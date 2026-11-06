@@ -49,6 +49,7 @@ export function createHarborScene(engine: Engine) {
   const shadows = new ShadowGenerator(engine.getRenderWidth() > 1100 ? 2048 : 1024, moon);
   shadows.usePoissonSampling = true; shadows.bias = 0.003;
   shadows.darkness = 0.35;
+  moon.shadowFrustumSize=64;moon.autoUpdateExtends=false;moon.shadowMinZ=1;moon.shadowMaxZ=120;
   const material = (name: string, color: string, emission?: string) => {
     const mat = new StandardMaterial(name, scene);
     mat.diffuseColor = Color3.FromHexString(color);
@@ -232,7 +233,7 @@ export function createHarborScene(engine: Engine) {
       }
     }
     const buildingMeshes = batch(meshes);
-    for (const mesh of buildingMeshes) shadows.addShadowCaster(mesh);
+    for (const mesh of buildingMeshes){shadows.addShadowCaster(mesh);mesh.freezeWorldMatrix();}
     occluders.push({ meshes: buildingMeshes,
       min: new Vector3(x - width / 2 - 0.6, 0, z - depth / 2 - 1),
       max: new Vector3(x + width / 2 + 0.6, height + 1, z + depth / 2 + 1),
@@ -390,6 +391,7 @@ export function createHarborScene(engine: Engine) {
   const buildingParts = new Set(occluders.flatMap(building => building.meshes));
   const staticMeshes=batch(scene.meshes.filter((mesh): mesh is Mesh => mesh instanceof Mesh
     && !mesh.parent && !buildingParts.has(mesh) && mesh.material !== poolMat && mesh !== skyDome));
+  for(const mesh of staticMeshes)mesh.freezeWorldMatrix();
   for(const mesh of staticMeshes) if(mesh.material===canopyMat || mesh.material===wood) shadows.addShadowCaster(mesh);
   for (const mesh of scene.meshes) {
     if (mesh instanceof Mesh && !mesh.parent && mesh.material !== poolMat && mesh !== skyDome) mesh.isPickable = true;
@@ -459,7 +461,9 @@ export function createHarborScene(engine: Engine) {
   }
   function update(p: Point, dt: number, look: Look = { yaw: 0, pitch: 0 }, paused=false) {
     if(!preview&&!reference&&!paused){weapon=advanceWeapon(weapon,dt,spec);cooldown=Math.max(0,cooldown-dt);jumpState=advanceJump(jumpState,dt);}
-    if(!paused)atmosphere.update(dt);
+    if(!paused)atmosphere.update(dt,p);
+    const texel=64/shadows.mapSize;
+    moon.position.set(Math.round((p.x+24.75)/texel)*texel,55,Math.round((p.z-13.75)/texel)*texel);
     waterNormals.uOffset+=paused?0:Math.min(dt,.1)*.012;
     animationTime+=dt;recoil=Math.max(0,recoil-dt*9);
     viewModel.position.z=0.18-recoil*0.05;
@@ -583,8 +587,8 @@ export function createHarborScene(engine: Engine) {
     effectsState:effects.stats,
     setQuality(high:boolean){
       atmosphere.setQuality(high);
-      shadows.mapSize=high?2048:1024;
-      for(const texture of scene.textures)texture.anisotropicFilteringLevel=high?8:2;
+      const mapSize=high?2048:1024;if(shadows.mapSize!==mapSize)shadows.mapSize=mapSize;
+      for(const texture of scene.textures)texture.anisotropicFilteringLevel=high?8:4;
     },
     scene, camera, player, update, resize, selectCharacter, setPreview, setReference, shoot,
     get characterType() { return character.type; },

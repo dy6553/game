@@ -55,3 +55,17 @@ test('FPS camera follows eyes, hides own body, previews and switches both robots
   world.scene.render();world.scene.dispose();
  }finally{engine.dispose();}
 });
+
+test('static map transforms are frozen while player, camera and targets stay dynamic',()=>{
+ const engine=new NullEngine({renderWidth:960,renderHeight:540,textureSize:512,deterministicLockstep:false,lockstepMaxSteps:4});
+ try{
+  const world=createHarborScene(engine);world.update(PROTOTYPE.spawn,0);world.scene.render();
+  const fixed=world.scene.meshes.filter(m=>m.name.startsWith('batch-'));
+  assert.ok(fixed.length>0);assert.ok(fixed.every(m=>m.isWorldMatrixFrozen));
+  assert.equal(world.scene.getMeshByName('practice-target-0')!.isWorldMatrixFrozen,false);
+  world.setQuality(false);world.setQuality(false);world.setQuality(true);
+  const position={x:2,z:-9};world.update(position,0,{yaw:.5,pitch:0});world.scene.render();
+  assert.equal(world.camera.position.x,2);assert.equal(world.camera.rotation.y,.5);
+  world.scene.dispose();
+ }finally{engine.dispose();}
+});

@@ -4,7 +4,7 @@ import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js'
 import { RawTexture } from '@babylonjs/core/Materials/Textures/rawTexture.js';
 import { Color3 } from '@babylonjs/core/Maths/math.color.js';
 import type { Scene } from '@babylonjs/core/scene.js';
-import { canStand } from './world.ts';
+import { canStand,type Point } from './world.ts';
 
 // Authored reflection cards, not screen-space reflections. Bounded mobile cost.
 export function createAtmosphere(scene:Scene){
@@ -28,8 +28,8 @@ export function createAtmosphere(scene:Scene){
     const m=new StandardMaterial(name,scene);m.diffuseColor=Color3.FromHexString(color);m.emissiveColor=m.diffuseColor;m.disableLighting=true;
     m.diffuseTexture=tex;m.useAlphaFromDiffuseTexture=true;m.alpha=alpha;m.disableDepthWrite=true;m.backFaceCulling=false;return m;
   };
-  const gold=mat('wet-amber','#ffc27a',wet,.38),blue=mat('wet-blue','#78b8d4',wet,.2);
-  const waterGold=mat('water-gold','#ffd292',ripple,.7),waterBlue=mat('water-blue','#90d8ed',ripple,.45);
+  const gold=mat('wet-amber','#ffc27a',wet,.28),blue=mat('wet-blue','#78b8d4',wet,.2);
+  const waterGold=mat('water-gold','#ffd292',ripple,.5),waterBlue=mat('water-blue','#90d8ed',ripple,.35);
   const glow=mat('lantern-aura','#ffc07b',halo,.65);
   const finish=(mesh:Mesh,m:StandardMaterial)=>{mesh.material=m;mesh.isPickable=false;mesh.receiveShadows=false;meshes.push(mesh);return mesh;};
   const groups=new Map<StandardMaterial,Mesh[]>();
@@ -64,6 +64,11 @@ export function createAtmosphere(scene:Scene){
     const angle=random()*Math.PI*2;p.position.set(Math.cos(angle)*240,75+random()*180,Math.sin(angle)*240);p.lookAt(scene.activeCamera!.position);stars.push(p);
   }
   const starBatch=Mesh.MergeMeshes(stars,true,true,undefined,false,false);if(starBatch){starBatch.name='atmosphere-stars';starBatch.isPickable=false;meshes.push(starBatch);}
+  const live=meshes.filter(mesh=>!mesh.isDisposed());
+  const halos=live.filter(mesh=>mesh.name==='lantern-atmospheric-glow');
+  for(const mesh of live)if(mesh.billboardMode===0)mesh.freezeWorldMatrix();
+  let highQuality=true,viewer:Point={x:0,z:-8},checkTime=0;
+  function cull(){for(const mesh of halos)mesh.setEnabled(highQuality&&Math.hypot(mesh.position.x-viewer.x,mesh.position.z-viewer.z)<38);}
   let time=0;
-  return {update(dt:number){time+=Math.min(dt,.1);ripple.vOffset=Math.sin(time*.6)*.018;wet.uOffset=Math.sin(time*.2)*.002;},setQuality(high:boolean){for(const mesh of meshes)if(!mesh.isDisposed()&&mesh.name==='lantern-atmospheric-glow')mesh.setEnabled(high);},meshes};
+  return {update(dt:number,p:Point){time+=Math.min(dt,.1);viewer=p;checkTime+=dt;if(checkTime>.2){checkTime=0;cull();}ripple.vOffset=Math.sin(time*.6)*.018;},setQuality(high:boolean){highQuality=high;cull();},meshes:live};
 }

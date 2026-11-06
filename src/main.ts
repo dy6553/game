@@ -1,3 +1,4 @@
+import { createRenderBudget } from './render-budget.ts';
 import { sprintMultiplier } from './sprint.ts';
 import { createGameAudio,spatialSound } from './audio.ts';
 import { Engine } from '@babylonjs/core/Engines/engine.js';
@@ -37,9 +38,9 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <p>봇 1대1: 양쪽 체력 100, 먼저 10킬 승리. 자동 회복 없이 사망 3초 후 부활합니다. 붉은 표시가 상대 봇입니다. 봇은 1초 조준 후 위치를 고정하고 0.4초 경고 뒤 발사합니다. 경고 때 옆으로 이동하면 피할 수 있으며, 벽 뒤로 숨으면 조준이 초기화됩니다.</p>
     <p>맵을 남쪽 상점 거리와 양옆 골목으로 넓혔습니다. 중앙 거리 양쪽의 열린 출입구와 남쪽 거리의 상점, 총 6곳의 1층에 들어갈 수 있습니다. 문 버튼 없이 걸어서 출입합니다.</p>
     <p>시작 무기는 메뉴에서 선택하며 변경하면 경기를 새로 시작합니다. 기관총은 발사 버튼을 누르고 있거나 PC 마우스 고정 상태에서 왼쪽 버튼을 누르면 연사합니다. 산탄총은 탄알 6개가 퍼지며, 저격총은 확대 버튼 또는 PC Q키로 조준합니다.</p>
-    <p>야경 개선: 젖은 노면의 빛, 수면 반짝임, 벽·지붕 표면과 금속 광택을 추가했습니다. 균형 화질에서는 추가 가로등 빛 번짐을 줄입니다.</p>
+    <p>야경 개선: 젖은 노면의 빛, 수면 반짝임, 벽·지붕 표면과 금속 광택을 추가했습니다. 자동 화질은 지속적인 프레임 저하가 있을 때 렌더 해상도를 조절합니다. 높음은 수동 고화질, 균형은 낮은 부하 설정입니다.</p>
     <fieldset class="audio-settings"><legend>소리</legend><label><input id="audio-mute" type="checkbox"> 음소거</label><label>전체<input id="audio-master" type="range" min="0" max="100" aria-label="전체 음량"></label><label>효과음<input id="audio-effects" type="range" min="0" max="100" aria-label="효과음 음량"></label><label>환경음<input id="audio-environment" type="range" min="0" max="100" aria-label="환경음 음량"></label><small id="audio-status">시작 버튼을 누르면 소리를 켭니다.</small></fieldset>
-    <label class="graphics-setting">그래픽 화질 <select id="graphics-quality"><option value="high">높음 · 선명한 화면</option><option value="balanced">균형 · 부드러운 실행</option></select></label>
+    <label class="graphics-setting">그래픽 화질 <select id="graphics-quality"><option value="auto" selected>자동 · 기기에 맞춤</option><option value="high">높음 · 선명한 화면</option><option value="balanced">균형 · 부드러운 실행</option></select></label>
   </section>
   <div class="desktop-hint"><kbd>W</kbd><span><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><p>이동 <i>·</i> 드래그로 시점 변경</p></div>
   <div class="touch-controls">
@@ -80,15 +81,18 @@ const loading = document.querySelector<HTMLDivElement>('#loading')!;
 async function start() {
   if (!Engine.IsSupported) throw new Error('이 브라우저에서 WebGL을 사용할 수 없습니다. 하드웨어 가속을 켜거나 다른 브라우저를 사용해 주세요.');
   const engine = new Engine(canvas, true, { stencil: true, preserveDrawingBuffer: false }, false);
-  // Limit drawing-buffer density on phones; CSS and input remain at full device coordinates.
-  engine.setHardwareScalingLevel(1 / Math.min(window.devicePixelRatio || 1, 2));
+  const mobile=matchMedia('(pointer: coarse)').matches;
+  let graphicsMode='auto';
+  const densityCap=()=>Math.min(window.devicePixelRatio||1,graphicsMode==='high'?2:graphicsMode==='balanced'?1:mobile?1.5:1.75);
+  let budget=createRenderBudget(densityCap()),qualityHigh=!mobile;
+  engine.setHardwareScalingLevel(1/budget.density);
   const world = createHarborScene(engine);
-  world.setQuality(true);
+  world.setQuality(qualityHigh);
   world.setMode('duel');
   document.querySelector<HTMLSelectElement>('#graphics-quality')!.addEventListener('change',event=>{
-    const high=(event.currentTarget as HTMLSelectElement).value==='high';
-    engine.setHardwareScalingLevel(1/Math.min(window.devicePixelRatio||1,high?2:1.25));
-    world.setQuality(high);engine.resize();world.resize();
+    graphicsMode=(event.currentTarget as HTMLSelectElement).value;budget=createRenderBudget(densityCap());
+    engine.setHardwareScalingLevel(1/budget.density);qualityHigh=graphicsMode==='high'||(graphicsMode==='auto'&&!mobile);
+    world.setQuality(qualityHigh);engine.resize();world.resize();
   });
   const input = createInput(canvas);
   const audio=createGameAudio();
@@ -256,6 +260,12 @@ async function start() {
     const dt = Math.min(elapsed, 0.05);
     const portraitTouch = matchMedia('(pointer: coarse) and (orientation: portrait)').matches;
     const canPlay=!document.hidden&&!portraitTouch&&picker.hidden&&!comparing&&!menuOpen&&help.hidden&&document.hasFocus();
+    if(graphicsMode==='auto'){
+      const density=budget.sample(elapsed,canPlay);
+      if(density!==null){engine.setHardwareScalingLevel(1/density);engine.resize();world.resize();}
+      const detailed=!mobile&&budget.density>=Math.min(densityCap(),1.1);
+      if(detailed!==qualityHigh){qualityHigh=detailed;world.setQuality(detailed);}
+    }
     audio.pause(!canPlay);
     document.querySelector('#audio-status')!.textContent=audio.available?'사운드 활성화':'화면을 눌러 소리 켜기';
     if (canPlay) {
