@@ -1,0 +1,16 @@
+{
+  "name": "harbor-arena-prototype",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": { "node": ">=22.18.0" },
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build",
+    "build:standalone": "tsc --noEmit && node scripts/build-standalone.mjs && node scripts/verify-standalone.mjs",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "node --test --test-isolation=none tests/*.test.ts"
+  },
+  "dependencies": { "@babylonjs/core": "9.34.0" },
+  "devDependencies": { "typescript": "7.0.2", "vite": "8.3.6" }
+}
