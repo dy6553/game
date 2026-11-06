@@ -163,3 +163,6 @@ body.comparing .ammo-hud,body.comparing .practice-complete { display:none; }
  .menu-open .touch-controls,.menu-open .ammo-hud{visibility:hidden}
  .practice-complete{top:32%;z-index:4}
 }
+
+.weapon-setting{display:grid;gap:4px;font-size:10px;grid-column:1/-1}.weapon-setting select{background:#142535;color:#fff;border:1px solid #4c6675;border-radius:8px;padding:7px}.scope-button{position:absolute;right:calc(max(18px,env(safe-area-inset-right)) + 94px);bottom:calc(max(16px,env(safe-area-inset-bottom)) + 94px);width:54px;height:54px;padding:0;border-radius:50%;pointer-events:auto;touch-action:none;font-size:11px;background:#243e50cc}#scope-overlay{position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle closest-side at center,transparent 88%,#08121bdd 92%);border:1px solid #536c76}#scope-overlay i:before,#scope-overlay i:after{content:'';position:absolute;background:#82adac99}#scope-overlay i:before{width:1px;height:65%;left:50%;top:17.5%}#scope-overlay i:after{height:1px;width:65%;top:50%;left:17.5%}
+#scope-overlay{z-index:1}.touch-controls,.ammo-hud,.duel-hud,.practice-score,.crosshair,.shot-feedback{z-index:2}@media(pointer:coarse),(max-width:900px),(max-height:550px){.ammo-hud>span{display:block;font-size:9px}}

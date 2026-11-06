@@ -14,6 +14,7 @@ export function createInput(canvas: HTMLCanvasElement) {
   let lookPointer: number | null = null;
   let last = { x: 0, y: 0 };
   let look = { yaw: 0, pitch: 0 };
+  let firePointer:number|null=null,mouseHeld=false;
   let shots = 0;
   let reloads = 0;
   let jumps = 0;
@@ -21,6 +22,7 @@ export function createInput(canvas: HTMLCanvasElement) {
   let mouseDragged = false;
 
   const reset = () => {
+    firePointer=null;mouseHeld=false;
     keys.clear(); stickPointer = null; stick = { x: 0, y: 0 };
     thumb.style.transform = 'translate(0, 0)';
     lookPointer = null;
@@ -45,7 +47,7 @@ export function createInput(canvas: HTMLCanvasElement) {
   canvas.addEventListener('pointerdown', event => {
     if (lookPointer !== null || (event.pointerType === 'mouse' && event.button !== 0)) return;
     event.preventDefault(); canvas.focus();
-    if (event.pointerType === 'mouse' && document.pointerLockElement === canvas) { shots++; return; }
+    if (event.pointerType === 'mouse' && document.pointerLockElement === canvas) { mouseHeld=true;shots++; return; }
     lookPointer = event.pointerId; last = { x: event.clientX, y: event.clientY };
     pressedAt = { ...last }; mouseDragged = false;
     canvas.setPointerCapture(event.pointerId);
@@ -60,6 +62,7 @@ export function createInput(canvas: HTMLCanvasElement) {
     }
   });
   const releaseLook = (event: PointerEvent) => {
+    if(event.pointerType==='mouse')mouseHeld=false;
     if (event.pointerId === lookPointer) {
       if (event.type === 'pointerup' && event.pointerType === 'mouse' && !mouseDragged) shots++;
       lookPointer = null;
@@ -68,7 +71,10 @@ export function createInput(canvas: HTMLCanvasElement) {
   ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(type =>
     canvas.addEventListener(type, event => releaseLook(event as PointerEvent)));
   document.addEventListener('pointerlockchange', reset);
-  fire.addEventListener('pointerdown', event => { event.preventDefault(); shots++; });
+  fire.addEventListener('pointerdown', event => {event.preventDefault();if(firePointer!==null)return;firePointer=event.pointerId;fire.setPointerCapture(event.pointerId);shots++;});
+  ['pointerup','pointercancel','lostpointercapture'].forEach(type=>fire.addEventListener(type,event=>{if((event as PointerEvent).pointerId===firePointer)firePointer=null;}));
+  window.addEventListener('pointerup',()=>{mouseHeld=false;});
+  window.addEventListener('pointercancel',()=>{mouseHeld=false;});
   fire.addEventListener('click', event => { if (event.detail === 0) shots++; });
   reload?.addEventListener('pointerdown',event=>{event.preventDefault();reloads++;});
   reload?.addEventListener('click',event=>{if(event.detail===0)reloads++;});
@@ -112,6 +118,7 @@ export function createInput(canvas: HTMLCanvasElement) {
     },
     get look() { return look; },
     resetLook() { look = { yaw: 0, pitch: 0 }; reset(); },
+    get firing(){return firePointer!==null||mouseHeld;},
     consumeShots() { const count = shots; shots = 0; return count; },
     consumeReloads() { const count=reloads;reloads=0;return count; },
     consumeJumps() { const count=jumps;jumps=0;return count; },

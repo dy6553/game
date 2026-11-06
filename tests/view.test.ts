@@ -32,6 +32,8 @@ test('independent touches move, turn and fire; cancellation releases only the ma
     const input=createInput(canvas as unknown as HTMLCanvasElement);
     send(stick,'pointerdown',1,50,17);send(canvas,'pointerdown',2,120,50);send(canvas,'pointermove',2,160,50);
     send(fire,'pointerdown',3,200,100);
+    assert.equal(input.firing,true,'fire finger stays held independently');
+    send(fire,'pointercancel',3,200,100);assert.equal(input.firing,false,'cancel stops automatic fire');
     assert.equal(input.move.y,1);assert.ok(input.look.yaw>0);assert.equal(input.consumeShots(),1);assert.equal(input.consumeShots(),0);
     send(reload,'pointerdown',5,180,100);assert.equal(input.consumeReloads(),1);assert.equal(input.consumeReloads(),0);
     win.dispatchEvent(Object.assign(new Event('keydown',{cancelable:true}),{code:'KeyR',repeat:false}));

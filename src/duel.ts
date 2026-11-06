@@ -40,13 +40,14 @@ export function createDuel(){
   let locked:Point|null=null,warning=0,damageVersion=0;
   let botWeapon=createWeapon(PRACTICE_RULES);
   let winner:''|'player'|'bot'='';
-  function hurt(who:'player'|'bot'){
+  function hurt(who:'player'|'bot',damage:number=DUEL_RULES.damage){
+    if(!Number.isFinite(damage)||damage<0)throw new Error('Invalid damage');
     if(winner||playerHealth===0||botHealth===0)return false;
     if(who==='bot'){
-      botHealth=Math.max(0,botHealth-DUEL_RULES.damage);
+      botHealth=Math.max(0,botHealth-damage);
       if(botHealth===0){playerKills++;botDead=3;aim=0;locked=null;warning=0;if(playerKills===10)winner='player';return true;}
     }else{
-      damageVersion++;playerHealth=Math.max(0,playerHealth-DUEL_RULES.damage);
+      damageVersion++;playerHealth=Math.max(0,playerHealth-damage);
       if(playerHealth===0){botKills++;playerDead=3;aim=0;locked=null;warning=0;if(botKills===10)winner='bot';return true;}
     }
     return false;

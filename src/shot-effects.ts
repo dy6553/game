@@ -48,16 +48,17 @@ export function createShotEffects(scene:Scene,camera:Camera) {
   const shells=Array.from({length:12},()=>({mesh:add(MeshBuilder.CreateCylinder('fx-shell',{diameter:0.022,height:0.07,tessellation:8},scene),brass),velocity:Vector3.Zero(),life:0,bounced:false}));
   const clouds=Array.from({length:6},()=>({mesh:add(MeshBuilder.CreateSphere('fx-impact-dust',{diameter:0.12,segments:6},scene),dust),life:0}));
   let traceIndex=0,sparkIndex=0,markIndex=0,shellIndex=0,cloudIndex=0,emitted=0;
-  function emit(start:Vector3,end:Vector3,normal:Vector3,impact:boolean,target:boolean) {
-    emitted++;flash.position.copyFrom(start);flash.setEnabled(true);flashLife=0.045;
+  function emit(start:Vector3,end:Vector3,normal:Vector3,impact:boolean,target:boolean,primary=true) {
+    emitted++;if(primary){flash.position.copyFrom(start);flash.setEnabled(true);flashLife=0.045;}
     const trace=traces[traceIndex++%traces.length]!;
     trace.start.copyFrom(start);trace.end.copyFrom(end);trace.direction=end.subtract(start).normalize();
     trace.distance=Vector3.Distance(start,end);trace.travel=0;trace.active=true;
     trace.mesh.rotationQuaternion=new Quaternion();Quaternion.FromUnitVectorsToRef(Vector3.Up(),trace.direction,trace.mesh.rotationQuaternion);
     trace.mesh.position.copyFrom(start);trace.mesh.scaling.y=0.01;trace.mesh.setEnabled(true);
-    const shell=shells[shellIndex++%shells.length]!;
+    if(primary){const shell=shells[shellIndex++%shells.length]!;
     shell.mesh.position.copyFrom(start);shell.mesh.position.y-=0.1;shell.mesh.setEnabled(true);shell.life=1.1;shell.bounced=false;
     shell.velocity=camera.getDirection(Vector3.Right()).scale(1.3).add(new Vector3(0,1.05,0));
+    }
     if(!impact)return;
     const n=normal.lengthSquared()>0.1?normal.normalizeToNew():trace.direction.scale(-1);
     const right=Vector3.Cross(n,Math.abs(n.y)>0.9?Vector3.Right():Vector3.Up()).normalize();

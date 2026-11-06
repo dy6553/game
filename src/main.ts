@@ -4,7 +4,7 @@ import { createHarborScene } from './scene.ts';
 import { moveWithCollisions, PROTOTYPE } from './world.ts';
 import { isCharacterType } from './characters.ts';
 import { viewMovement } from './view.ts';
-import { PRACTICE_RULES } from './combat.ts';
+import { isWeaponId } from './weapons.ts';
 import './style.css';
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
@@ -19,6 +19,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <button id="practice-reset">다시 시작</button>
       <select id="game-mode" aria-label="게임 모드"><option value="duel">봇 1대1 · 쉬움</option><option value="practice">표적 연습</option></select>
       <label class="pc-jump-setting"><select id="jump-key" aria-label="PC 점프 키 선택"><option value="Space" selected>스페이스: 점프</option><option value="KeyJ">J: 점프</option></select></label>
+      <label class="weapon-setting">시작 무기 · 변경 시 새 경기<select id="weapon-select" aria-label="시작 무기 선택, 변경 시 경기 초기화"><option value="pistol">권총</option><option value="machinegun">기관총</option><option value="shotgun">산탄총</option><option value="sniper">저격총</option></select></label>
       <button id="help-toggle" aria-expanded="false" aria-controls="help">도움말</button>
     </div>
   </header>
@@ -31,6 +32,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <p><strong>점프</strong> 휴대폰은 점프 버튼을 누릅니다. PC는 스페이스바로 점프합니다. 메뉴에서 J키로 변경할 수 있습니다.</p>
     <p>권총은 탄창 12발, 표적은 체력 100입니다. 4발 맞히면 파괴됩니다. PC R키 또는 재장전 버튼으로 1.5초 동안 재장전합니다. 예비 탄약은 무제한입니다.</p>
     <p>봇 1대1: 양쪽 체력 100, 먼저 10킬 승리. 자동 회복 없이 사망 3초 후 부활합니다. 붉은 표시가 상대 봇입니다. 봇은 1초 조준 후 위치를 고정하고 0.4초 경고 뒤 발사합니다. 경고 때 옆으로 이동하면 피할 수 있으며, 벽 뒤로 숨으면 조준이 초기화됩니다.</p>
+    <p>시작 무기는 메뉴에서 선택하며 변경하면 경기를 새로 시작합니다. 기관총은 발사 버튼을 누르고 있거나 PC 마우스 고정 상태에서 왼쪽 버튼을 누르면 연사합니다. 산탄총은 탄알 6개가 퍼지며, 저격총은 확대 버튼 또는 PC Q키로 조준합니다.</p>
     <p>야경 개선: 젖은 노면의 빛, 수면 반짝임, 벽·지붕 표면과 금속 광택을 추가했습니다. 균형 화질에서는 추가 가로등 빛 번짐을 줄입니다.</p>
     <label class="graphics-setting">그래픽 화질 <select id="graphics-quality"><option value="high">높음 · 선명한 화면</option><option value="balanced">균형 · 부드러운 실행</option></select></label>
   </section>
@@ -39,15 +41,17 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <div class="move-control"><div id="joystick" role="group" aria-label="이동 가상 스틱"><div class="stick-cross"></div><div id="joystick-thumb"></div></div><span>이동</span></div>
     <button id="fire" class="single-fire" aria-label="화면 중앙 정면으로 발사">발사</button>
     <button id="reload" class="reload-button" aria-label="권총 재장전">재장전</button>
+    <button id="scope" class="scope-button" hidden aria-pressed="false">확대</button>
     <button id="jump" class="jump-button" aria-label="점프">점프</button>
   </div>
+  <div id="scope-overlay" hidden aria-hidden="true"><i></i></div>
   <div id="damage-overlay" aria-hidden="true"><i id="damage-direction"></i></div><div id="impact-marker" aria-hidden="true">×</div>
   <div class="crosshair" aria-hidden="true"><i></i><b></b></div>
   <div id="shot-feedback" class="shot-feedback" role="status" hidden></div>
   <div class="look-hint">빈 화면을 드래그해 둘러보세요</div>
   <section class="practice-score" aria-label="표적 연습 현황"><div>명중 <span id="hits">0</span> · 파괴 <span id="destroyed">0</span>/3</div><div class="target-health">${[0,1,2].map(i=>`<div><span>표적 ${i+1}</span><progress id="health-${i}" max="100" value="100" aria-label="표적 ${i+1} 체력"></progress><b id="health-value-${i}">100</b></div>`).join('')}</div></section>
   <section id="duel-hud" class="duel-hud" aria-label="봇 대전 현황"><strong id="duel-score"></strong><div id="duel-health"></div><progress id="player-health" max="100" value="100" aria-label="내 체력"></progress><div id="health-segments" aria-hidden="true"><i></i><i></i><i></i><i></i></div><p id="duel-status" role="status"></p></section>
-  <div class="ammo-hud" aria-label="권총 탄약"><span>권총</span><div><b id="ammo">12</b><span> / 12</span><small>예비 ∞</small></div><p id="weapon-status">발사 준비</p><progress id="reload-progress" max="1.5" value="0" aria-label="재장전 진행" hidden></progress></div>
+  <div class="ammo-hud" aria-label="권총 탄약"><span id="weapon-name">권총</span><div><b id="ammo">12</b><span id="magazine-size"> / 12</span><small>예비 ∞</small></div><p id="weapon-status">발사 준비</p><progress id="reload-progress" max="1.5" value="0" aria-label="재장전 진행" hidden></progress></div>
   <div id="practice-complete" class="practice-complete" role="status" hidden>표적 연습 완료 <button id="practice-again">다시 연습</button></div>
   <figure id="reference-panel" class="reference-panel" hidden><figcaption>기준 시안</figcaption><div class="reference-load"><p>비교할 배경 시안을 선택해 주세요</p><label>이미지 선택<input id="reference-file" type="file" accept="image/*" /></label><p id="reference-status">게임은 이미지를 선택하지 않아도 실행됩니다.</p></div><img id="reference-image" alt="선택한 배경 시안" hidden /></figure>
   <div class="live-reference-label" hidden>현재 3D 배경 · 제작 중</div>
@@ -181,15 +185,21 @@ async function start() {
     document.querySelector<HTMLButtonElement>('#reset')!.disabled=duel.active;
     const blocked=duel.active&&(duel.playerHealth===0||!!duel.winner);
     document.querySelector<HTMLButtonElement>('#fire')!.disabled=blocked;
-    const key=[blocked,state.ammo,Math.ceil(state.reloadRemaining*10),...state.targetHealth,state.hits,state.destroyed,state.grounded,noticeTime>0?notice:''].join('|');
+    document.querySelector('#weapon-name')!.textContent=state.weaponName;
+    document.querySelector('#magazine-size')!.textContent=` / ${state.magazineSize}`;
+    const scopeButton=document.querySelector<HTMLButtonElement>('#scope')!;
+    scopeButton.hidden=state.weaponId!=='sniper';scopeButton.disabled=blocked;
+    scopeButton.textContent=state.scoped?'원래 시야':'확대';scopeButton.setAttribute('aria-pressed',String(state.scoped));
+    document.querySelector<HTMLElement>('#scope-overlay')!.hidden=!state.scoped||!picker.hidden||comparing;
+    const key=[state.weaponId,blocked,state.ammo,Math.ceil(state.reloadRemaining*10),...state.targetHealth,state.hits,state.destroyed,state.grounded,noticeTime>0?notice:''].join('|');
     if(key===lastHudKey)return;lastHudKey=key;
     ammo.textContent=String(state.ammo);hits.textContent=String(state.hits);destroyed.textContent=String(state.destroyed);
     for(let i=0;i<state.targetHealth.length;i++){
       healthBars[i]!.value=state.targetHealth[i]!;healthLabels[i]!.textContent=String(state.targetHealth[i]);
     }
     const reloading=state.reloadRemaining>0;
-    reloadProgress.hidden=!reloading;reloadProgress.max=PRACTICE_RULES.reloadSeconds;
-    reloadProgress.value=PRACTICE_RULES.reloadSeconds-state.reloadRemaining;
+    reloadProgress.hidden=!reloading;reloadProgress.max=state.reloadSeconds;
+    reloadProgress.value=state.reloadSeconds-state.reloadRemaining;
     reloadButton.disabled=blocked||reloading||state.ammo===state.magazineSize;
     jumpButton.disabled=blocked||!state.grounded;
     reloadButton.textContent=reloading?'재장전 중':'재장전';
@@ -204,6 +214,14 @@ async function start() {
   document.querySelector<HTMLSelectElement>('#game-mode')!.addEventListener('change',event=>{
     world.setMode((event.currentTarget as HTMLSelectElement).value==='duel'?'duel':'practice');restart();canvas.focus();
   });
+  document.querySelector<HTMLSelectElement>('#weapon-select')!.addEventListener('change',event=>{
+    const id=(event.currentTarget as HTMLSelectElement).value;if(isWeaponId(id)){world.selectWeapon(id);restart();canvas.focus();}
+  });
+  window.addEventListener('keydown',event=>{
+    const tag=(event.target as HTMLElement|null)?.tagName;
+    if(event.code==='KeyQ'&&!event.repeat&&!menuOpen&&picker.hidden&&!comparing&&document.querySelector<HTMLElement>('#help')!.hidden&&!['INPUT','SELECT','TEXTAREA'].includes(tag??'')){event.preventDefault();world.toggleScope();}
+  });
+  document.querySelector('#scope')!.addEventListener('click',()=>{world.toggleScope();canvas.focus();});
   const help = document.querySelector<HTMLElement>('#help')!;
   document.querySelector('#help-toggle')!.addEventListener('click', event => {
     help.hidden = !help.hidden;
@@ -231,12 +249,13 @@ async function start() {
       if(input.consumeJumps()>0&&canAct)world.jump();
       world.update(position, elapsed, input.look);
       if(input.consumeReloads()>0)world.reload();
-      const shots = input.consumeShots();
+      const queued=input.consumeShots();
+      const shots=queued>0?queued:(input.firing&&world.practiceState().automatic?1:0);
       for (let i = 0; i < shots; i++) {
         const shot = world.shoot();
         if(shot.fired)shotTime=0.08;
-        if (shot.hit) {impactTime=0.2;document.querySelector('#impact-marker')!.classList.toggle('kill','eliminated' in shot&&!!shot.eliminated);hitTime=0.16;feedbackTime=0.35;shotFeedback.textContent='eliminated' in shot&&shot.eliminated?(world.duelState().active?'봇 처치':'표적 파괴'):'명중 −25';}
-        else if(!shot.fired && 'reason' in shot){notice=shot.reason==='empty'?'탄창이 비었습니다 · 재장전하세요':'재장전 중에는 발사할 수 없습니다';noticeTime=0.8;}
+        if (shot.hit) {impactTime=0.2;document.querySelector('#impact-marker')!.classList.toggle('kill','eliminated' in shot&&!!shot.eliminated);hitTime=0.16;feedbackTime=0.35;shotFeedback.textContent='eliminated' in shot&&shot.eliminated?(world.duelState().active?'봇 처치':'표적 파괴'):`명중 −${'damage' in shot?shot.damage:0}`;}
+        else if(!shot.fired && 'reason' in shot && shot.reason!=='cooldown'){notice=shot.reason==='empty'?'탄창이 비었습니다 · 재장전하세요':'재장전 중에는 발사할 수 없습니다';noticeTime=0.8;}
       }
       zone.textContent = position.z > 28 ? '항구 산책로' : Math.abs(position.x) > 20 ? '건물 사이 골목'
         : Math.abs(position.z) < 11 && Math.abs(position.x) < 11 ? '중앙 광장' : '해안 거리';

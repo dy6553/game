@@ -1,3 +1,4 @@
+import { WEAPONS,pelletOffsets,type WeaponId } from './weapons.ts';
 import { createDuel } from './duel.ts';
 import type { Engine } from '@babylonjs/core/Engines/engine.js';
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js';
@@ -355,6 +356,9 @@ export function createHarborScene(engine: Engine) {
   muzzle.rotation.x=Math.PI/2;muzzle.position.set(0.27,-0.2,1.035);muzzle.parent=viewModel;muzzle.material=metal;muzzle.isPickable=false;
   const muzzleInset=MeshBuilder.CreateCylinder('view-bore',{diameter:0.055,height:0.01,tessellation:20},scene);
   muzzleInset.rotation.x=Math.PI/2;muzzleInset.position.set(0.27,-0.2,1.1);muzzleInset.parent=viewModel;muzzleInset.material=glass;muzzleInset.isPickable=false;
+  const scopeBody=MeshBuilder.CreateCylinder('weapon-scope',{diameter:.1,height:.32,tessellation:16},scene);
+  scopeBody.parent=viewModel;scopeBody.position.set(.27,-.06,.68);scopeBody.rotation.x=Math.PI/2;scopeBody.material=metal;scopeBody.isPickable=false;
+  const secondBarrel=box('shotgun-second-barrel',.36,-.2,.9,.07,.07,.42,metal);secondBarrel.parent=viewModel;secondBarrel.isPickable=false;
   addStreetDetails(scene);
   const buildingParts = new Set(occluders.flatMap(building => building.meshes));
   const staticMeshes=batch(scene.meshes.filter((mesh): mesh is Mesh => mesh instanceof Mesh
@@ -407,7 +411,8 @@ export function createHarborScene(engine: Engine) {
     opponentMark.scaling.x=Math.max(0.001,state.botHealth/100);
     botParent.computeWorldMatrix(true);
   }
-  let weapon=createWeapon(PRACTICE_RULES);
+  let weaponId:WeaponId='pistol',spec=WEAPONS.pistol,cooldown=0,scoped=false;
+  let weapon=createWeapon(spec);
   let jumpState=createJump();
   let hits=0,destroyed=0,shots=0;
   const effects=createShotEffects(scene,camera);
@@ -425,12 +430,12 @@ export function createHarborScene(engine: Engine) {
     for(const light of streetLights) light.setEnabled(!value);
   }
   function update(p: Point, dt: number, look: Look = { yaw: 0, pitch: 0 }, paused=false) {
-    if(!preview&&!reference&&!paused){weapon=advanceWeapon(weapon,dt,PRACTICE_RULES);jumpState=advanceJump(jumpState,dt);}
+    if(!preview&&!reference&&!paused){weapon=advanceWeapon(weapon,dt,spec);cooldown=Math.max(0,cooldown-dt);jumpState=advanceJump(jumpState,dt);}
     if(!paused)atmosphere.update(dt);
     waterNormals.uOffset+=paused?0:Math.min(dt,.1)*.012;
     animationTime+=dt;recoil=Math.max(0,recoil-dt*9);
     viewModel.position.z=0.18-recoil*0.05;
-    const reloadMotion=weapon.reloadRemaining>0?Math.sin((1-weapon.reloadRemaining/PRACTICE_RULES.reloadSeconds)*Math.PI):0;
+    const reloadMotion=weapon.reloadRemaining>0?Math.sin((1-weapon.reloadRemaining/spec.reloadSeconds)*Math.PI):0;
     viewModel.position.y=-0.055+Math.sin(animationTime*1.8)*0.002-reloadMotion*0.16;
     viewModel.rotation.z=-reloadMotion*0.3;
     viewModel.rotation.x=-recoil*0.055;
@@ -455,7 +460,7 @@ export function createHarborScene(engine: Engine) {
         return !wall?.hit;
       });
       const state=duel.state();
-      if(state.respawnVersion!==seenRespawn){seenRespawn=state.respawnVersion;p.x=0;p.z=-8;weapon=createWeapon(PRACTICE_RULES);jumpState=createJump();}
+      if(state.respawnVersion!==seenRespawn){seenRespawn=state.respawnVersion;p.x=0;p.z=-8;weapon=createWeapon(spec);cooldown=0;scoped=false;jumpState=createJump();}
     }
     player.position.x = p.x; player.position.z = p.z;
     player.position.y=preview||reference?0:jumpState.height;
@@ -469,18 +474,27 @@ export function createHarborScene(engine: Engine) {
       camera.setTarget(new Vector3(p.x+1.25,1.35,p.z));
     } else {
       camera.position.set(p.x,(character.type==='robot-cat'?1.9:1.95)+jumpState.height,p.z);
+      camera.fov=scoped?.38:1.25;viewModel.setEnabled(!scoped);
       camera.rotation.set(look.pitch, look.yaw, 0);
     }
+    scopeBody.setEnabled(weaponId==='sniper');secondBarrel.setEnabled(weaponId==='shotgun');
+    gun.scaling.z=weaponId==='pistol'?1:1.6;barrel.scaling.z=weaponId==='sniper'?2:weaponId==='pistol'?1:1.5;
     syncBot();
   }
   setPreview(false);
   resize();
   function shoot() {
     if (preview || reference || (duelMode&&(duel.state().playerHealth===0||!!duel.state().winner))) return { fired: false, hit: false };
+    if(cooldown>1e-8)return {fired:false,hit:false,reason:'cooldown'};
     const attempt=tryFire(weapon);weapon=attempt.state;
     if(!attempt.fired)return {fired:false,hit:false,reason:attempt.reason};
-    shots++;recoil=1;
-    const direction = camera.getDirection(Vector3.Forward()).normalize();
+    shots++;recoil=1;cooldown=spec.interval;
+    let anyHit=false,anyEliminated=false,totalDamage=0;
+    let lastPoint=camera.position.clone();
+    const offsets=pelletOffsets(spec);
+    for(let pellet=0;pellet<offsets.length;pellet++){
+    const offset=offsets[pellet]!;
+    const direction = camera.getDirection(Vector3.Forward()).add(camera.getDirection(Vector3.Right()).scale(offset.x)).add(camera.getDirection(Vector3.Up()).scale(offset.y)).normalize();
     const ray = new Ray(camera.position.clone(), direction, 150);
     const pick = scene.pickWithRay(ray, mesh => mesh.isPickable && mesh.isEnabled());
     const end = pick?.pickedPoint ?? camera.position.add(direction.scale(150));
@@ -493,10 +507,10 @@ export function createHarborScene(engine: Engine) {
     }
     const hit = duelMode ? pick?.pickedMesh?.metadata?.opponent === true : pick?.pickedMesh?.metadata?.practiceTarget === true;
     let eliminated=false;
-    if(hit&&duelMode){eliminated=duel.hurt('bot');syncBot();}
+    if(hit&&duelMode){const before=duel.state().botHealth;eliminated=duel.hurt('bot',spec.damage);totalDamage+=before-duel.state().botHealth;syncBot();}
     if(hit&&!duelMode) {
       const target=targets[pick!.pickedMesh!.metadata.targetIndex]!;
-      const damage=applyDamage(target.health,PRACTICE_RULES.damage);
+      const damage=applyDamage(target.health,spec.damage);totalDamage+=target.health-damage.health;
       target.health=damage.health;target.flash=0.16;hits++;
       const fraction=target.health/PRACTICE_RULES.maxHealth;
       target.healthBar.scaling.x=Math.max(0.001,fraction);
@@ -504,15 +518,17 @@ export function createHarborScene(engine: Engine) {
       eliminated=damage.eliminated;
       if(eliminated){target.root.setEnabled(false);destroyed++;}
     }
-    effects.emit(start,end,pick?.getNormal(true)??direction.scale(-1),pick?.hit===true,hit);
-    return { fired: true, hit, eliminated, point: end };
+    effects.emit(start,end,pick?.getNormal(true)??direction.scale(-1),pick?.hit===true,hit,pellet===0);
+    anyHit=anyHit||hit;anyEliminated=anyEliminated||eliminated;lastPoint=end;
+    }
+    return { fired: true, hit:anyHit, eliminated:anyEliminated, damage:totalDamage,point:lastPoint };
   }
   function reload() {
     if(preview||reference||(duelMode&&(duel.state().playerHealth===0||!!duel.state().winner)))return false;
-    const next=beginReload(weapon,PRACTICE_RULES);const started=next!==weapon;weapon=next;return started;
+    const next=beginReload(weapon,spec);const started=next!==weapon;weapon=next;return started;
   }
   function resetPractice() {
-    weapon=createWeapon(PRACTICE_RULES);jumpState=createJump();hits=0;destroyed=0;shots=0;
+    weapon=createWeapon(spec);cooldown=0;scoped=false;jumpState=createJump();hits=0;destroyed=0;shots=0;
     effects.clear();botEffects.clear();recoil=0;duel=createDuel();seenRespawn=0;syncBot();
     for(const target of targets){
       target.health=PRACTICE_RULES.maxHealth;target.flash=0;target.root.setEnabled(!duelMode);
@@ -520,12 +536,14 @@ export function createHarborScene(engine: Engine) {
     }
   }
   function practiceState() {
-    return {ammo:weapon.ammo,reloadRemaining:weapon.reloadRemaining,magazineSize:PRACTICE_RULES.magazineSize,
+    return {ammo:weapon.ammo,reloadRemaining:weapon.reloadRemaining,magazineSize:spec.magazineSize,weaponId,weaponName:spec.name,reloadSeconds:spec.reloadSeconds,automatic:spec.automatic,cooldown,scoped,
       targetHealth:targets.map(t=>t.health),hits,destroyed,shots,complete:destroyed===targets.length,
       jumpHeight:jumpState.height,grounded:jumpState.height===0&&jumpState.velocity===0};
   }
   return {
     jump(){if(preview||reference||(duelMode&&(duel.state().playerHealth===0||!!duel.state().winner)))return false;const next=beginJump(jumpState);const started=next!==jumpState;jumpState=next;return started;},
+    selectWeapon(id:WeaponId){weaponId=id;spec=WEAPONS[id];resetPractice();},
+    toggleScope(){if(weaponId!=='sniper'||preview||reference||(duelMode&&(duel.state().playerHealth===0||!!duel.state().winner)))return false;scoped=!scoped;return scoped;},
     resetJump(){jumpState=createJump();},
     setMode(mode:'practice'|'duel'){duelMode=mode==='duel';resetPractice();},
     duelState:()=>({...duel.state(),active:duelMode}),
