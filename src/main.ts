@@ -1,3 +1,4 @@
+import { createPerformanceHud } from './performance-hud.ts';
 import { createRenderBudget } from './render-budget.ts';
 import { sprintMultiplier } from './sprint.ts';
 import { createGameAudio,spatialSound } from './audio.ts';
@@ -86,6 +87,7 @@ async function start() {
   const densityCap=()=>Math.min(window.devicePixelRatio||1,graphicsMode==='high'?2:graphicsMode==='balanced'?1:mobile?1.5:1.75);
   let budget=createRenderBudget(densityCap()),qualityHigh=!mobile;
   engine.setHardwareScalingLevel(1/budget.density);
+  const performanceHud=createPerformanceHud(engine);
   const world = createHarborScene(engine);
   world.setQuality(qualityHigh);
   world.setMode('duel');
@@ -258,6 +260,7 @@ async function start() {
   engine.runRenderLoop(() => {
     const elapsed=resetClock?0:Math.max(0,engine.getDeltaTime()/1000);resetClock=false;
     const dt = Math.min(elapsed, 0.05);
+    performanceHud.update(elapsed);
     const portraitTouch = matchMedia('(pointer: coarse) and (orientation: portrait)').matches;
     const canPlay=!document.hidden&&!portraitTouch&&picker.hidden&&!comparing&&!menuOpen&&help.hidden&&document.hasFocus();
     if(graphicsMode==='auto'){
