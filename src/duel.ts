@@ -41,9 +41,10 @@ export function findRoute(start:Point,goal:Point):Point[]{
   }
   return [];
 }
-export function createDuel(difficulty:BotDifficulty='easy',spawnPoint:Point=BOT_SPAWN){
+type BotProfile={aimSeconds:number;warningSeconds:number;speed:number;strafe:boolean;strafeSpeed?:number};
+export function createDuel(difficulty:BotDifficulty='easy',spawnPoint:Point=BOT_SPAWN,override?:BotProfile){
   if(!canStand(spawnPoint,PROTOTYPE.radius))throw new Error('Invalid bot spawn');let respawnPoint={...spawnPoint};
-  const selected=isBotDifficulty(difficulty)?difficulty:'easy',profile=BOT_DIFFICULTIES[selected];let strafeDirection=1;
+  const selected=isBotDifficulty(difficulty)?difficulty:'easy';const profile:BotProfile=override??BOT_DIFFICULTIES[selected];let strafeDirection=1;
   let playerHealth=100,botHealth=100,playerKills=0,botKills=0,playerDead=0,botDead=0;
   let position={...respawnPoint},aim=0,cooldown=0,repath=0,route:Point[]=[],respawnVersion=0;
   let locked:Point|null=null,warning=0,damageVersion=0;
@@ -74,7 +75,7 @@ export function createDuel(difficulty:BotDifficulty='easy',spawnPoint:Point=BOT_
       const next=route[0];if(next){const dx=next.x-position.x,dz=next.z-position.z,d=Math.hypot(dx,dz);if(d<0.2)route.shift();else{const travel=Math.min(d,profile.speed*Math.min(dt,0.05));position=moveWithCollisions(position,{x:dx/d*travel,z:dz/d*travel});}}
     }
     if(sees&&distance<=12&&!locked&&profile.strafe&&botWeapon.reloadRemaining===0&&distance>.01){
-      const before=position,travel=profile.speed*Math.min(dt,.05),dx=(player.z-position.z)/distance*strafeDirection,dz=-(player.x-position.x)/distance*strafeDirection;
+      const before=position,travel=(profile.strafeSpeed??profile.speed)*Math.min(dt,.05),dx=(player.z-position.z)/distance*strafeDirection,dz=-(player.x-position.x)/distance*strafeDirection;
       position=moveWithCollisions(position,{x:dx*travel,z:dz*travel});
       if(Math.hypot(position.x-before.x,position.z-before.z)<travel*.1)strafeDirection*=-1;
     }
@@ -145,9 +146,12 @@ export function createBotMatch(difficulty:BotDifficulty='easy'){
 // User-approved survival tuning; tests may inject explicit boundary fixtures.
 export type SurvivalOptions={prepareSeconds:number;initialEnemies:number;increaseEvery:number;maxEnemies:number;restoreBetweenWaves:boolean};
 export const SURVIVAL_RULES:Readonly<SurvivalOptions>=Object.freeze({prepareSeconds:5,initialEnemies:3,increaseEvery:2,maxEnemies:12,restoreBetweenWaves:true});
-export function createSurvivalMatch(difficulty:BotDifficulty='easy',options:SurvivalOptions=SURVIVAL_RULES){
+export type SurvivalDifficulty=BotDifficulty|'auto';
+export function isSurvivalDifficulty(value:unknown):value is SurvivalDifficulty{return value==='auto'||isBotDifficulty(value);}
+export function createSurvivalMatch(difficulty:SurvivalDifficulty='easy',options:SurvivalOptions=SURVIVAL_RULES){
  if(!Number.isFinite(options.prepareSeconds)||options.prepareSeconds<0||![options.initialEnemies,options.increaseEvery,options.maxEnemies].every(n=>Number.isInteger(n)&&n>0)||options.initialEnemies>options.maxEnemies)throw new Error('Invalid survival options');
- const selected=isBotDifficulty(difficulty)?difficulty:'easy',totalWaves={easy:10,normal:20,hard:30}[selected];
+ const automatic=difficulty==='auto',adaptive=automatic?createAdaptiveDifficulty({initial:'normal',healthyThreshold:50,clearsToRaise:2,stepsPerTier:4}):null;
+ let selected:BotDifficulty=automatic?'normal':isBotDifficulty(difficulty)?difficulty:'easy';const totalWaves=automatic?20:{easy:10,normal:20,hard:30}[selected];
  type Slot={id:string;name:string;agent:ReturnType<typeof createDuel>;delay:number};
  let slots:Slot[]=[],wave=1,lives=3,playerHealth=100,playerKills=0,playerDead=0,respawnVersion=0,damageVersion=0,ammoRefreshVersion=0;
  let phase:'preparing'|'combat'|'respawning'|'won'|'lost'='preparing',prepareRemaining=options.prepareSeconds,spawned=0,defeated=0;
@@ -155,13 +159,13 @@ export function createSurvivalMatch(difficulty:BotDifficulty='easy',options:Surv
  const total=()=>Math.min(options.maxEnemies,options.initialEnemies+Math.floor((wave-1)/options.increaseEvery));
  function spawnWave(){
   if(options.restoreBetweenWaves){playerHealth=100;ammoRefreshVersion++;}phase='combat';spawned=Math.min(3,total());defeated=0;
-  const occupied:Point[]=[playerPosition];slots=Array.from({length:spawned},(_,i)=>{let point=GROUP_SPAWNS[i+1]!;if(occupied.some(p=>Math.hypot(p.x-point.x,p.z-point.z)<PROTOTYPE.radius*2))point=distantSpawn(occupied);occupied.push(point);return {id:`bot-${i+1}`,name:`봇 ${i+1}`,agent:createDuel(selected,point),delay:0};});
+  const occupied:Point[]=[playerPosition];slots=Array.from({length:spawned},(_,i)=>{let point=GROUP_SPAWNS[i+1]!;if(occupied.some(p=>Math.hypot(p.x-point.x,p.z-point.z)<PROTOTYPE.radius*2))point=distantSpawn(occupied);occupied.push(point);return {id:`bot-${i+1}`,name:`봇 ${i+1}`,agent:createDuel(selected,point,adaptive?adaptiveBotProfile(adaptive.state().stage):undefined),delay:0};});
  }
  function hurt(id:string,damage=25){
   if(!Number.isFinite(damage)||damage<0)throw new Error('Invalid damage');
   const slot=slots.find(b=>b.id===id);if(phase!=='combat'||playerHealth===0||!slot)return false;
   const killed=slot.agent.hurt('bot',damage);if(killed){playerKills++;defeated++;slot.delay=3;
-   if(defeated===total()){if(wave===totalWaves){phase='won';}else{wave++;spawned=0;defeated=0;phase='preparing';prepareRemaining=options.prepareSeconds;if(options.restoreBetweenWaves){playerHealth=100;ammoRefreshVersion++;}}}
+   if(defeated===total()){if(wave===totalWaves){phase='won';}else{if(adaptive){adaptive.completeWave(playerHealth);selected=adaptive.state().difficulty;}wave++;spawned=0;defeated=0;phase='preparing';prepareRemaining=options.prepareSeconds;if(options.restoreBetweenWaves){playerHealth=100;ammoRefreshVersion++;}}}
   }return killed;
  }
  function hurtPlayer(id:string,damage=25){
@@ -172,21 +176,48 @@ export function createSurvivalMatch(difficulty:BotDifficulty='easy',options:Surv
  }
  function update(dt:number,p:Point,visible:(from:Point,id?:string)=>boolean,fire:(from:Point,target:Point,id?:string)=>boolean|void){
   if(!Number.isFinite(dt)||dt<0)throw new Error('Invalid elapsed time');if(phase==='won'||phase==='lost')return;
-  if(phase==='respawning'){playerDead=Math.max(0,playerDead-dt);if(playerDead<1e-8){playerDead=0;playerHealth=100;respawnVersion++;playerPosition={...GROUP_SPAWNS[0]!};spawnWave();}return;}
+  if(phase==='respawning'){playerDead=Math.max(0,playerDead-dt);if(playerDead<1e-8){playerDead=0;if(adaptive){adaptive.retryAfterDeath();selected=adaptive.state().difficulty;}playerHealth=100;respawnVersion++;playerPosition={...GROUP_SPAWNS[0]!};spawnWave();}return;}
   playerPosition={...p};
   if(phase==='preparing'){prepareRemaining=Math.max(0,prepareRemaining-dt);if(prepareRemaining<1e-8){prepareRemaining=0;spawnWave();}return;}
   for(const slot of slots){
    if(phase!=='combat')break;const state=slot.agent.state();
-   if(state.botHealth===0){slot.delay=Math.max(0,slot.delay-dt);if(slot.delay<1e-8&&spawned<total()){const others=[playerPosition,...slots.filter(b=>b.id!==slot.id&&b.agent.state().botHealth>0).map(b=>b.agent.state().position)];slot.agent=createDuel(selected,distantSpawn(others));spawned++;}continue;}
+   if(state.botHealth===0){slot.delay=Math.max(0,slot.delay-dt);if(slot.delay<1e-8&&spawned<total()){const others=[playerPosition,...slots.filter(b=>b.id!==slot.id&&b.agent.state().botHealth>0).map(b=>b.agent.state().position)];slot.agent=createDuel(selected,distantSpawn(others),adaptive?adaptiveBotProfile(adaptive.state().stage):undefined);spawned++;}continue;}
    slot.agent.update(dt,playerPosition,from=>visible(from,slot.id),(from,target)=>{const clear=fire(from,target,slot.id)!==false;if(clear&&Math.hypot(playerPosition.x-target.x,playerPosition.z-target.z)<=.65)hurtPlayer(slot.id);return false;});
   }
  }
  function state(){
   const bots=slots.map(b=>{const s=b.agent.state();return {id:b.id,name:b.name,health:s.botHealth,kills:0,dead:b.delay,position:s.position,locked:phase==='combat'?s.locked:null,warning:s.warning,aim:s.aim,ammo:s.botAmmo};});
   const warning=bots.find(b=>b.health>0&&b.locked);
-  return {mode:'survival' as const,difficulty:selected,wave,totalWaves,lives,phase,prepareRemaining,total:total(),spawned,defeated,remaining:total()-defeated,ammoRefreshVersion,
+  return {mode:'survival' as const,automatic,adaptiveStage:adaptive?.state().stage??0,difficulty:selected,wave,totalWaves,lives,phase,prepareRemaining,total:total(),spawned,defeated,remaining:total()-defeated,ammoRefreshVersion,
    playerHealth,playerKills,playerDead,respawnVersion,damageVersion,playerPosition:{...playerPosition},position:{...lastAttacker},winner:phase==='won'?'player' as const:phase==='lost'?'bot' as const:'',winnerName:phase==='won'?'생존 성공':phase==='lost'?'생명 소진':'',bots,
    botHealth:bots[0]?.health??0,botKills:3-lives,botDead:0,aim:phase==='combat'?Math.max(0,...bots.map(b=>b.aim)):0,warning:warning?.warning??0,locked:warning?.locked??null,botAmmo:bots[0]?.ammo??0};
  }
  return {hurt,hurtPlayer,update,state};
+}
+
+// No application defaults: the caller must supply an approved adaptation policy.
+export type AdaptiveDifficultyPolicy={initial:BotDifficulty;healthyThreshold:number;clearsToRaise:number;stepsPerTier?:number};
+export function createAdaptiveDifficulty(policy:AdaptiveDifficultyPolicy){
+ const subdivisions=policy.stepsPerTier??1;
+ if(!Number.isInteger(subdivisions)||subdivisions<1)throw new Error('Invalid adaptation steps');
+ if(!isBotDifficulty(policy.initial)||!Number.isFinite(policy.healthyThreshold)||policy.healthyThreshold<0||policy.healthyThreshold>100||!Number.isInteger(policy.clearsToRaise)||policy.clearsToRaise<1)throw new Error('Invalid adaptive difficulty policy');
+ const levels:BotDifficulty[]=['easy','normal','hard'];
+ const threshold=policy.healthyThreshold,required=policy.clearsToRaise;
+ let index=levels.indexOf(policy.initial)*subdivisions,streak=0;
+ return {
+  completeWave(health:number){
+   if(!Number.isFinite(health)||health<0||health>100)throw new Error('Invalid wave health');
+   streak=health>=threshold?streak+1:0;
+   if(streak>=required){index=Math.min((levels.length-1)*subdivisions,index+1);streak=0;}
+  },
+  retryAfterDeath(){index=Math.max(0,index-1);streak=0;},
+  state:()=>({difficulty:levels[Math.round(index/subdivisions)]!,streak,stage:index+1}),
+ };
+}
+
+export function adaptiveBotProfile(stage:number):BotProfile{
+ if(!Number.isInteger(stage)||stage<1||stage>9)throw new Error('Invalid adaptive stage');
+ const low=stage<=5?BOT_DIFFICULTIES.easy:BOT_DIFFICULTIES.normal,high=stage<=5?BOT_DIFFICULTIES.normal:BOT_DIFFICULTIES.hard,t=stage<=5?(stage-1)/4:(stage-5)/4;
+ const lerp=(a:number,b:number)=>a+(b-a)*t,speed=lerp(low.speed,high.speed);
+ return {aimSeconds:lerp(low.aimSeconds,high.aimSeconds),warningSeconds:lerp(low.warningSeconds,high.warningSeconds),speed,strafe:stage>1,strafeSpeed:speed*Math.min(1,(stage-1)/4)};
 }

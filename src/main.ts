@@ -1,4 +1,4 @@
-import {BOT_DIFFICULTIES,isBotDifficulty} from './duel.ts';
+import {BOT_DIFFICULTIES,isSurvivalDifficulty} from './duel.ts';
 import {nearbyPickup,createInventory} from './inventory.ts';
 import { createPlaytest } from './playtest.ts';
 import { createRemoteMotion } from './remote-motion.ts';
@@ -37,7 +37,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <button id="reset">출발점</button>
       <button id="practice-reset">다시 시작</button>
       <select id="game-mode" aria-label="게임 모드"><option value="duel">봇 1대1</option><option value="ffa">봇 3명 개인전</option><option value="survival">웨이브 생존</option><option value="practice">표적 연습</option></select>
-      <label id="bot-difficulty-setting">봇 난이도<select id="bot-difficulty" aria-label="봇 난이도, 변경 시 새 경기"><option value="easy">쉬움</option><option value="normal">보통</option><option value="hard">어려움</option></select></label>
+      <label id="bot-difficulty-setting">봇 난이도<select id="bot-difficulty" aria-label="봇 난이도, 변경 시 새 경기"><option value="easy">쉬움</option><option value="normal">보통</option><option value="hard">어려움</option><option value="auto" disabled hidden>자동 · 생존 9단계</option></select></label>
       <label class="pc-jump-setting"><select id="jump-key" aria-label="PC 점프 키 선택"><option value="Space" selected>스페이스: 점프</option><option value="KeyJ">J: 점프</option></select></label>
       <label class="weapon-setting">시작 무기 · 변경 시 새 경기<select id="weapon-select" aria-label="시작 무기 선택, 변경 시 경기 초기화"><option value="pistol">권총</option><option value="machinegun">기관총</option><option value="shotgun">산탄총</option><option value="sniper">저격총</option></select></label>
       <button id="help-toggle" aria-expanded="false" aria-controls="help">도움말</button>
@@ -45,7 +45,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   </header>
   <div class="location"><span class="live-dot"></span><span id="zone">중앙 광장</span><span class="location-divider"></span><span>해안 지구</span></div>
   <section class="help" id="help" hidden>
-    <button id="help-close" class="panel-close" aria-label="도움말 닫기">닫기</button><h2>조작과 게임 안내</h2><p>생존: 생명 3개, 쉬움 10·보통 20·어려움 30웨이브. 동시 최대 3명이며 첫 적 3명에서 2웨이브마다 1명씩 늘어 최대 12명입니다. 준비 시간은 5초이며 체력·탄창을 회복합니다. 사망 시 3초 후 현재 웨이브의 적·상자와 소지 무기를 초기화해 시작 총으로 재도전합니다.</p><p>봇 3명 개인전에서는 봇끼리 싸우지 않고 나만 공격합니다. 나와 각 봇의 점수를 따로 기록하며 먼저 10킬이면 승리합니다. 사망하면 3초 후 다른 캐릭터들과 먼 지점에서 시작 총으로 부활합니다.</p><p>봇 대전은 쉬움·보통·어려움 중 선택합니다. 보통·어려움은 더 빨리 조준하고 좌우로 움직이며, 발사 경고 중에는 멈춥니다. 난이도를 변경하면 새 경기를 시작합니다.</p><p>보급 상자 근처에서 E키 또는 획득 버튼으로 무기를 줍습니다. 최대 3개를 소지하며 숫자 1~3 또는 아래 슬롯 버튼으로 바꿉니다. 가득 차면 버릴 총을 선택하세요. 상자는 20초 후 다시 나오며, 사망하면 시작 총만 남습니다.</p>
+    <button id="help-close" class="panel-close" aria-label="도움말 닫기">닫기</button><h2>조작과 게임 안내</h2><p>생존 자동 난이도는 9단계이며 보통에 해당하는 5단계에서 시작합니다. 총 20웨이브입니다. 체력 50 이상으로 2웨이브 연속 클리어하면 한 단계 상승하고, 사망 후 재도전할 때 한 단계 내려갑니다. 조준·경고 시간과 이동·좌우 이동 속도가 조금씩 변하며 전투 중에는 유지됩니다.</p><p>생존: 생명 3개, 쉬움 10·보통 20·어려움 30웨이브. 동시 최대 3명이며 첫 적 3명에서 2웨이브마다 1명씩 늘어 최대 12명입니다. 준비 시간은 5초이며 체력·탄창을 회복합니다. 사망 시 3초 후 현재 웨이브의 적·상자와 소지 무기를 초기화해 시작 총으로 재도전합니다.</p><p>봇 3명 개인전에서는 봇끼리 싸우지 않고 나만 공격합니다. 나와 각 봇의 점수를 따로 기록하며 먼저 10킬이면 승리합니다. 사망하면 3초 후 다른 캐릭터들과 먼 지점에서 시작 총으로 부활합니다.</p><p>봇 대전은 쉬움·보통·어려움 중 선택합니다. 보통·어려움은 더 빨리 조준하고 좌우로 움직이며, 발사 경고 중에는 멈춥니다. 난이도를 변경하면 새 경기를 시작합니다.</p><p>보급 상자 근처에서 E키 또는 획득 버튼으로 무기를 줍습니다. 최대 3개를 소지하며 숫자 1~3 또는 아래 슬롯 버튼으로 바꿉니다. 가득 차면 버릴 총을 선택하세요. 상자는 20초 후 다시 나오며, 사망하면 시작 총만 남습니다.</p>
     <p>로봇의 눈높이에서 거리를 탐색합니다. 화면 중앙의 조준점이 바라보는 방향입니다.</p>
     <p><strong>PC</strong> WASD 이동 · Shift 달리기 · 마우스 드래그로 시점 변경 · 짧게 클릭하면 발사. 메뉴의 마우스 고정 버튼으로 자유롭게 조준할 수 있습니다. Esc를 누르면 고정을 해제하고 일시정지합니다.</p>
     <p><strong>휴대폰</strong> 왼쪽 스틱 이동 · 화면 빈 공간을 좌우·위아래로 드래그해 시점 변경</p>
@@ -89,8 +89,8 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <section id="character-picker" class="character-picker" role="dialog" aria-modal="true" aria-labelledby="character-title" hidden>
     <div class="character-sheet"><span class="eyebrow">CHOOSE YOUR CHARACTER</span>
       <button id="setup-home">홈으로</button><h2 id="character-title">출발 준비</h2><p>캐릭터와 게임 모드, 시작 무기를 골라주세요. 설정을 바꾸면 새 경기를 시작합니다.</p>
-      <div class="start-settings"><label>게임 모드<select id="start-mode"><option value="duel">봇 1대1</option><option value="ffa">봇 3명 개인전</option><option value="survival">웨이브 생존</option><option value="practice">표적 연습</option></select></label><label id="start-difficulty-setting">봇 난이도<select id="start-difficulty"><option value="easy">쉬움</option><option value="normal">보통</option><option value="hard">어려움</option></select></label><label>시작 무기<select id="start-weapon"><option value="pistol">권총</option><option value="machinegun">기관총</option><option value="shotgun">산탄총</option><option value="sniper">저격총</option></select></label></div>
-      <p id="survival-mode-note" hidden>생명 3개로 쉬움 10·보통 20·어려움 30웨이브에 도전합니다. 5초 준비 후 시작하며, 사망하면 현재 웨이브를 시작 총으로 재도전합니다.</p>
+      <div class="start-settings"><label>게임 모드<select id="start-mode"><option value="duel">봇 1대1</option><option value="ffa">봇 3명 개인전</option><option value="survival">웨이브 생존</option><option value="practice">표적 연습</option></select></label><label id="start-difficulty-setting">봇 난이도<select id="start-difficulty"><option value="easy">쉬움</option><option value="normal">보통</option><option value="hard">어려움</option><option value="auto" disabled hidden>자동 · 생존 9단계</option></select></label><label>시작 무기<select id="start-weapon"><option value="pistol">권총</option><option value="machinegun">기관총</option><option value="shotgun">산탄총</option><option value="sniper">저격총</option></select></label></div>
+      <p id="survival-mode-note" hidden>생명 3개로 쉬움 10·보통 20·어려움 30웨이브에 도전합니다. 자동은 20웨이브·5/9단계로 시작하며, 체력 50 이상으로 2웨이브 연속 클리어하면 한 단계 상승하고 사망 후 재도전하면 한 단계 내려갑니다. 5초 준비 후 시작하며, 사망하면 현재 웨이브를 시작 총으로 재도전합니다.</p>
       <p id="ffa-mode-note" hidden>봇 3명은 나만 공격합니다. 나와 각 봇이 먼저 10킬을 경쟁하며, 사망하면 3초 후 먼 지점에서 부활합니다.</p>
       <div class="character-options">
         <button data-character="robot"><span class="robot-icon" aria-hidden="true">▰<i>● ●</i></span><strong>소형 로봇</strong><span>둥근 머리 · 청록색 눈 · 작은 안테나</span><small>왼쪽 시안</small></button>
@@ -276,15 +276,24 @@ async function start() {
   }));
   const startLocked=document.querySelector<HTMLButtonElement>('#character-start-locked')!;
   let homeMatchPending=true;
+  const syncDifficultyOptions=()=>{
+    for(const [modeId,levelId] of [['game-mode','bot-difficulty'],['start-mode','start-difficulty']]){
+      const mode=document.querySelector<HTMLSelectElement>('#'+modeId)!,level=document.querySelector<HTMLSelectElement>('#'+levelId)!;
+      const option=level.querySelector<HTMLOptionElement>('option[value="auto"]')!;option.disabled=option.hidden=mode.value!=='survival';
+      if(option.disabled&&level.value==='auto')level.value='normal';
+    }
+  };
+  document.querySelector('#start-mode')!.addEventListener('change',syncDifficultyOptions);
   const beginGame=(locked:boolean)=>{
+    syncDifficultyOptions();
     const mode=document.querySelector<HTMLSelectElement>('#game-mode')!;
     const weapon=document.querySelector<HTMLSelectElement>('#weapon-select')!;
     const nextMode=document.querySelector<HTMLSelectElement>('#start-mode')!.value;
     const nextWeapon=document.querySelector<HTMLSelectElement>('#start-weapon')!.value;
     const nextDifficulty=document.querySelector<HTMLSelectElement>('#start-difficulty')!.value;const difficulty=document.querySelector<HTMLSelectElement>('#bot-difficulty')!;
     const changed=mode.value!==nextMode||weapon.value!==nextWeapon||difficulty.value!==nextDifficulty;
-    mode.value=nextMode;weapon.value=nextWeapon;if(isBotDifficulty(nextDifficulty))difficulty.value=nextDifficulty;
-    if((changed||homeMatchPending)&&isWeaponId(nextWeapon)){world.setMode(readMode(nextMode),isBotDifficulty(nextDifficulty)?nextDifficulty:'easy');world.selectWeapon(nextWeapon);restart();}
+    mode.value=nextMode;weapon.value=nextWeapon;if(isSurvivalDifficulty(nextDifficulty))difficulty.value=nextDifficulty;
+    if((changed||homeMatchPending)&&isWeaponId(nextWeapon)){world.setMode(readMode(nextMode),isSurvivalDifficulty(nextDifficulty)?nextDifficulty:'easy');world.selectWeapon(nextWeapon);restart();}
     homeMatchPending=false;void audio.unlock();input.reset();picker.hidden=true;world.setPreview(false);closeMenu();hasPlayed=true;resumeGame();
     if(locked)lockMouse();
   };
@@ -334,7 +343,7 @@ async function start() {
     const duel=world.duelState();
     document.querySelector<HTMLElement>('.practice-score')!.hidden=duel.active;
     document.querySelector<HTMLElement>('#duel-hud')!.hidden=!duel.active;
-    document.querySelector('#duel-score')!.textContent=duel.mode==='survival'?`웨이브 ${duel.wave} / ${duel.totalWaves} · ${BOT_DIFFICULTIES[duel.difficulty].name}`:duel.mode==='ffa'?`개인전 · 나 ${duel.playerKills}킬 · ${BOT_DIFFICULTIES[duel.difficulty].name}`:`나 ${duel.playerKills} : ${duel.botKills} 봇 · ${BOT_DIFFICULTIES[duel.difficulty].name} · 10킬`;
+    document.querySelector('#duel-score')!.textContent=duel.mode==='survival'?`웨이브 ${duel.wave} / ${duel.totalWaves} · ${duel.automatic?'자동 '+duel.adaptiveStage+'/9':BOT_DIFFICULTIES[duel.difficulty].name}`:duel.mode==='ffa'?`개인전 · 나 ${duel.playerKills}킬 · ${BOT_DIFFICULTIES[duel.difficulty].name}`:`나 ${duel.playerKills} : ${duel.botKills} 봇 · ${BOT_DIFFICULTIES[duel.difficulty].name} · 10킬`;
     const scores=document.querySelector<HTMLElement>('#ffa-scores')!;if(duel.mode==='ffa'&&duel.active){scores.hidden=false;scores.textContent=duel.bots.map((b,i)=>`${b.name}(${['빨강','파랑','노랑'][i]}) ${b.kills}킬 · ${b.health===0?Math.ceil(b.dead)+'초 후 부활':'HP '+b.health}`).join('\n');}
     document.querySelector('#duel-health')!.textContent=duel.mode==='survival'?`체력 ${duel.playerHealth} · 생명 ${duel.lives}`:duel.mode==='ffa'?`내 체력 ${duel.playerHealth} · 목표 10킬`:`내 체력 ${duel.playerHealth} · 봇 체력 ${duel.botHealth}`;
     document.querySelector<HTMLProgressElement>('#player-health')!.value=duel.playerHealth;
@@ -385,9 +394,9 @@ async function start() {
   const restart=()=>{reset();world.resetPractice();lastReload=0;lastGrounded=true;lastPlayerHealth=100;lastRespawn=0;lastWinner='';footDistance=0;footAlternating=false;emptyAt=0;lastHudKey='';noticeTime=0;hitTime=0;shotTime=0;feedbackTime=0;damageTime=0;impactTime=0;previousDamage=0;refreshHud();};
   document.querySelector('#practice-reset')!.addEventListener('click',restart);
   document.querySelector('#practice-again')!.addEventListener('click',restart);
-  document.querySelector<HTMLSelectElement>('#bot-difficulty')!.addEventListener('change',event=>{const level=(event.currentTarget as HTMLSelectElement).value;if(onlineActive||!isBotDifficulty(level))return;world.setMode(readMode(document.querySelector<HTMLSelectElement>('#game-mode')!.value),level);restart();canvas.focus();});
+  document.querySelector<HTMLSelectElement>('#bot-difficulty')!.addEventListener('change',event=>{const level=(event.currentTarget as HTMLSelectElement).value;if(onlineActive||!isSurvivalDifficulty(level))return;world.setMode(readMode(document.querySelector<HTMLSelectElement>('#game-mode')!.value),level);restart();canvas.focus();});
   document.querySelector<HTMLSelectElement>('#game-mode')!.addEventListener('change',event=>{
-    world.setMode(readMode((event.currentTarget as HTMLSelectElement).value));restart();canvas.focus();
+    syncDifficultyOptions();const level=document.querySelector<HTMLSelectElement>('#bot-difficulty')!.value;world.setMode(readMode((event.currentTarget as HTMLSelectElement).value),isSurvivalDifficulty(level)?level:'easy');restart();canvas.focus();
   });
   document.querySelector<HTMLSelectElement>('#weapon-select')!.addEventListener('change',event=>{
     const id=(event.currentTarget as HTMLSelectElement).value;if(isWeaponId(id)){world.selectWeapon(id);restart();canvas.focus();}
@@ -492,6 +501,7 @@ async function start() {
     runButton.textContent=runningRequested?'달리기 켜짐':'달리기';
     const runBattle=world.duelState();runButton.disabled=runBattle.active&&(runBattle.playerHealth===0||!!runBattle.winner);
     damageTime=Math.max(0,damageTime-elapsed);impactTime=Math.max(0,impactTime-elapsed);document.querySelector<HTMLElement>('#impact-marker')!.hidden=impactTime<=0||!picker.hidden||comparing;
+    syncDifficultyOptions();
     document.querySelector<HTMLElement>('#bot-difficulty-setting')!.hidden=onlineActive||document.querySelector<HTMLSelectElement>('#game-mode')!.value==='practice';document.querySelector<HTMLElement>('#start-difficulty-setting')!.hidden=document.querySelector<HTMLSelectElement>('#start-mode')!.value==='practice';
     document.querySelector<HTMLElement>('#ffa-mode-note')!.hidden=document.querySelector<HTMLSelectElement>('#start-mode')!.value!=='ffa';document.querySelector<HTMLElement>('#survival-mode-note')!.hidden=document.querySelector<HTMLSelectElement>('#start-mode')!.value!=='survival';
     noticeTime=Math.max(0,noticeTime-elapsed);refreshHud();refreshInventory();
