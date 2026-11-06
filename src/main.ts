@@ -1,3 +1,4 @@
+import { createPlaytest } from './playtest.ts';
 import { createRemoteMotion } from './remote-motion.ts';
 import { createOnlineMotion } from './online-motion.ts';
 import { createOnlineClient } from './online.ts';
@@ -105,7 +106,7 @@ async function start() {
   const densityCap=()=>Math.min(window.devicePixelRatio||1,graphicsMode==='high'?2:graphicsMode==='balanced'?1:mobile?1.5:1.75);
   let budget=createRenderBudget(densityCap()),qualityHigh=!mobile;
   engine.setHardwareScalingLevel(1/budget.density);
-  const performanceHud=createPerformanceHud(engine);
+  const performanceHud=createPerformanceHud(engine);const playtest=createPlaytest();
   const world = createHarborScene(engine);
   world.setQuality(qualityHigh);
   world.setMode('duel');
@@ -145,10 +146,10 @@ async function start() {
     if(code==='Space'||code==='KeyJ'){input.reset();input.setJumpKey(code);canvas.focus();}
   });
   let onlineState:MatchState|null=null,onlineId='',onlineActive=false,onlineSendTime=0,onlineEventId=-1;
-  let onlineStatus='',onlineCode='';const onlineMotion=createOnlineMotion(),remoteMotion=createRemoteMotion();
+  let onlineStatus='',onlineCode='';const onlineMotion=createOnlineMotion(m=>playtest.correction(m)),remoteMotion=createRemoteMotion();
   const onlineLobby=document.querySelector<HTMLElement>('#online-lobby')!;
   const online=createOnlineClient(import.meta.env?.VITE_ONLINE_URL??(import.meta.env?.DEV?'http://127.0.0.1:8787':''),(state,id)=>{
-    onlineState=state;onlineId=id;onlineMotion.receive(state,id);remoteMotion.receive(state,id,performance.now());
+    playtest.packet();onlineState=state;onlineId=id;onlineMotion.receive(state,id);remoteMotion.receive(state,id,performance.now());
     if(!onlineActive){onlineActive=true;homeOpen=false;home.hidden=true;onlineLobby.hidden=true;document.body.classList.remove('at-home');picker.hidden=true;manualPaused=false;pausePanel.hidden=true;world.setPreview(false);const me=state.players.find(p=>p.id===id);if(me){world.selectCharacter(me.character);world.selectWeapon(me.weaponId);input.resetLook();input.setLook(me.yaw,me.pitch);}hasPlayed=true;canvas.focus();}
   },status=>{onlineStatus=status;document.querySelector('#online-message')!.textContent=status;},session=>{onlineCode=session.code;});
   let onlineControlsActive=false;const updateOnlineControls=(active:boolean)=>{if(active===onlineControlsActive)return;onlineControlsActive=active;document.querySelector<HTMLElement>('#online-copy')!.hidden=!active;for(const id of ['character-open','game-mode','weapon-select','practice-reset','reset'])document.querySelector<HTMLButtonElement>('#'+id)!.disabled=active;};
@@ -390,7 +391,7 @@ async function start() {
     input.setEnabled(canPlay);
     document.querySelector('#pause-description')!.textContent=onlineActive?'내 조작만 멈춥니다. 상대의 경기는 계속됩니다.':'전투와 이동이 멈췄습니다.';
     document.querySelector<HTMLElement>('#pause-indicator')!.hidden=manualPaused||!picker.hidden||comparing||portraitTouch||(!menuOpen&&help.hidden);
-    performanceHud.update(elapsed,canPlay);
+    performanceHud.update(elapsed,canPlay);playtest.frame(elapsed,onlineActive?'online':world.duelState().active?'bot':'practice',canPlay,onlineActive?online.network.rttMs:null);
     if(graphicsMode==='auto'){
       const density=budget.sample(elapsed,canPlay);
       if(density!==null){engine.setHardwareScalingLevel(1/density);engine.resize();world.resize();}

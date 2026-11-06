@@ -2,7 +2,7 @@ import { moveNetworkPlayer,type Command,type MatchState,type Player } from './ne
 type Move=Omit<Command,'seq'>;
 type Point={x:number;z:number};
 // Only presentation is predicted. Health, ammo, hits, kills and the canonical position remain server owned.
-export function createOnlineMotion(){
+export function createOnlineMotion(onCorrection:(meters:number)=>void=()=>{}){
  let me:Player|null=null,position:Point={x:0,z:0},offset:Point={x:0,z:0},active=false,age=0;
  let pending:{seq:number;command:Move}[]=[];
  function snap(p:Player){position={x:p.x,z:p.z};offset={x:0,z:0};pending=[];}
@@ -16,7 +16,7 @@ export function createOnlineMotion(){
    if(discontinuity){snap(next);}else{
     let target:Point={x:next.x,z:next.z};
     for(const p of pending)target=moveNetworkPlayer({...next,...target},p.command,.05);
-    const distance=Math.hypot(target.x-position.x,target.z-position.z);
+    const distance=Math.hypot(target.x-position.x,target.z-position.z);onCorrection(distance);
     if(distance>3){snap(next);}else{
      offset.x+=position.x-target.x;offset.z+=position.z-target.z;position=target;
     }
