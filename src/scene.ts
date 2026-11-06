@@ -1,3 +1,4 @@
+import {createSupplyCrates} from './supply-crates.ts';
 import {createInventory,createPickups,syncSlot,advanceStowed,switchSlot,takePickup,tickPickups} from './inventory.ts';
 import type { MatchState } from './network-game.ts';
 import { createRecoil,type ShakeLevel } from './impact.ts';
@@ -471,9 +472,8 @@ export function createHarborScene(engine: Engine) {
   let preview = false, reference = false;
   const recoil=createRecoil();
   function equip(){const slot=inventory.slots[inventory.active]!;weaponId=slot.id;spec=WEAPONS[weaponId];weapon=slot.weapon;cooldown=slot.cooldown;scoped=false;recoil.clear();}
-  const supplyMaterial=material('supply-crate','#4d8c93','#16313a');
-  const supplyMeshes=createPickups().map(c=>{const mesh=MeshBuilder.CreateBox(c.id,{width:1.2,height:.75,depth:.8},scene);mesh.position.set(c.x,.4,c.z);mesh.material=supplyMaterial;mesh.isPickable=false;return mesh;});
-  function syncSupplies(){for(const mesh of supplyMeshes){const crate=pickups.find(c=>c.id===mesh.name);mesh.setEnabled(!preview&&!reference&&!!crate&&crate.remaining===0);}}
+  const supplies=createSupplyCrates(scene,createPickups());
+  function syncSupplies(){supplies.update(pickups,!preview&&!reference);}
   let animationTime = 0;
   function resize() { camera.getProjectionMatrix(true); }
   function setReference(value: boolean) {
