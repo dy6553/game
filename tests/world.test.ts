@@ -10,7 +10,7 @@ test('spawn and connected main/side streets are walkable', () => {
 });
 
 test('buildings and cover block their exact footprints', () => {
-  for (const rect of [...BUILDINGS, ...COVERS]) {
+  for (const rect of [...BUILDINGS.filter(b=>!b.enterable), ...COVERS]) {
     assert.equal(canStand(rect, PROTOTYPE.radius), false, rect.id);
   }
 });

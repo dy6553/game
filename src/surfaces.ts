@@ -3,13 +3,14 @@ import { Texture } from '@babylonjs/core/Materials/Textures/texture.js';
 import '@babylonjs/core/Engines/Extensions/engine.rawTexture.js';
 import type { Scene } from '@babylonjs/core/scene.js';
 
-export function createSurface(scene: Scene, kind: 'paving' | 'plaster' | 'road' | 'roof' | 'window') {
-  const size=512, pixels=new Uint8Array(size*size*3);
+export function createSurface(scene: Scene, kind: 'paving' | 'plaster' | 'road' | 'roof' | 'window' | 'wood') {
+  const size=1024, pixels=new Uint8Array(size*size*3);
   let seed=917;
   const noise=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};
   for(let y=0;y<size;y++) for(let x=0;x<size;x++) {
     let value=0.9+(noise()-0.5)*0.1;
-    if(kind==='paving') {
+    if(kind==='wood'){value=.65+.1*Math.sin(y*.05+Math.sin(x*.015)*3)+.05*Math.sin(y*.4);if(y%96<3)value=.28;}
+    else if(kind==='paving') {
       const row=Math.floor(y/96),column=(x+(row%2)*72)%144;
       if(y%96<3 || column<3) value=0.69;
       else value+=Math.sin(row*7+Math.floor((x+(row%2)*72)/144)*13)*0.09;

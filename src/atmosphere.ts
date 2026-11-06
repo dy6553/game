@@ -37,7 +37,7 @@ export function createAtmosphere(scene:Scene){
     const p=finish(MeshBuilder.CreateGround('reflection-card',{width:w,height:h},scene),m);p.position.set(x,y,z);
     const group=groups.get(m)??[];group.push(p);groups.set(m,group);return p;
   };
-  for(const x of [-10.7,10.7])for(const z of [-29,-10,10,29]){
+  for(const x of [-43,-10.7,10.7,43])for(const z of [-52,-32,-29,-10,10,29]){
     for(let i=0;i<5;i++){
       const px=x+(random()-.5)*3,pz=z+(random()-.5)*7;
       if(canStand({x:px,z:pz},.15))card(px,pz,1+random()*2,2+random()*4,.085+i*.001,gold);
@@ -46,7 +46,7 @@ export function createAtmosphere(scene:Scene){
     p.position.set(x,4.15,z);p.billboardMode=Mesh.BILLBOARDMODE_ALL;
   }
   for(let i=0;i<45;i++){
-    const x=(random()-.5)*80,z=(random()-.5)*64;
+    const x=(random()-.5)*120,z=-13+(random()-.5)*90;
     if(canStand({x,z},.5))card(x,z,1+random()*3,1+random()*4,.08,blue);
   }
   for(let i=0;i<34;i++){

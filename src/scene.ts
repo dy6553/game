@@ -22,7 +22,7 @@ import { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator.
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
 import { PRACTICE_RULES,createWeapon,tryFire,beginReload,advanceWeapon,applyDamage } from './combat.ts';
 import { createJump,beginJump,advanceJump } from './jump.ts';
-import { BUILDINGS, COVERS } from './world.ts';
+import { BUILDINGS, COVERS,buildingWalls,interiorFurniture,indoorAt,DOOR_WIDTH } from './world.ts';
 import type { Point } from './world.ts';
 import { createCharacter } from './characters.ts';
 import type { CharacterType } from './characters.ts';
@@ -102,14 +102,17 @@ export function createHarborScene(engine: Engine) {
     mesh.isPickable = false;
     return mesh;
   };
-  createNightGround(scene,stone,'ground',0,0,92,74,0);
-  createNightGround(scene,asphalt,'main-road',0,0,89,10,0.012);
-  createNightGround(scene,asphalt,'cross-road',0,0,10,68,0.016);
-  for(const x of [-25,25])createNightGround(scene,asphalt,'side-alley',x,0,4.8,65,0.02);
+  createNightGround(scene,stone,'ground',0,-13,132,100,0);
+  createNightGround(scene,asphalt,'main-road',0,0,128,10,0.012);
+  createNightGround(scene,asphalt,'cross-road',0,-13,10,94,0.016);
+  for(const x of [-61,-25,25,61])createNightGround(scene,asphalt,'side-alley',x,-13,4.8,94,0.02);
   createNightGround(scene,stone,'plaza',0,0,21,23,0.04);
   for(let x=-42;x<44;x+=6)if(Math.abs(x)>12)box('road-dash',x,0.04,0,2.6,0.012,0.15,line);
   for(const x of [-12,12])for(let z=-3;z<=3;z+=1)box('crosswalk',x,0.04,z,2,0.02,0.5,line);
 
+  createNightGround(scene,asphalt,'southern-boulevard',0,-32,128,8,.018);
+  const interiorLights:{id:string;light:PointLight}[]=[];
+  const interiorFloor=material('interior-floor','#9f6b48');interiorFloor.diffuseTexture=createSurface(scene,'wood');
   const occluders: { meshes: Mesh[]; min: Vector3; max: Vector3 }[] = [];
   const batch = (meshes: Mesh[]) => {
     const groups = new Map<StandardMaterial, Mesh[]>();
@@ -136,9 +139,29 @@ export function createHarborScene(engine: Engine) {
       const mesh = box(`${id}-${name}`, px, py, pz, w, h, d, mat);
       meshes.push(mesh); return mesh;
     };
-    const body = part('body', x, height / 2, z, width, height, depth, bodyMaterials[palette]!);
+    const body = part('body', x, building.enterable?(height+3.4)/2:height/2, z, width,building.enterable?height-3.4:height,depth,bodyMaterials[palette]!);
+    if(building.enterable){
+      for(const wall of buildingWalls(building))part('shell-'+wall.id,wall.x,1.7,wall.z,wall.width,3.4,wall.depth,bodyMaterials[palette]!);
+      part('interior-floor',x,.035,z,width-.45,.06,depth-.45,interiorFloor);
+      part('ceiling',x,3.35,z,width-.4,.1,depth-.4,wood);
+      part('ceiling-light',x,3.25,z,2.5,.08,.7,warm);
+      part('open-entry-light',x,3.02,z+(z<0?1:-1)*(depth/2+.22),.85,.09,.09,glass);
+      part('door-lintel',x,3.2,z+(z<0?1:-1)*depth/2,DOOR_WIDTH,.3,.5,wood);
+      for(const side of [-1,1])part('door-jamb',x+side*(DOOR_WIDTH/2+.06),1.6,z+(z<0?1:-1)*depth/2,.12,3.2,.6,wood);
+      for(const item of interiorFurniture(building)){
+        const counter=item.id.endsWith('counter');
+        part('furniture-'+item.id,item.x,counter?.65:.45,item.z,item.width,counter?1.3:.9,item.depth,wood);
+        part('furniture-top',item.x,counter?1.32:.92,item.z,item.width+.12,.07,item.depth+.12,stone);
+        if(counter)for(let i=0;i<5;i++){part('counter-cup',item.x,1.5,item.z-1.6+i*.7,.18,.28,.18,litWindow[i%2]!);}
+      }
+      const lamp=new PointLight(building.id+'-interior-light',new Vector3(x,2.7,z),scene);lamp.diffuse=Color3.FromHexString('#ffd0a0');lamp.intensity=1.4;lamp.range=15;lamp.setEnabled(false);interiorLights.push({id:building.id,light:lamp});
+      for(let i=0;i<4;i++){
+        const shelfZ=z-3+i*1.4;part('interior-shelf',x-width/2+.55,1.5,shelfZ,.45,.08,1.15,wood);
+        for(let j=0;j<4;j++)part('books',x-width/2+.55,1.72,shelfZ-.4+j*.23,.25,.35+(j%2)*.1,.16,awningMats[(i+j)%3]!);
+      }
+    }
     body.receiveShadows = true; shadows.addShadowCaster(body);
-    part('foundation', x, 0.3, z, width + 0.3, 0.6, depth + 0.3, metal);
+    if(!building.enterable)part('foundation', x, 0.3, z, width + 0.3, 0.6, depth + 0.3, metal);
     part('cornice', x, height - 0.1, z, width + 0.5, 0.25, depth + 0.5, stone);
     for (const side of [-1,1]) {
       const roof = part('roof', x, height+0.65, z+side*depth/4, width+0.85,0.22,depth/2+0.8,roofMat);
@@ -150,13 +173,14 @@ export function createHarborScene(engine: Engine) {
     const frontZ = z + front * (depth / 2 + 0.06);
     for (let floor = 2; floor < height - 0.8; floor += 2.4) {
       for (let offset = -width / 2 + 1.3; offset < width / 2 - 0.5; offset += 2.5) {
+        if(building.enterable&&floor<3.4&&Math.abs(offset)<2.4)continue;
         part('window-frame', x + offset, floor, frontZ, 1.55, 1.5, 0.14, metal);
         part('window', x + offset, floor, frontZ + front * 0.08, 1.3, 1.24, 0.06, litWindow[(Math.floor(offset+width)+Math.floor(floor)+palette)%3]!);
         part('mullion', x + offset, floor, frontZ + front * 0.13, 0.06, 1.3, 0.08, wood);
       }
     }
-    part('door', x, 1.15, frontZ + front * 0.1, 1.5, 2.3, 0.2, wood);
-    part('door-glass', x, 1.5, frontZ + front * 0.22, 1.05, 1.05, 0.04, litWindow[1]!);
+    if(!building.enterable)part('door', x, 1.15, frontZ + front * 0.1, 1.5, 2.3, 0.2, wood);
+    if(!building.enterable)part('door-glass', x, 1.5, frontZ + front * 0.22, 1.05, 1.05, 0.04, litWindow[1]!);
     part('awning', x, 2.85, frontZ + front * 0.5, width * 0.85, 0.25, 1.35, awningMats[palette]!);
     for (let stripe = -width * 0.37; stripe < width * 0.4; stripe += 0.85) {
       part('awning-stripe', x + stripe, 3, frontZ + front * 0.5, 0.2, 0.025, 1.35, stone);
@@ -198,7 +222,10 @@ export function createHarborScene(engine: Engine) {
       for(let offset=-width/2+0.3;offset<width/2;offset+=width/3) {
         part('timber-upright',x+offset,height/2, z+side*(depth/2+0.1),0.13,height,0.1,wood);
       }
-      for(let level=0.8;level<height;level+=2.4) part('timber-crossbeam',x,level,z+side*(depth/2+0.12),width,0.12,0.12,wood);
+      for(let level=0.8;level<height;level+=2.4){
+        if(building.enterable&&side===front&&level<3.4){const w=(width-DOOR_WIDTH)/2;for(const d of [-1,1])part('timber-crossbeam',x+d*(DOOR_WIDTH/2+w/2),level,z+side*(depth/2+.12),w,.12,.12,wood);}
+        else part('timber-crossbeam',x,level,z+side*(depth/2+.12),width,.12,.12,wood);
+      }
       if(palette===1) {
         part('shutter',x+width*0.3,1.45,z+side*(depth/2+0.18),2.1,2.4,0.1,glass);
         for(let slat=0;slat<12;slat++) part('shutter-slat',x+width*0.3,0.4+slat*0.19,z+side*(depth/2+0.24),2.1,0.035,0.04,metal);
@@ -263,7 +290,7 @@ export function createHarborScene(engine: Engine) {
   }
   // Lamps are outside collision lanes; emissive pools avoid dozens of expensive lights.
   const poolMat = material('lamp-pool', '#e4b266', '#65431f'); poolMat.alpha = 0.09;
-  for (const x of [-10.7, 10.7]) for (const z of [-29, -10, 10, 29]) {
+  for (const x of [-43,-10.7, 10.7,43]) for (const z of [-52,-32,-29, -10, 10, 29]) {
     box('lamp-post', x, 2.2, z, 0.12, 4.4, 0.12, metal);
     box('lamp-base',x,0.16,z,0.38,0.32,0.38,metal);
     box('lamp-collar',x,3.9,z,0.21,0.09,0.21,wood);
@@ -276,9 +303,9 @@ export function createHarborScene(engine: Engine) {
     const pool = MeshBuilder.CreateDisc('lamp-pool', { radius: 3.5, tessellation: 32 }, scene);
     pool.rotation.x = Math.PI / 2; pool.position.set(x, 0.07, z); pool.material = poolMat; pool.isPickable = false;
   }
-  box('harbor-wall', 0, 0.4, 35.5, 94, 0.8, 1, stone);
-  box('railing', 0, 1.5, 35.3, 92, 0.08, 0.08, metal);
-  for (let x = -45; x <= 45; x += 2) box('rail-post', x, 0.95, 35.3, 0.07, 1.25, 0.07, metal);
+  box('harbor-wall', 0, 0.4, 35.5, 130, 0.8, 1, stone);
+  box('railing', 0, 1.5, 35.3, 128, 0.08, 0.08, metal);
+  for (let x = -63; x <= 63; x += 2) box('rail-post', x, 0.95, 35.3, 0.07, 1.25, 0.07, metal);
   const sea = material('sea', '#18374c', '#05101d');
   const waterNormals=createSurfaceNormals(scene,'water');waterNormals.uScale=16;waterNormals.vScale=12;sea.bumpTexture=waterNormals;
   sea.specularColor = new Color3(0.25, 0.3, 0.38); sea.specularPower = 90;
@@ -481,6 +508,7 @@ export function createHarborScene(engine: Engine) {
     }
     scopeBody.setEnabled(weaponId==='sniper');secondBarrel.setEnabled(weaponId==='shotgun');
     gun.scaling.z=weaponId==='pistol'?1:1.6;barrel.scaling.z=weaponId==='sniper'?2:weaponId==='pistol'?1:1.5;
+    const inside=indoorAt(p);for(const item of interiorLights)item.light.setEnabled(!preview&&!reference&&item.id===inside?.id);
     syncBot();
   }
   setPreview(false);

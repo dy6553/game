@@ -53,11 +53,11 @@ export function addStreetDetails(scene:Scene) {
   for(const [index,b] of BUILDINGS.entries()) {
     const front=b.z<0?1:-1, faceZ=b.z+front*(b.depth/2+0.2);
     // Shop entry hardware, utility boxes and a modest light above each doorway.
-    box('door-handle',b.x+0.43,1.2,faceZ+front*0.08,0.035,0.28,0.06,brass);
-    box('door-kickplate',b.x,0.35,faceZ+front*0.06,1.1,0.15,0.035,iron);
-    box('doorstep',b.x,0.09,faceZ,1.65,0.12,0.3,grey);
-    box('entry-lintel',b.x,2.6,faceZ,1.9,0.16,0.38,wood);
-    box('entry-strip-light',b.x,2.49,faceZ+front*0.12,1.4,0.045,0.06,amber);
+    if(!b.enterable)box('door-handle',b.x+0.43,1.2,faceZ+front*0.08,0.035,0.28,0.06,brass);
+    if(!b.enterable)box('door-kickplate',b.x,0.35,faceZ+front*0.06,1.1,0.15,0.035,iron);
+    if(!b.enterable)box('doorstep',b.x,0.09,faceZ,1.65,0.12,0.3,grey);
+    box('entry-lintel',b.x,b.enterable?3.35:2.6,faceZ,1.9,0.16,0.38,wood);
+    box('entry-strip-light',b.x,b.enterable?3.24:2.49,faceZ+front*0.12,1.4,0.045,0.06,amber);
     const lampX=b.x-b.width*0.38;
     box('wall-lamp-bracket',lampX,2.7,faceZ,0.1,0.12,0.45,iron);
     box('wall-lamp-cap',lampX,2.75,faceZ+front*0.3,0.45,0.1,0.36,iron);

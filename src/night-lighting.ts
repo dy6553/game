@@ -5,7 +5,7 @@ import { BUILDINGS, COVERS } from './world.ts';
 import type { Scene } from '@babylonjs/core/scene.js';
 
 const pools = [
-  ...[-10.7,10.7].flatMap(x=>[-29,-10,10,29].map(z=>({x,z,radius:6.1,strength:Math.abs(z)<20?0.9:0.55}))),
+  ...[-43,-10.7,10.7,43].flatMap(x=>[-52,-32,-29,-10,10,29].map(z=>({x,z,radius:6.1,strength:Math.abs(z)<20?0.9:0.55}))),
   ...BUILDINGS.map(b=>({x:b.x,z:b.z+(b.z<0?1:-1)*(b.depth/2+1),radius:4.6,strength:0.6+b.palette*0.13})),
 ];
 export function sampleNightGround(x:number,z:number) {
