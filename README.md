@@ -1,6 +1,10 @@
-# 항구의 밤
+# 항구의 밤 — 웹 버전
 
-Babylon.js + TypeScript + Vite 1인칭 로봇 FPS.
+실행: https://project-3uu6s.vercel.app
+
+Babylon.js + TypeScript + Vite로 만든 1인칭 로봇 슈팅 시제품입니다. 권총·기관총·산탄총·저격총, 표적 연습과 쉬운 봇1대1, 모바일 터치, 스페이스바 점프, 재장전, 사운드와 음량 설정을 제공합니다.
+
+단일HTML 다운로드 및 HTML뷰어 대응 빌드는 종료했습니다. 2MB 단일 파일 검사를 제거하고 JavaScript·CSS·오디오를 분리해 웹으로 배포합니다. 웹페이지 진입점 index.html은 웹 실행에 필요합니다. 모바일 성능·네트워크·호스팅 무료 사용량은 계속 고려합니다.
 
 ```sh
 npm ci
@@ -8,4 +12,8 @@ npm run build
 npm test
 ```
 
-Neon Postgres/Auth 설정은 neon.ts에 정의합니다. 환경변수와 .neon은 Git에 올리지 않습니다.
+PC: WASD 이동, 드래그 시점, 클릭 발사, 스페이스 점프, R재장전, Q저격 확대. 더블클릭으로 마우스를 고정한 뒤 기관총 연사 가능. 휴대폰 가로: 스틱·드래그·발사·점프·재장전. 메뉴에서 시작 무기를 바꾸면 새 경기를 시작합니다. 도움말에서 음량과 화질을 조절합니다.
+
+온라인 사람 간 대전·대시·무기 획득/소지·나머지 AI모드·계정·전적은 미구현입니다. Neon은 초기화 후 인증 시간 초과로 실제 서비스 연결과 검증이 남아 있습니다. 자동 검사32개 통과 기록과 실제 모바일/GPU/청취 검증은 구분합니다.
+
+CC0 Kenney 효과음 및 자체 합성음 사용. public/audio의 라이선스와 docs/audio.md 참조. 런타임 라이선스는 public/THIRD_PARTY_RUNTIME_LICENSES.txt에 포함합니다.
