@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "harbor-arena-online",
+  "name": "game",
   "main": "worker.js",
   "compatibility_date": "2026-03-01",
   "workers_dev": true,
