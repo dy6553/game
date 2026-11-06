@@ -1,6 +1,13 @@
 import { canStand, moveWithCollisions, PROTOTYPE, type Point } from './world.ts';
 import { createWeapon, advanceWeapon, beginReload, tryFire, PRACTICE_RULES } from './combat.ts';
 export const DUEL_RULES = Object.freeze({health:100,damage:25,aimSeconds:1,fireSeconds:0.8,respawnSeconds:3,goal:10,warningSeconds:0.4});
+export type BotDifficulty='easy'|'normal'|'hard';
+export const BOT_DIFFICULTIES=Object.freeze({
+ easy:{name:'쉬움',aimSeconds:1,warningSeconds:.4,speed:3,strafe:false},
+ normal:{name:'보통',aimSeconds:.7,warningSeconds:.35,speed:4,strafe:true},
+ hard:{name:'어려움',aimSeconds:.45,warningSeconds:.3,speed:5,strafe:true},
+});
+export function isBotDifficulty(value:unknown):value is BotDifficulty{return value==='easy'||value==='normal'||value==='hard';}
 export const BOT_SPAWN:Point={x:0,z:18};
 // Grid routing uses the same collision geometry and radius as player movement.
 const step=2;
@@ -34,7 +41,8 @@ export function findRoute(start:Point,goal:Point):Point[]{
   }
   return [];
 }
-export function createDuel(){
+export function createDuel(difficulty:BotDifficulty='easy'){
+  const selected=isBotDifficulty(difficulty)?difficulty:'easy',profile=BOT_DIFFICULTIES[selected];let strafeDirection=1;
   let playerHealth=100,botHealth=100,playerKills=0,botKills=0,playerDead=0,botDead=0;
   let position={...BOT_SPAWN},aim=0,cooldown=0,repath=0,route:Point[]=[],respawnVersion=0;
   let locked:Point|null=null,warning=0,damageVersion=0;
@@ -59,16 +67,21 @@ export function createDuel(){
     if(botHealth===0){botDead=Math.max(0,botDead-dt);if(botDead===0){botHealth=100;position={...BOT_SPAWN};botWeapon=createWeapon(PRACTICE_RULES);aim=0;cooldown=0;repath=0;}return;}
     botWeapon=advanceWeapon(botWeapon,dt,PRACTICE_RULES);cooldown=Math.max(0,cooldown-dt);
     const sees=visible(position),distance=Math.hypot(player.x-position.x,player.z-position.z);
-    if(!sees||distance>12){
+    if((!locked||!profile.strafe)&&(!sees||distance>12)){
       repath-=dt;if(repath<=0){route=findRoute(position,player);repath=0.75;}
-      const next=route[0];if(next){const dx=next.x-position.x,dz=next.z-position.z,d=Math.hypot(dx,dz);if(d<0.2)route.shift();else{const travel=Math.min(d,3*Math.min(dt,0.05));position=moveWithCollisions(position,{x:dx/d*travel,z:dz/d*travel});}}
+      const next=route[0];if(next){const dx=next.x-position.x,dz=next.z-position.z,d=Math.hypot(dx,dz);if(d<0.2)route.shift();else{const travel=Math.min(d,profile.speed*Math.min(dt,0.05));position=moveWithCollisions(position,{x:dx/d*travel,z:dz/d*travel});}}
+    }
+    if(sees&&distance<=12&&!locked&&profile.strafe&&botWeapon.reloadRemaining===0&&distance>.01){
+      const before=position,travel=profile.speed*Math.min(dt,.05),dx=(player.z-position.z)/distance*strafeDirection,dz=-(player.x-position.x)/distance*strafeDirection;
+      position=moveWithCollisions(position,{x:dx*travel,z:dz*travel});
+      if(Math.hypot(position.x-before.x,position.z-before.z)<travel*.1)strafeDirection*=-1;
     }
     if(!sees||!visible(position)){aim=0;locked=null;warning=0;return;}
     if(locked){
       warning=Math.max(0,warning-dt);
       if(warning===0){
         const target=locked;locked=null;const shot=tryFire(botWeapon);botWeapon=shot.state;
-        if(shot.fired){cooldown=DUEL_RULES.fireSeconds;aim=0;
+        if(shot.fired){cooldown=DUEL_RULES.fireSeconds;aim=0;strafeDirection*=-1;
           const clear=fire(position,target)!==false;
           if(clear&&Math.hypot(player.x-target.x,player.z-target.z)<=0.65)hurt('player');
         }
@@ -76,10 +89,10 @@ export function createDuel(){
       return;
     }
     aim+=Math.min(dt,0.1);
-    if(aim>=DUEL_RULES.aimSeconds&&cooldown===0){
-      if(botWeapon.ammo>0&&botWeapon.reloadRemaining===0){locked={...player};warning=DUEL_RULES.warningSeconds;}
+    if(aim>=profile.aimSeconds&&cooldown===0){
+      if(botWeapon.ammo>0&&botWeapon.reloadRemaining===0){locked={...player};warning=profile.warningSeconds;}
       else if(botWeapon.ammo===0)botWeapon=beginReload(botWeapon,PRACTICE_RULES);
     }
   }
-  return {hurt,update,state:()=>({playerHealth,botHealth,playerKills,botKills,playerDead,botDead,position:{...position},winner,respawnVersion,aim,warning,locked:locked?{...locked}:null,damageVersion,botAmmo:botWeapon.ammo})};
+  return {hurt,update,state:()=>({difficulty:selected,playerHealth,botHealth,playerKills,botKills,playerDead,botDead,position:{...position},winner,respawnVersion,aim,warning,locked:locked?{...locked}:null,damageVersion,botAmmo:botWeapon.ammo})};
 }

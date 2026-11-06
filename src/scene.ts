@@ -3,7 +3,7 @@ import type { MatchState } from './network-game.ts';
 import { createRecoil,type ShakeLevel } from './impact.ts';
 import { createRobotImpact } from './robot-impact.ts';
 import { WEAPONS,pelletOffsets,type WeaponId } from './weapons.ts';
-import { createDuel } from './duel.ts';
+import { createDuel,isBotDifficulty,type BotDifficulty } from './duel.ts';
 import type { Engine } from '@babylonjs/core/Engines/engine.js';
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js';
 import { Vector3, Vector4 } from '@babylonjs/core/Maths/math.vector.js';
@@ -419,7 +419,7 @@ export function createHarborScene(engine: Engine) {
 
   });
   const atmosphere=createAtmosphere(scene);
-  let duel=createDuel(), duelMode=false;
+  let botDifficulty:BotDifficulty='easy';let duel=createDuel(botDifficulty), duelMode=false;
   const botParent=new TransformNode('opponent',scene);
   const opponent=createCharacter(scene,botParent,'robot-cat');
   for(const mesh of opponent.meshes){mesh.isPickable=true;mesh.metadata={opponent:true};shadows.addShadowCaster(mesh);}
@@ -582,7 +582,7 @@ export function createHarborScene(engine: Engine) {
   }
   function resetPractice() {
     weaponId=startWeapon;spec=WEAPONS[weaponId];inventory=createInventory(startWeapon);pickups=createPickups();weapon=createWeapon(spec);cooldown=0;scoped=false;jumpState=createJump();hits=0;destroyed=0;shots=0;
-    effects.clear();botEffects.clear();recoil.clear();robotImpact.reset();duel=createDuel();seenRespawn=0;syncBot();
+    effects.clear();botEffects.clear();recoil.clear();robotImpact.reset();duel=createDuel(botDifficulty);seenRespawn=0;syncBot();
     for(const target of targets){
       target.health=PRACTICE_RULES.maxHealth;target.flash=0;target.root.setEnabled(!duelMode);
       target.healthBar.scaling.x=1;target.healthBar.position.x=target.x;
@@ -623,7 +623,7 @@ export function createHarborScene(engine: Engine) {
     selectWeapon(id:WeaponId){startWeapon=id;weaponId=id;spec=WEAPONS[id];resetPractice();},
     toggleScope(){if(weaponId!=='sniper'||preview||reference||(duelMode&&(duel.state().playerHealth===0||!!duel.state().winner)))return false;scoped=!scoped;return scoped;},
     resetJump(){jumpState=createJump();},
-    setMode(mode:'practice'|'duel'){duelMode=mode==='duel';resetPractice();},
+    setMode(mode:'practice'|'duel',difficulty?:BotDifficulty){if(isBotDifficulty(difficulty))botDifficulty=difficulty;duelMode=mode==='duel';resetPractice();},
     consumeSounds(){return soundEvents.splice(0);},
     duelState:()=>({...duel.state(),active:duelMode}),
     inventoryState(){syncSlot(inventory,weapon,cooldown);return {inventory,pickups};},
