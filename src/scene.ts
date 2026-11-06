@@ -1,3 +1,4 @@
+import type { MatchState } from './network-game.ts';
 import { createRecoil,type ShakeLevel } from './impact.ts';
 import { createRobotImpact } from './robot-impact.ts';
 import { WEAPONS,pelletOffsets,type WeaponId } from './weapons.ts';
@@ -582,6 +583,31 @@ export function createHarborScene(engine: Engine) {
       target.healthBar.scaling.x=1;target.healthBar.position.x=target.x;
     }
   }
+  let remote: {model:ReturnType<typeof createCharacter>;fx:ReturnType<typeof createRobotImpact>;type:CharacterType;health:number}|null=null;
+  const remoteParent=new TransformNode('online-opponent',scene);
+  let lastNetworkEvent=-1;
+  function endOnline(){
+    if(remote){for(const mesh of remote.model.meshes)shadows.removeShadowCaster(mesh);remote.fx.dispose();remote.model.root.dispose();remote=null;}
+    lastNetworkEvent=-1;effects.clear();botEffects.clear();recoil.clear();
+  }
+  function renderOnline(state:MatchState,id:string,look:Look,dt:number){
+    const me=state.players.find(p=>p.id===id);if(!me)return;
+    const other=state.players.find(p=>p.id!==id);
+    duelMode=false;preview=false;reference=false;weaponId=me.weaponId;spec=WEAPONS[weaponId];weapon={...me.weapon};jumpState={...me.jump};
+    recoil.update(dt);effects.update(dt);botEffects.update(dt);
+    update(me,0,look,true);for(const target of targets)target.root.setEnabled(false);
+    if(other){
+      if(!remote||remote.type!==other.character){endOnline();const model=createCharacter(scene,remoteParent,other.character);const fx=createRobotImpact(scene,model.root,model.meshes);remote={model,fx,type:other.character,health:other.health};for(const mesh of model.meshes){mesh.isPickable=false;shadows.addShadowCaster(mesh);}remoteParent.position.set(other.x,other.jump.height,other.z);}
+      if(remote.health===0&&other.health>0){remote.fx.reset();remoteParent.position.set(other.x,other.jump.height,other.z);}
+      const factor=1-Math.exp(-dt*18);remoteParent.position.x+=(other.x-remoteParent.position.x)*factor;remoteParent.position.z+=(other.z-remoteParent.position.z)*factor;remoteParent.position.y=other.jump.height;remoteParent.rotation.y=other.yaw;
+      remote.fx.update(dt);remoteParent.setEnabled(other.health>0||remote.fx.showingDeath);remote.health=other.health;
+    }
+    for(const event of state.events)if(event.id>lastNetworkEvent){
+      lastNetworkEvent=event.id;const from=new Vector3(event.from.x,event.from.y,event.from.z),to=new Vector3(event.to.x,event.to.y,event.to.z);
+      (event.player===id?effects:botEffects).emit(from,to,from.subtract(to).normalize(),true,event.hit);
+      if(event.player===id){recoil.fire(event.weapon);if(event.hit&&remote)remote.fx.hit(to,to.x-remoteParent.position.x,event.killed);}
+    }
+  }
   function practiceState() {
     return {ammo:weapon.ammo,reloadRemaining:weapon.reloadRemaining,magazineSize:spec.magazineSize,weaponId,weaponName:spec.name,reloadSeconds:spec.reloadSeconds,automatic:spec.automatic,cooldown,scoped,
       targetHealth:targets.map(t=>t.health),hits,destroyed,shots,complete:destroyed===targets.length,
@@ -596,6 +622,7 @@ export function createHarborScene(engine: Engine) {
     consumeSounds(){return soundEvents.splice(0);},
     duelState:()=>({...duel.state(),active:duelMode}),
     reload,resetPractice,practiceState,
+    renderOnline,endOnline,
     effectsState:effects.stats,
     impactState:()=>({...robotImpact.stats(),recoil:recoil.read()}),
     setShake(level:ShakeLevel){recoil.setShake(level);},

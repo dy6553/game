@@ -6,3 +6,6 @@ standalone/
 !.env.example
 *.local
 *.log
+.neon
+
+.wrangler/

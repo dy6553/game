@@ -59,3 +59,13 @@ test('real duel keeps a dying robot visible but unpickable, then restores it on 
   function sceneCount(){return world.scene.meshes.length;}
  }finally{e.dispose();}
 });
+
+test('online snapshots render both character types and leave without growing effect pools',async()=>{
+ const {createNetworkGame}=await import('../src/network-game.ts');const e=engine();try{
+  const world=createHarborScene(e),game=createNetworkGame();game.join('me');game.join('other','pistol','robot-cat');
+  world.renderOnline(game.state,'me',{yaw:0,pitch:0},.05);world.scene.render();
+  const count=world.scene.meshes.length;for(let i=0;i<20;i++)world.renderOnline(game.state,'me',{yaw:0,pitch:0},.05);assert.equal(world.scene.meshes.length,count);
+  assert.equal(world.scene.getTransformNodeByName('online-opponent')!.isEnabled(),true);
+  world.endOnline();world.setMode('duel');world.update({x:0,z:-8},0);world.scene.render();assert.equal(world.duelState().active,true);world.scene.dispose();
+ }finally{e.dispose();}
+});

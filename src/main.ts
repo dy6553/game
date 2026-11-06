@@ -1,3 +1,5 @@
+import { createOnlineClient } from './online.ts';
+import type { MatchState } from './network-game.ts';
 import { simulationSteps } from './simulation.ts';
 import { createPerformanceHud } from './performance-hud.ts';
 import { createRenderBudget } from './render-budget.ts';
@@ -13,12 +15,18 @@ import { isWeaponId } from './weapons.ts';
 import './style.css';
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
+  <section id="home-screen" class="home-screen" aria-labelledby="home-title">
+    <div class="home-intro"><span class="eyebrow">HARBOR / NIGHT ARENA</span><h1 id="home-title">항구의 밤</h1><p>불빛이 내려앉은 항구, 당신의 로봇으로 출격하세요.</p></div>
+    <div class="home-modes"><button id="home-online"><span>01 / ONLINE</span><strong>온라인 대전</strong><p>사람 대 사람 1대1</p><small>방 코드 · 친구 초대 · 자동 매칭</small></button><button id="home-bot"><span>02 / SOLO</span><strong>봇 대전</strong><p>쉬운 봇과 1대1 · 먼저 10킬</p><small>캐릭터와 무기를 고르고 출격</small></button><button id="home-practice"><span>03 / TRAINING</span><strong>표적 연습</strong><p>이동과 조준, 네 가지 무기 익히기</p><small>부담 없이 연습하기</small></button></div>
+    <p class="home-controls">PC: WASD 이동 · 마우스 조준 &nbsp; / &nbsp; 모바일: 가로 화면 · 터치 조작</p>
+  </section>
+  <section id="online-lobby" class="online-lobby" hidden aria-labelledby="online-title"><div><button id="online-back">홈으로</button><h2 id="online-title">온라인 1대1</h2><p>먼저 10킬 · 두 사람이 연결되면 시작합니다.</p><label>캐릭터<select id="online-character"><option value="robot">소형 로봇</option><option value="robot-cat">고양이형 로봇</option></select></label><label>시작 무기<select id="online-weapon"><option value="pistol">권총</option><option value="machinegun">기관총</option><option value="shotgun">산탄총</option><option value="sniper">저격총</option></select></label><div class="online-actions"><button id="online-create">방 만들기</button><button id="online-quick">자동 매칭</button></div><label>방 코드<input id="online-code" maxlength="8" autocomplete="off" placeholder="8자리 코드"></label><button id="online-join">코드로 입장</button><p id="online-message" role="status"></p><p>온라인 대전에서는 메뉴를 열어도 상대의 경기는 계속됩니다.</p></div></section>
   <canvas id="game" tabindex="0" aria-label="항구 도시 1인칭 탐색. WASD로 이동하고 화면을 드래그해 시점을 돌립니다."></canvas>
   <header class="topbar">
     <div class="brand"><span class="eyebrow">HARBOR / FIRST PERSON</span><h1>항구의 밤<span>1인칭</span></h1></div>
     <button id="menu-toggle" aria-expanded="false" aria-controls="game-toolbar">메뉴</button>
     <div id="game-toolbar" class="toolbar" aria-label="화면 설정">
-      <button id="character-open">캐릭터 선택</button>
+      <button id="home-open">홈으로</button><button id="online-copy" hidden>초대 링크 복사</button><button id="character-open">캐릭터 선택</button>
       <button id="pause-open">일시정지</button><button id="pointer-lock" class="mouse-only">마우스 고정</button>
       <button id="reset">출발점</button>
       <button id="practice-reset">다시 시작</button>
@@ -72,7 +80,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <div class="rotate-notice"><span>↻</span><h2>가로로 돌려주세요</h2><p>넓은 화면에서 이동과 조준을 함께 사용할 수 있습니다.</p></div>
   <section id="character-picker" class="character-picker" role="dialog" aria-modal="true" aria-labelledby="character-title" hidden>
     <div class="character-sheet"><span class="eyebrow">CHOOSE YOUR CHARACTER</span>
-      <h2 id="character-title">출발 준비</h2><p>캐릭터와 게임 모드, 시작 무기를 골라주세요. 설정을 바꾸면 새 경기를 시작합니다.</p>
+      <button id="setup-home">홈으로</button><h2 id="character-title">출발 준비</h2><p>캐릭터와 게임 모드, 시작 무기를 골라주세요. 설정을 바꾸면 새 경기를 시작합니다.</p>
       <div class="start-settings"><label>게임 모드<select id="start-mode"><option value="duel">봇 1대1 · 쉬움</option><option value="practice">표적 연습</option></select></label><label>시작 무기<select id="start-weapon"><option value="pistol">권총</option><option value="machinegun">기관총</option><option value="shotgun">산탄총</option><option value="sniper">저격총</option></select></label></div>
       <div class="character-options">
         <button data-character="robot"><span class="robot-icon" aria-hidden="true">▰<i>● ●</i></span><strong>소형 로봇</strong><span>둥근 머리 · 청록색 눈 · 작은 안테나</span><small>왼쪽 시안</small></button>
@@ -80,7 +88,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       </div><button id="character-start" class="character-start">시작 · 드래그로 조준</button><button id="character-start-locked" class="character-start mouse-only">마우스 고정하고 시작</button><p id="pointer-status" role="status"></p><p class="character-note">캐릭터를 고르면 오른쪽에서 실제 3D 모델을 볼 수 있습니다.</p>
     </div>
   </section>
-  <section id="pause-panel" class="pause-panel" role="dialog" aria-modal="true" aria-labelledby="pause-title" hidden><div><h2 id="pause-title">일시정지</h2><p>전투와 이동이 멈췄습니다.</p><button id="resume">계속하기</button><button id="resume-locked" class="mouse-only">마우스 고정하고 계속</button><p id="pause-lock-status" role="status"></p></div></section>
+  <section id="pause-panel" class="pause-panel" role="dialog" aria-modal="true" aria-labelledby="pause-title" hidden><div><h2 id="pause-title">일시정지</h2><p id="pause-description">전투와 이동이 멈췄습니다.</p><button id="resume">계속하기</button><button id="resume-locked" class="mouse-only">마우스 고정하고 계속</button><p id="pause-lock-status" role="status"></p></div></section>
   <div class="loading" id="loading" role="status"><div class="loading-ring"></div><p>밤의 거리를 준비하고 있습니다</p></div>
   <footer class="phase-note">03 / 표적 연습 · 봇 1대1</footer>
 `;
@@ -134,10 +142,25 @@ async function start() {
     const code=(event.currentTarget as HTMLSelectElement).value;
     if(code==='Space'||code==='KeyJ'){input.reset();input.setJumpKey(code);canvas.focus();}
   });
+  let onlineState:MatchState|null=null,onlineId='',onlineActive=false,onlineSendTime=0,onlineEventId=-1;
+  let onlineStatus='',onlineCode='';
+  const onlineLobby=document.querySelector<HTMLElement>('#online-lobby')!;
+  const online=createOnlineClient(import.meta.env?.VITE_ONLINE_URL??(import.meta.env?.DEV?'http://127.0.0.1:8787':''),(state,id)=>{
+    onlineState=state;onlineId=id;
+    if(!onlineActive){onlineActive=true;homeOpen=false;home.hidden=true;onlineLobby.hidden=true;document.body.classList.remove('at-home');picker.hidden=true;manualPaused=false;pausePanel.hidden=true;world.setPreview(false);const me=state.players.find(p=>p.id===id);if(me){world.selectCharacter(me.character);world.selectWeapon(me.weaponId);input.resetLook();input.setLook(me.yaw,me.pitch);}hasPlayed=true;canvas.focus();}
+  },status=>{onlineStatus=status;document.querySelector('#online-message')!.textContent=status;},session=>{onlineCode=session.code;});
+  const updateOnlineControls=(active:boolean)=>{document.querySelector<HTMLElement>('#online-copy')!.hidden=!active;for(const id of ['character-open','game-mode','weapon-select','practice-reset','reset'])document.querySelector<HTMLButtonElement>('#'+id)!.disabled=active;};
+  document.querySelector('#online-copy')!.addEventListener('click',async()=>{const url=new URL(location.href);url.searchParams.set('room',onlineCode);try{await navigator.clipboard.writeText(url.href);document.querySelector('#online-copy')!.textContent='초대 링크 복사됨';}catch{document.querySelector('#online-copy')!.textContent=`방 코드 ${onlineCode}`;}});
+  document.querySelector('#home-online')!.addEventListener('click',()=>{home.hidden=true;onlineLobby.hidden=false;document.querySelector('#online-message')!.textContent=online.available?'방을 만들거나 친구의 코드를 입력하세요.':'온라인 서버 연결 준비 중입니다. 봇 대전과 표적 연습은 바로 이용할 수 있습니다.';for(const id of ['online-create','online-join','online-quick'])document.querySelector<HTMLButtonElement>('#'+id)!.disabled=!online.available;});
+  for(const [id,action] of [['online-create','create'],['online-join','join'],['online-quick','quick']] as const)document.querySelector('#'+id)!.addEventListener('click',async()=>{
+    const buttons=['online-create','online-join','online-quick'].map(id=>document.querySelector<HTMLButtonElement>('#'+id)!);buttons.forEach(button=>button.disabled=true);
+    try{await online.enter(action,document.querySelector<HTMLInputElement>('#online-code')!.value.trim().toUpperCase(),document.querySelector<HTMLSelectElement>('#online-weapon')!.value,document.querySelector<HTMLSelectElement>('#online-character')!.value);}catch(error){document.querySelector('#online-message')!.textContent=error instanceof Error?error.message:'방에 입장하지 못했습니다.';}finally{buttons.forEach(button=>button.disabled=!online.available);}
+  });
+  let homeOpen=true;
   let manualPaused=false,hasPlayed=false,wasLocked=false;
   const pausePanel=document.querySelector<HTMLElement>('#pause-panel')!;
   const pauseGame=()=>{
-    if(!hasPlayed||!picker.hidden)return;
+    if(!hasPlayed||homeOpen||!picker.hidden)return;
     manualPaused=true;input.setEnabled(false);audio.pause(true);
     if(document.pointerLockElement)document.exitPointerLock();
     pausePanel.hidden=false;document.querySelector<HTMLButtonElement>('#resume')!.focus();
@@ -202,6 +225,14 @@ async function start() {
   const startButton = document.querySelector<HTMLButtonElement>('#character-start')!;
   const refreshCharacter = () => choices.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.character === world.characterType)));
   const openPicker = () => { setComparison(false);input.setEnabled(false);document.querySelector<HTMLSelectElement>('#start-mode')!.value=document.querySelector<HTMLSelectElement>('#game-mode')!.value;document.querySelector<HTMLSelectElement>('#start-weapon')!.value=document.querySelector<HTMLSelectElement>('#weapon-select')!.value; input.reset(); if (document.pointerLockElement) document.exitPointerLock(); world.setPreview(true); refreshCharacter(); picker.hidden = false; choices[0]!.focus(); };
+  const home=document.querySelector<HTMLElement>('#home-screen')!;
+  const openHome=()=>{online.leave();onlineActive=false;onlineState=null;onlineId='';onlineEventId=-1;world.endOnline();onlineLobby.hidden=true;updateOnlineControls(false);homeOpen=true;home.hidden=false;document.body.classList.add('at-home');manualPaused=false;pausePanel.hidden=true;closeMenu();document.querySelector<HTMLElement>('#help')!.hidden=true;picker.hidden=true;setComparison(false);input.setEnabled(false);world.setPreview(true);document.querySelector<HTMLButtonElement>('#home-bot')!.focus();};
+  const chooseMode=(value:'duel'|'practice')=>{homeMatchPending=true;homeOpen=false;home.hidden=true;document.body.classList.remove('at-home');openPicker();document.querySelector<HTMLSelectElement>('#start-mode')!.value=value;};
+  document.querySelector('#online-back')!.addEventListener('click',openHome);
+  document.querySelector('#home-bot')!.addEventListener('click',()=>chooseMode('duel'));
+  document.querySelector('#home-practice')!.addEventListener('click',()=>chooseMode('practice'));
+  document.querySelector('#home-open')!.addEventListener('click',openHome);
+  document.querySelector('#setup-home')!.addEventListener('click',openHome);
   openCharacter.addEventListener('click', openPicker);
   choices.forEach(button => button.addEventListener('click', () => {
     const type = button.dataset.character;
@@ -209,6 +240,7 @@ async function start() {
     world.selectCharacter(type); refreshCharacter(); input.reset();
   }));
   const startLocked=document.querySelector<HTMLButtonElement>('#character-start-locked')!;
+  let homeMatchPending=true;
   const beginGame=(locked:boolean)=>{
     const mode=document.querySelector<HTMLSelectElement>('#game-mode')!;
     const weapon=document.querySelector<HTMLSelectElement>('#weapon-select')!;
@@ -216,8 +248,8 @@ async function start() {
     const nextWeapon=document.querySelector<HTMLSelectElement>('#start-weapon')!.value;
     const changed=mode.value!==nextMode||weapon.value!==nextWeapon;
     mode.value=nextMode;weapon.value=nextWeapon;
-    if(changed&&isWeaponId(nextWeapon)){world.setMode(nextMode==='duel'?'duel':'practice');world.selectWeapon(nextWeapon);restart();}
-    void audio.unlock();input.reset();picker.hidden=true;world.setPreview(false);closeMenu();hasPlayed=true;resumeGame();
+    if((changed||homeMatchPending)&&isWeaponId(nextWeapon)){world.setMode(nextMode==='duel'?'duel':'practice');world.selectWeapon(nextWeapon);restart();}
+    homeMatchPending=false;void audio.unlock();input.reset();picker.hidden=true;world.setPreview(false);closeMenu();hasPlayed=true;resumeGame();
     if(locked)lockMouse();
   };
   startButton.addEventListener('click',()=>beginGame(false));
@@ -249,6 +281,18 @@ async function start() {
   let lastHudKey='';
   const refreshHud=()=>{
     const state=world.practiceState();
+    if(onlineActive&&onlineState){
+      const me=onlineState.players.find(p=>p.id===onlineId),foe=onlineState.players.find(p=>p.id!==onlineId);if(!me)return;
+      document.querySelector<HTMLElement>('.practice-score')!.hidden=true;document.querySelector<HTMLElement>('#duel-hud')!.hidden=false;
+      document.querySelector('#duel-score')!.textContent=`나 ${me.kills} : ${foe?.kills??0} 상대 · 목표 10킬`;
+      document.querySelector('#duel-health')!.textContent=`내 체력 ${me.health} · 방 ${onlineCode}`;
+      document.querySelector<HTMLProgressElement>('#player-health')!.value=me.health;
+      document.querySelector('#duel-status')!.textContent=onlineState.winner?(onlineState.winner===onlineId?'승리!':'패배')+' · 홈에서 새 경기':me.health===0?`${Math.ceil(me.dead)}초 후 부활`:onlineStatus;
+      document.querySelector('#weapon-name')!.textContent=state.weaponName;ammo.textContent=String(me.weapon.ammo);document.querySelector('#magazine-size')!.textContent=` / ${state.magazineSize}`;weaponStatus.textContent=me.weapon.reloadRemaining>0?`재장전 ${me.weapon.reloadRemaining.toFixed(1)}초`:'발사 준비';
+      document.querySelector<HTMLButtonElement>('#fire')!.disabled=me.health===0||!!onlineState.winner;document.querySelector<HTMLButtonElement>('#scope')!.hidden=me.weaponId!=='sniper';document.querySelector('#scope')!.textContent=state.scoped?'원래 시야':'확대';document.querySelector<HTMLElement>('#scope-overlay')!.hidden=!state.scoped;
+      reloadButton.disabled=me.health===0||me.weapon.reloadRemaining>0;reloadProgress.hidden=true;complete.hidden=true;
+      return;
+    }
     const duel=world.duelState();
     document.querySelector<HTMLElement>('.practice-score')!.hidden=duel.active;
     document.querySelector<HTMLElement>('#duel-hud')!.hidden=!duel.active;
@@ -317,7 +361,7 @@ async function start() {
     (event.currentTarget as HTMLElement).setAttribute('aria-expanded', String(!help.hidden));
   });
   window.addEventListener('keydown',event=>{
-    if(event.code!=='Escape'||!picker.hidden)return;
+    if(event.code!=='Escape'||homeOpen||!picker.hidden)return;
     if(!help.hidden){event.preventDefault();closeHelp();canvas.focus();}
     else if(comparing){event.preventDefault();setComparison(false);}
     else if(menuOpen){event.preventDefault();closeMenu();canvas.focus();}
@@ -329,7 +373,8 @@ async function start() {
   world.update(position, 1);
   await world.scene.whenReadyAsync();
   loading.hidden = true;
-  openPicker();
+  openHome();
+  const invited=new URLSearchParams(window.location?.search??'').get('room');if(invited&&/^[0-9A-F]{8}$/.test(invited.toUpperCase())){document.querySelector<HTMLInputElement>('#online-code')!.value=invited.toUpperCase();document.querySelector<HTMLButtonElement>('#home-online')!.click();}
   let resetClock=true;
   document.addEventListener('visibilitychange',()=>{resetClock=true;});
   window.addEventListener('focus',()=>{resetClock=true;});
@@ -337,8 +382,9 @@ async function start() {
     const elapsed=resetClock?0:Math.max(0,engine.getDeltaTime()/1000);resetClock=false;
     const dt = Math.min(elapsed, 0.05);
     const portraitTouch = matchMedia('(pointer: coarse) and (orientation: portrait)').matches;
-    const canPlay=!manualPaused&&!document.hidden&&!portraitTouch&&picker.hidden&&!comparing&&!menuOpen&&help.hidden&&document.hasFocus();
+    const canPlay=!homeOpen&&!manualPaused&&!document.hidden&&!portraitTouch&&picker.hidden&&!comparing&&!menuOpen&&help.hidden&&document.hasFocus();
     input.setEnabled(canPlay);
+    document.querySelector('#pause-description')!.textContent=onlineActive?'내 조작만 멈춥니다. 상대의 경기는 계속됩니다.':'전투와 이동이 멈췄습니다.';
     document.querySelector<HTMLElement>('#pause-indicator')!.hidden=manualPaused||!picker.hidden||comparing||portraitTouch||(!menuOpen&&help.hidden);
     performanceHud.update(elapsed,canPlay);
     if(graphicsMode==='auto'){
@@ -349,7 +395,13 @@ async function start() {
     }
     audio.pause(!canPlay);
     document.querySelector('#audio-status')!.textContent=audio.available?'사운드 활성화':'화면을 눌러 소리 켜기';
-    if (canPlay) {
+    if(onlineActive&&onlineState){
+      updateOnlineControls(true);
+      onlineSendTime+=elapsed;
+      if(onlineSendTime>=.05){onlineSendTime=0;online.send({x:canPlay?input.move.x:0,y:canPlay?input.move.y:0,yaw:input.look.yaw,pitch:input.look.pitch,fire:canPlay&&input.firing,shot:canPlay&&input.consumeShots()>0,reload:canPlay&&input.consumeReloads()>0,jump:canPlay&&input.consumeJumps()>0,sprint:canPlay&&input.sprintingRequested,scope:world.practiceState().scoped});}
+      world.renderOnline(onlineState,onlineId,input.look,Math.min(elapsed,.1));
+      for(const event of onlineState.events)if(event.id>onlineEventId){onlineEventId=event.id;audio.play(event.weapon);if(event.hit&&event.player===onlineId){audio.play(event.killed?'kill':'hit');impactTime=.2;feedbackTime=.35;shotFeedback.textContent=event.killed?'상대 처치':'명중';document.querySelector('#impact-marker')!.classList.toggle('kill',event.killed);}}
+    } else if (canPlay) {
       for(const step of simulationSteps(elapsed)){
         const queued=input.consumeShots(),reloadRequested=input.consumeReloads();
         const before=world.practiceState();

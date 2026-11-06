@@ -127,6 +127,7 @@ export function createInput(canvas: HTMLCanvasElement) {
         stick.y + Number(keys.has('KeyW') || keys.has('ArrowUp')) - Number(keys.has('KeyS') || keys.has('ArrowDown')));
     },
     get look() { return look; },
+    setLook(yaw:number,pitch:number){look={yaw,pitch};},
     resetLook() { look = { yaw: 0, pitch: 0 }; reset(); },
     get sprintingRequested(){return sprintToggle||keys.has('ShiftLeft')||keys.has('ShiftRight');},
     get firing(){return firePointer!==null||mouseHeld;},

@@ -77,6 +77,6 @@ export function createRobotImpact(scene:Scene,root:TransformNode,body:Mesh[]) {
     }
   }
   reset();
-  return {hit,update,reset,clearParticles,setQuality(value:boolean){high=value;},get showingDeath(){return deathAge>=0&&deathAge<1.15;},
+  return {hit,update,reset,clearParticles,dispose(){for(const p of particles)p.mesh.dispose();for(const {mat} of materials.values())mat.dispose();for(const mat of [electric,gold,metal,smoke])mat.dispose();},setQuality(value:boolean){high=value;},get showingDeath(){return deathAge>=0&&deathAge<1.15;},
     stats:()=>({active:particles.filter(p=>p.life>0).length,dead:deathAge>=0,deathAge}),meshes:particles.map(p=>p.mesh)};
 }
