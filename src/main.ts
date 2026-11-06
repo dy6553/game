@@ -11,7 +11,8 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <canvas id="game" tabindex="0" aria-label="항구 도시 1인칭 탐색. WASD로 이동하고 화면을 드래그해 시점을 돌립니다."></canvas>
   <header class="topbar">
     <div class="brand"><span class="eyebrow">HARBOR / FIRST PERSON</span><h1>항구의 밤<span>1인칭</span></h1></div>
-    <div class="toolbar" aria-label="화면 설정">
+    <button id="menu-toggle" aria-expanded="false" aria-controls="game-toolbar">메뉴</button>
+    <div id="game-toolbar" class="toolbar" aria-label="화면 설정">
       <button id="character-open">캐릭터 선택</button>
       <button id="reference-open" aria-pressed="false">시안 비교</button>
       <button id="reset">출발점</button>
@@ -84,6 +85,15 @@ async function start() {
     const code=(event.currentTarget as HTMLSelectElement).value;
     if(code==='Space'||code==='KeyJ'){input.reset();input.setJumpKey(code);canvas.focus();}
   });
+  let menuOpen=false;
+  const menuButton=document.querySelector<HTMLButtonElement>('#menu-toggle')!;
+  const closeMenu=()=>{menuOpen=false;document.body.classList.remove('menu-open');menuButton.setAttribute('aria-expanded','false');input.reset();};
+  menuButton.addEventListener('click',()=>{
+    menuOpen=!menuOpen;document.body.classList.toggle('menu-open',menuOpen);menuButton.setAttribute('aria-expanded',String(menuOpen));input.reset();
+    if(menuOpen){document.querySelector<HTMLElement>('#help')!.hidden=true;if(document.pointerLockElement)document.exitPointerLock();}
+  });
+  document.querySelector('#game-toolbar')!.addEventListener('click',event=>{if((event.target as HTMLElement).closest('button'))closeMenu();});
+  document.querySelector('#game-toolbar')!.addEventListener('change',closeMenu);
   let comparing=false;
   const referenceButton=document.querySelector<HTMLButtonElement>('#reference-open')!;
   const referenceFile=document.querySelector<HTMLInputElement>('#reference-file')!;
@@ -123,7 +133,7 @@ async function start() {
     if (!isCharacterType(type)) return;
     world.selectCharacter(type); refreshCharacter(); input.reset();
   }));
-  startButton.addEventListener('click', () => { input.reset(); picker.hidden=true; world.setPreview(false); canvas.focus(); });
+  startButton.addEventListener('click', () => { input.reset(); picker.hidden=true; world.setPreview(false); closeMenu(); canvas.focus(); });
   picker.addEventListener('keydown', event => {
     if (event.key === 'Tab') {
       event.preventDefault();
@@ -199,7 +209,7 @@ async function start() {
     help.hidden = !help.hidden;
     (event.currentTarget as HTMLElement).setAttribute('aria-expanded', String(!help.hidden));
   });
-  window.addEventListener('resize', () => { engine.resize(); world.resize(); });
+  window.addEventListener('resize', () => { closeMenu(); engine.resize(); world.resize(); });
   canvas.addEventListener('contextmenu', event => event.preventDefault());
   world.update(position, 1);
   await world.scene.whenReadyAsync();
@@ -212,7 +222,7 @@ async function start() {
     const elapsed=resetClock?0:Math.max(0,engine.getDeltaTime()/1000);resetClock=false;
     const dt = Math.min(elapsed, 0.05);
     const portraitTouch = matchMedia('(pointer: coarse) and (orientation: portrait)').matches;
-    if (!document.hidden && !portraitTouch && picker.hidden && !comparing) {
+    if (!document.hidden && !portraitTouch && picker.hidden && !comparing && !menuOpen && help.hidden) {
       const movement = viewMovement(input.look.yaw, input.move.x, input.move.y);
       const duel=world.duelState(),canAct=!duel.active||(duel.playerHealth>0&&!duel.winner);
       if(canAct)position = moveWithCollisions(position, {

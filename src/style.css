@@ -133,3 +133,33 @@ body.comparing .ammo-hud,body.comparing .practice-complete { display:none; }
 #damage-overlay{position:absolute;inset:0;pointer-events:none;z-index:3;opacity:0;box-shadow:inset 0 0 75px 25px #e65544;transition:opacity .08s}#damage-direction{position:absolute;left:calc(50% - 55px);top:calc(50% - 55px);width:110px;height:110px;border-top:6px solid #ff6855;border-radius:50%}.duel-hud #player-health{height:18px;accent-color:#6de2be}.duel-hud.critical #player-health{accent-color:#ff6d60}.duel-hud.critical{border-color:#e57966}.incoming{color:#ffac6c!important;font-weight:bold}#impact-marker{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:38px;color:#92fff1;pointer-events:none;text-shadow:0 0 6px #55bfa6}#impact-marker.kill{color:#ffd07e;font-size:50px}.comparing #duel-hud,.comparing #damage-overlay{display:none}.player-hurt #game{box-shadow:none}
 
 #health-segments{display:flex;gap:4px;margin-top:4px}#health-segments i{height:7px;background:#79dec1;flex:1;border-radius:2px;transition:background .2s}#health-segments i.lost{background:#43515c}.critical #health-segments i:not(.lost){background:#ff6f60}#duel-health{font-size:17px;font-weight:600;margin:5px 0}
+
+/* Compact play layout reserves top HUD and bottom touch zones independently. */
+#menu-toggle{display:none;pointer-events:auto}.topbar{z-index:5}.help{max-height:calc(100dvh - 90px);overflow-y:auto;z-index:6}
+@media (pointer:coarse), (max-width:900px), (max-height:550px){
+ html,body,#app{height:100dvh}
+ .topbar{top:max(10px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));left:auto;gap:0}
+ .brand,.location,.phase-note,.desktop-hint{display:none}
+ #menu-toggle{display:block;min-height:38px;padding:6px 10px;font-size:12px}
+ .toolbar{display:none;position:absolute;right:0;top:46px;width:min(320px,calc(100vw - 24px));max-width:none;max-height:calc(100dvh - 70px);overflow-y:auto;padding:12px;background:#0c1c2bf5;border:1px solid #7899ac70;border-radius:12px;box-shadow:0 8px 30px #0008;gap:8px}
+ .menu-open .toolbar{display:grid;grid-template-columns:1fr 1fr}
+ .toolbar button,.toolbar select{width:100%;min-height:42px;font-size:12px}
+ .pc-jump-setting{grid-column:1/-1}#game-mode{max-width:none;grid-column:1/-1}
+ .duel-hud{top:max(10px,env(safe-area-inset-top));left:max(12px,env(safe-area-inset-left));width:min(250px,40vw);max-width:none;padding:7px 10px;border-radius:8px;font-size:11px;background:#0b1925b8}
+ .duel-hud strong{font-size:12px;margin:0 0 3px;white-space:nowrap}
+ #duel-health{font-size:12px;margin:3px 0;white-space:nowrap}
+ .duel-hud #player-health{height:7px;display:block}
+ #health-segments{display:none}.duel-hud p{font-size:10px;margin-top:4px;line-height:1.3}
+ .practice-score{top:max(10px,env(safe-area-inset-top));left:max(12px,env(safe-area-inset-left));padding:7px 9px;background:#0b1925b8}
+ .target-health{margin-top:3px;gap:5px}.target-health b{display:none}
+ .ammo-hud{top:max(10px,env(safe-area-inset-top));right:calc(max(12px,env(safe-area-inset-right)) + 64px);bottom:auto;min-width:110px;max-width:150px;padding:6px 9px;background:#0b1925b8}
+ .ammo-hud b{font-size:20px}.ammo-hud > span{display:none}.ammo-hud small{font-size:9px;margin-left:6px}.ammo-hud p{font-size:9px;max-width:125px}
+ .touch-controls{display:block}.move-control{left:max(18px,env(safe-area-inset-left));bottom:max(14px,env(safe-area-inset-bottom));gap:0}
+ #joystick{width:104px;height:104px}.move-control>span{display:none}
+ .single-fire{width:74px;height:74px;right:max(18px,env(safe-area-inset-right));bottom:max(16px,env(safe-area-inset-bottom));font-size:16px}
+ .jump-button{width:54px;height:54px;right:max(26px,env(safe-area-inset-right));bottom:calc(max(16px,env(safe-area-inset-bottom)) + 94px);font-size:12px}
+ .reload-button{width:54px;height:54px;right:calc(max(18px,env(safe-area-inset-right)) + 94px);bottom:calc(max(16px,env(safe-area-inset-bottom)) + 7px);font-size:11px}
+ .help{top:56px;right:max(12px,env(safe-area-inset-right));max-width:min(360px,calc(100vw - 24px));max-height:calc(100dvh - 72px);padding:14px}
+ .menu-open .touch-controls,.menu-open .ammo-hud{visibility:hidden}
+ .practice-complete{top:32%;z-index:4}
+}
