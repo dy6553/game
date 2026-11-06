@@ -3,7 +3,7 @@ import type { MatchState } from './network-game.ts';
 import { createRecoil,type ShakeLevel } from './impact.ts';
 import { createRobotImpact } from './robot-impact.ts';
 import { WEAPONS,pelletOffsets,type WeaponId } from './weapons.ts';
-import { createDuel,isBotDifficulty,type BotDifficulty } from './duel.ts';
+import { createDuel,createBotMatch,isBotDifficulty,type BotDifficulty } from './duel.ts';
 import type { Engine } from '@babylonjs/core/Engines/engine.js';
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js';
 import { Vector3, Vector4 } from '@babylonjs/core/Maths/math.vector.js';
@@ -419,14 +419,15 @@ export function createHarborScene(engine: Engine) {
 
   });
   const atmosphere=createAtmosphere(scene);
-  let botDifficulty:BotDifficulty='easy';let duel=createDuel(botDifficulty), duelMode=false;
+  let botDifficulty:BotDifficulty='easy';let duel=createDuel(botDifficulty),ffa=createBotMatch(botDifficulty),duelMode=false,ffaMode=false;
+  function battleState(){if(ffaMode)return ffa.state();const state=duel.state();return {...state,mode:'duel' as const,winnerName:state.winner==='player'?'나':'봇',playerPosition:{x:0,z:-8},bots:[] as ReturnType<typeof ffa.state>['bots']};}
   const botParent=new TransformNode('opponent',scene);
   const opponent=createCharacter(scene,botParent,'robot-cat');
-  for(const mesh of opponent.meshes){mesh.isPickable=true;mesh.metadata={opponent:true};shadows.addShadowCaster(mesh);}
+  for(const mesh of opponent.meshes){mesh.isPickable=true;mesh.metadata={opponent:true,botId:'bot-1'};shadows.addShadowCaster(mesh);}
   const opponentMark=box('opponent-marker',0,2.6,0,0.7,0.08,0.08,material('opponent-red','#ff856d','#f74f2d'));
   opponentMark.parent=botParent;opponentMark.isPickable=false;
   const botGun=box('opponent-pistol',0.32,1.65,0.65,0.14,0.16,0.5,metal);
-  botGun.parent=opponent.root;botGun.isPickable=true;botGun.metadata={opponent:true};
+  botGun.parent=opponent.root;botGun.isPickable=true;botGun.metadata={opponent:true,botId:'bot-1'};
   const opponentBody=[...opponent.meshes,botGun];
   const robotImpact=createRobotImpact(scene,opponent.root,opponentBody);
   botParent.setEnabled(false);
@@ -435,20 +436,32 @@ export function createHarborScene(engine: Engine) {
   const warningRing=MeshBuilder.CreateTorus('incoming-shot-ring',{diameter:1.3,thickness:0.055,tessellation:32},scene);
   warningRing.material=warningMat;warningRing.isPickable=false;warningRing.setEnabled(false);
   const soundEvents:{kind:'pistol';x:number;z:number}[]=[];
+  type BotRig={id:string;parent:TransformNode;body:Mesh[];mark:Mesh;fx:ReturnType<typeof createRobotImpact>;health:number};
+  const botRigs:BotRig[]=[{id:'bot-1',parent:botParent,body:opponentBody,mark:opponentMark,fx:robotImpact,health:100}];
+  function ensureBotRigs(){
+    if(botRigs.length===3)return;
+    for(let i=2;i<=3;i++){
+      const parent=new TransformNode(`opponent-bot-${i}`,scene),model=createCharacter(scene,parent,i===2?'robot':'robot-cat');
+      const gun=box(`bot-${i}-pistol`,.32,1.65,.65,.14,.16,.5,metal);gun.parent=model.root;
+      const body=[...model.meshes,gun];for(const mesh of body){mesh.isPickable=true;mesh.metadata={opponent:true,botId:`bot-${i}`};shadows.addShadowCaster(mesh);}
+      const tint=i===2?'#67c8ff':'#ffe282',mark=box(`bot-${i}-marker`,0,2.6,0,.7,.08,.08,material(`bot-${i}-mark`,tint,tint));mark.parent=parent;mark.isPickable=false;
+      const fx=createRobotImpact(scene,model.root,body);fx.setQuality(onlineQualityHigh);botRigs.push({id:`bot-${i}`,parent,body,mark,fx,health:100});
+    }
+  }
   let seenRespawn=0;
   function syncBot(){
-    const state=duel.state();
+    const state=battleState();if(ffaMode)ensureBotRigs();
     warningRing.setEnabled(duelMode&&!!state.locked&&!preview&&!reference);
-    if(state.locked){warningRing.position.set(state.locked.x,0.07,state.locked.z);warningRing.scaling.setAll(1+state.warning);}
-    opponentMark.scaling.y=state.locked?2.5:1;
-    const alive=state.botHealth>0;
-    for(const mesh of opponentBody)mesh.isPickable=alive;
-    opponentMark.setEnabled(alive);
-    botParent.setEnabled(duelMode&&(alive||robotImpact.showingDeath)&&!preview&&!reference);
-    botParent.position.set(state.position.x,0,state.position.z);
-    botParent.rotation.y=Math.atan2(camera.position.x-state.position.x,camera.position.z-state.position.z);
-    opponentMark.scaling.x=Math.max(0.001,state.botHealth/100);
-    botParent.computeWorldMatrix(true);
+    if(state.locked){warningRing.position.set(state.locked.x,.07,state.locked.z);warningRing.scaling.setAll(1+state.warning);}
+    for(const rig of botRigs){
+      const bot=ffaMode?state.bots.find(b=>b.id===rig.id):rig.id==='bot-1'?{health:state.botHealth,position:state.position,locked:state.locked}:undefined;
+      if(!bot){rig.parent.setEnabled(false);continue;}
+      if(rig.health===0&&bot.health>0)rig.fx.reset();rig.health=bot.health;const alive=bot.health>0;
+      for(const mesh of rig.body)mesh.isPickable=alive;
+      rig.mark.setEnabled(alive);rig.mark.scaling.y=bot.locked?2.5:1;rig.mark.scaling.x=Math.max(.001,bot.health/100);
+      rig.parent.setEnabled(duelMode&&(alive||rig.fx.showingDeath)&&!preview&&!reference);rig.parent.position.set(bot.position.x,0,bot.position.z);
+      rig.parent.rotation.y=Math.atan2(camera.position.x-bot.position.x,camera.position.z-bot.position.z);rig.parent.computeWorldMatrix(true);
+    }
   }
   let weaponId:WeaponId='pistol',startWeapon:WeaponId='pistol',spec=WEAPONS.pistol,cooldown=0,scoped=false;let inventory=createInventory(startWeapon),pickups=createPickups();
   let weapon=createWeapon(spec);
@@ -464,11 +477,11 @@ export function createHarborScene(engine: Engine) {
   let animationTime = 0;
   function resize() { camera.getProjectionMatrix(true); }
   function setReference(value: boolean) {
-    effects.clear();botEffects.clear();robotImpact.clearParticles();recoil.clear();reference=value;player.setEnabled(value);plinth.setEnabled(false);viewModel.setEnabled(!value);
+    effects.clear();botEffects.clear();robotImpact.clearParticles();for(const rig of botRigs.slice(1))rig.fx.clearParticles();recoil.clear();reference=value;player.setEnabled(value);plinth.setEnabled(false);viewModel.setEnabled(!value);
     camera.fov=value?0.95:1.25;camera.getProjectionMatrix(true);
   }
   function setPreview(value: boolean) {
-    effects.clear();botEffects.clear();robotImpact.clearParticles();recoil.clear();reference=false;preview = value;plinth.setEnabled(value); player.setEnabled(value); viewModel.setEnabled(!value);
+    effects.clear();botEffects.clear();robotImpact.clearParticles();for(const rig of botRigs.slice(1))rig.fx.clearParticles();recoil.clear();reference=false;preview = value;plinth.setEnabled(value); player.setEnabled(value); viewModel.setEnabled(!value);
     camera.fov=value?0.85:1.25;camera.getProjectionMatrix(true);
     previewLight.setEnabled(value);
     for(const light of streetLights) light.setEnabled(!value);
@@ -480,7 +493,7 @@ export function createHarborScene(engine: Engine) {
     moon.position.set(Math.round((p.x+24.75)/texel)*texel,55,Math.round((p.z-13.75)/texel)*texel);
     waterNormals.uOffset+=paused?0:Math.min(dt,.1)*.012;
     const active=!paused&&!preview&&!reference;
-    if(active){animationTime+=dt;recoil.update(dt);robotImpact.update(dt);}
+    if(active){animationTime+=dt;recoil.update(dt);robotImpact.update(dt);if(ffaMode)for(const rig of botRigs.slice(1))rig.fx.update(dt);}
     const kick=recoil.read();
     viewModel.position.z=0.18-kick.push;
     const reloadMotion=weapon.reloadRemaining>0?Math.sin((1-weapon.reloadRemaining/spec.reloadSeconds)*Math.PI):0;
@@ -494,8 +507,9 @@ export function createHarborScene(engine: Engine) {
     }
     if(duelMode&&!paused&&!preview&&!reference){
       botEffects.update(dt);
-      const wasBotDead=duel.state().botHealth===0;
-      duel.update(dt,p,point=>{
+      const wasBotDead=battleState().botHealth===0;
+      const updateBattle=ffaMode?ffa.update:duel.update;
+      updateBattle(dt,p,point=>{
         const from=new Vector3(point.x,1.8,point.z),to=new Vector3(p.x,1.95+jumpState.height,p.z);
         const direction=to.subtract(from),distance=direction.length();
         const obstruction=scene.pickWithRay(new Ray(from,direction.scale(1/distance),Math.max(0,distance-0.25)),mesh=>mesh.isPickable&&mesh.isEnabled()&&!mesh.metadata?.opponent);
@@ -509,9 +523,9 @@ export function createHarborScene(engine: Engine) {
         botEffects.emit(start,impact,wall?.getNormal(true)??delta.normalize().scale(-1),!!wall?.hit,false);
         return !wall?.hit;
       });
-      const state=duel.state();
+      const state=battleState();
       if(wasBotDead&&state.botHealth>0)robotImpact.reset();
-      if(state.respawnVersion!==seenRespawn){seenRespawn=state.respawnVersion;p.x=0;p.z=-8;weaponId=startWeapon;spec=WEAPONS[weaponId];inventory=createInventory(startWeapon);weapon=createWeapon(spec);cooldown=0;scoped=false;jumpState=createJump();recoil.clear();}
+      if(state.respawnVersion!==seenRespawn){seenRespawn=state.respawnVersion;p.x=state.playerPosition.x;p.z=state.playerPosition.z;weaponId=startWeapon;spec=WEAPONS[weaponId];inventory=createInventory(startWeapon);weapon=createWeapon(spec);cooldown=0;scoped=false;jumpState=createJump();recoil.clear();}
     }
     player.position.x = p.x; player.position.z = p.z;
     player.position.y=preview||reference?0:jumpState.height;
@@ -536,7 +550,7 @@ export function createHarborScene(engine: Engine) {
   setPreview(false);
   resize();
   function shoot() {
-    if (preview || reference || (duelMode&&(duel.state().playerHealth===0||!!duel.state().winner))) return { fired: false, hit: false };
+    if (preview || reference || (duelMode&&(battleState().playerHealth===0||!!battleState().winner))) return { fired: false, hit: false };
     if(cooldown>1e-8)return {fired:false,hit:false,reason:'cooldown'};
     const attempt=tryFire(weapon);weapon=attempt.state;
     if(!attempt.fired)return {fired:false,hit:false,reason:attempt.reason};
@@ -559,7 +573,7 @@ export function createHarborScene(engine: Engine) {
     }
     const hit = duelMode ? pick?.pickedMesh?.metadata?.opponent === true : pick?.pickedMesh?.metadata?.practiceTarget === true;
     let eliminated=false;
-    if(hit&&duelMode){const before=duel.state().botHealth;eliminated=duel.hurt('bot',spec.damage);const damage=before-duel.state().botHealth;totalDamage+=damage;if(damage>0)robotImpact.hit(end,end.x-duel.state().position.x,eliminated);syncBot();}
+    if(hit&&duelMode){const id=String(pick!.pickedMesh!.metadata.botId??'bot-1');const before=ffaMode?ffa.state().bots.find(b=>b.id===id)!.health:battleState().botHealth;eliminated=ffaMode?ffa.hurt(id,spec.damage):duel.hurt('bot',spec.damage);const after=ffaMode?ffa.state().bots.find(b=>b.id===id)!.health:battleState().botHealth;const damage=before-after;totalDamage+=damage;const rig=botRigs.find(b=>b.id===id);if(damage>0&&rig)rig.fx.hit(end,end.x-rig.parent.position.x,eliminated);syncBot();}
     if(hit&&!duelMode) {
       const target=targets[pick!.pickedMesh!.metadata.targetIndex]!;
       const damage=applyDamage(target.health,spec.damage);totalDamage+=target.health-damage.health;
@@ -577,12 +591,12 @@ export function createHarborScene(engine: Engine) {
     return { fired: true, hit:anyHit, eliminated:anyEliminated, damage:totalDamage,impact,point:lastPoint };
   }
   function reload() {
-    if(preview||reference||(duelMode&&(duel.state().playerHealth===0||!!duel.state().winner)))return false;
+    if(preview||reference||(duelMode&&(battleState().playerHealth===0||!!battleState().winner)))return false;
     const next=beginReload(weapon,spec);const started=next!==weapon;weapon=next;return started;
   }
   function resetPractice() {
     weaponId=startWeapon;spec=WEAPONS[weaponId];inventory=createInventory(startWeapon);pickups=createPickups();weapon=createWeapon(spec);cooldown=0;scoped=false;jumpState=createJump();hits=0;destroyed=0;shots=0;
-    effects.clear();botEffects.clear();recoil.clear();robotImpact.reset();duel=createDuel(botDifficulty);seenRespawn=0;syncBot();
+    effects.clear();botEffects.clear();recoil.clear();robotImpact.reset();duel=createDuel(botDifficulty);ffa=createBotMatch(botDifficulty);for(const rig of botRigs){rig.fx.reset();rig.health=100;}seenRespawn=0;syncBot();
     for(const target of targets){
       target.health=PRACTICE_RULES.maxHealth;target.flash=0;target.root.setEnabled(!duelMode);
       target.healthBar.scaling.x=1;target.healthBar.position.x=target.x;
@@ -598,7 +612,7 @@ export function createHarborScene(engine: Engine) {
   function renderOnline(state:MatchState,id:string,look:Look,dt:number,predictedPosition?:Point,remotePosition?:(Point&{id:string})){
     const me=state.players.find(p=>p.id===id);if(!me)return;
     const other=state.players.find(p=>p.id!==id);
-    duelMode=false;preview=false;reference=false;if(weaponId!==me.weaponId||me.health===0)scoped=false;weaponId=me.weaponId;spec=WEAPONS[weaponId];weapon={...me.weapon};cooldown=me.cooldown;if(networkJumpTick!==state.tick){networkJumpTick=state.tick;networkJumpAge=0;}else networkJumpAge=Math.min(.15,networkJumpAge+dt);jumpState=advanceJump(me.jump,networkJumpAge);inventory=me.inventory??createInventory(me.weaponId);pickups=state.pickups??[];
+    duelMode=false;ffaMode=false;preview=false;reference=false;if(weaponId!==me.weaponId||me.health===0)scoped=false;weaponId=me.weaponId;spec=WEAPONS[weaponId];weapon={...me.weapon};cooldown=me.cooldown;if(networkJumpTick!==state.tick){networkJumpTick=state.tick;networkJumpAge=0;}else networkJumpAge=Math.min(.15,networkJumpAge+dt);jumpState=advanceJump(me.jump,networkJumpAge);inventory=me.inventory??createInventory(me.weaponId);pickups=state.pickups??[];
     recoil.update(dt);effects.update(dt);botEffects.update(dt);
     update(predictedPosition??me,0,look,true);for(const target of targets)target.root.setEnabled(false);
     if(other){
@@ -619,23 +633,23 @@ export function createHarborScene(engine: Engine) {
       jumpHeight:jumpState.height,grounded:jumpState.height===0&&jumpState.velocity===0};
   }
   return {
-    jump(){if(preview||reference||(duelMode&&(duel.state().playerHealth===0||!!duel.state().winner)))return false;const next=beginJump(jumpState);const started=next!==jumpState;jumpState=next;return started;},
+    jump(){if(preview||reference||(duelMode&&(battleState().playerHealth===0||!!battleState().winner)))return false;const next=beginJump(jumpState);const started=next!==jumpState;jumpState=next;return started;},
     selectWeapon(id:WeaponId){startWeapon=id;weaponId=id;spec=WEAPONS[id];resetPractice();},
-    toggleScope(){if(weaponId!=='sniper'||preview||reference||(duelMode&&(duel.state().playerHealth===0||!!duel.state().winner)))return false;scoped=!scoped;return scoped;},
+    toggleScope(){if(weaponId!=='sniper'||preview||reference||(duelMode&&(battleState().playerHealth===0||!!battleState().winner)))return false;scoped=!scoped;return scoped;},
     resetJump(){jumpState=createJump();},
-    setMode(mode:'practice'|'duel',difficulty?:BotDifficulty){if(isBotDifficulty(difficulty))botDifficulty=difficulty;duelMode=mode==='duel';resetPractice();},
+    setMode(mode:'practice'|'duel'|'ffa',difficulty?:BotDifficulty){if(isBotDifficulty(difficulty))botDifficulty=difficulty;ffaMode=mode==='ffa';duelMode=mode!=='practice';resetPractice();},
     consumeSounds(){return soundEvents.splice(0);},
-    duelState:()=>({...duel.state(),active:duelMode}),
+    duelState:()=>({...battleState(),active:duelMode}),
     inventoryState(){syncSlot(inventory,weapon,cooldown);return {inventory,pickups};},
-    pickup(p:Point,id:string,replace?:number){if(preview||reference||(duelMode&&(duel.state().playerHealth===0||!!duel.state().winner)))return 'unavailable';syncSlot(inventory,weapon,cooldown);const result=takePickup(inventory,p,pickups,id,replace);if(result==='added')equip();return result;},
-    switchWeapon(slot:number){if(preview||reference||(duelMode&&(duel.state().playerHealth===0||!!duel.state().winner)))return false;syncSlot(inventory,weapon,cooldown);if(!switchSlot(inventory,slot))return false;equip();return true;},
+    pickup(p:Point,id:string,replace?:number){if(preview||reference||(duelMode&&(battleState().playerHealth===0||!!battleState().winner)))return 'unavailable';syncSlot(inventory,weapon,cooldown);const result=takePickup(inventory,p,pickups,id,replace);if(result==='added')equip();return result;},
+    switchWeapon(slot:number){if(preview||reference||(duelMode&&(battleState().playerHealth===0||!!battleState().winner)))return false;syncSlot(inventory,weapon,cooldown);if(!switchSlot(inventory,slot))return false;equip();return true;},
     reload,resetPractice,practiceState,
     renderOnline,endOnline,
     effectsState:effects.stats,
     impactState:()=>({...robotImpact.stats(),recoil:recoil.read()}),
     setShake(level:ShakeLevel){recoil.setShake(level);},
     setQuality(high:boolean){
-      onlineQualityHigh=high;remote?.fx.setQuality(high);atmosphere.setQuality(high);robotImpact.setQuality(high);
+      onlineQualityHigh=high;remote?.fx.setQuality(high);atmosphere.setQuality(high);robotImpact.setQuality(high);for(const rig of botRigs.slice(1))rig.fx.setQuality(high);
       const mapSize=high?2048:1024;if(shadows.mapSize!==mapSize)shadows.mapSize=mapSize;
       for(const texture of scene.textures)texture.anisotropicFilteringLevel=high?8:4;
     },
