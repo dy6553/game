@@ -32,3 +32,9 @@ test('room checkpoint preserves reconnect deadlines and match lifecycle after re
  const a=await r.connect('a');await r.connect('b');r.advance(50);a.close();await r.room.save();
  const restored=await runtime(r.storage.get('checkpoint'));assert.equal(restored.room.matchStarted,true);assert.equal(restored.room.disconnectedAt,1050);assert.ok(restored.room.game.state.players.every((p:any)=>!p.connected));
 });
+
+test('storage alarm independently closes disconnected rooms without incoming packets',async()=>{
+ const r=await runtime();r.room.game.join('a');r.room.game.join('b');r.room.sessions={a:'a',b:'b'};
+ const a=await r.connect('a'),b=await r.connect('b');r.advance(50);a.close();b.close();const returned=await r.connect('a');
+ await r.room.alarm();assert.equal(returned.closed,true);assert.equal(r.room.game.state.players.length,0);
+});

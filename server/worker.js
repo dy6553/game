@@ -31,7 +31,7 @@ export class Room extends DurableObject {
     if(msg.type==='leave'){this.closeRoom('상대가 방을 나갔습니다.');}
    }catch{server.close(1008,'잘못된 메시지');}
   });
-  const close=()=>{clearTimeout(timeout);const id=this.sockets.get(server);this.sockets.delete(server);if(id){this.game.disconnect(id);this.disconnectedAt ||=Date.now();this.last=Date.now();this.ctx.waitUntil(this.save());}if(!this.sockets.size)this.stop();};
+  const close=()=>{clearTimeout(timeout);const id=this.sockets.get(server);this.sockets.delete(server);if(id){this.game.disconnect(id);this.disconnectedAt ||=Date.now();this.last=Date.now();this.ctx.waitUntil(Promise.all([this.save(),this.ctx.storage.setAlarm(this.disconnectedAt+30000)]));}if(!this.sockets.size)this.stop();};
   server.addEventListener('close',close);server.addEventListener('error',close);
   return new Response(null,{status:101,webSocket:client});
  }
@@ -43,11 +43,11 @@ export class Room extends DurableObject {
   this.game.step();this.last=Date.now();const packet=JSON.stringify({type:'state',state:this.game.state});
   for(const socket of this.sockets.keys())try{socket.send(packet);}catch{socket.close();}
   if(++ticks%40===0)this.ctx.waitUntil(this.save());
-  if(ticks%1200===0)this.ctx.waitUntil(this.ctx.storage.setAlarm(Date.now()+120000));
+  if(ticks%1200===0&&!this.disconnectedAt)this.ctx.waitUntil(this.ctx.storage.setAlarm(Date.now()+120000));
  },50);}
  stop(){if(this.timer)clearInterval(this.timer);this.timer=null;}
  closeRoom(reason){for(const socket of this.sockets.keys()){try{socket.send(JSON.stringify({type:'closed',reason}));socket.close(1000,reason);}catch{}}this.sockets.clear();this.stop();this.game=createNetworkGame();this.sessions={};this.startedAt=0;this.finishedAt=0;this.matchStarted=false;this.disconnectedAt=0;this.ctx.waitUntil(this.ctx.storage.deleteAll());}
- async alarm(){if(!this.sockets.size){this.game=createNetworkGame();this.sessions={};await this.ctx.storage.deleteAll();}else await this.ctx.storage.setAlarm(Date.now()+120000);}
+ async alarm(){if(this.disconnectedAt){this.closeRoom('상대 연결을 복구하지 못해 경기를 종료했습니다.');return;}if(!this.sockets.size){this.game=createNetworkGame();this.sessions={};await this.ctx.storage.deleteAll();}else await this.ctx.storage.setAlarm(Date.now()+120000);}
 }
 export class Lobby extends DurableObject {
  rates=new Map();
@@ -72,7 +72,7 @@ export class Lobby extends DurableObject {
 export default {async fetch(request,env){
  const origin=request.headers.get('Origin'),allowed=env.ALLOWED_ORIGINS.split(',');
  if(!origin||!allowed.includes(origin))return json({error:'허용되지 않은 접속 주소'},403);
- const headers={'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Methods':'POST,GET,OPTIONS','Access-Control-Allow-Headers':'Content-Type','Vary':'Origin'};
+ const headers={'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Methods':'POST,GET,OPTIONS','Access-Control-Allow-Headers':'Content-Type','Vary':'Origin','X-Harbor-Version':'reconnect-alarm-v1'};
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
  const url=new URL(request.url);let response;
  try{
