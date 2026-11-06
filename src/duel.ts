@@ -141,3 +141,52 @@ export function createBotMatch(difficulty:BotDifficulty='easy'){
  }
  return {hurt,hurtPlayer,update,state};
 }
+
+// User-approved survival tuning; tests may inject explicit boundary fixtures.
+export type SurvivalOptions={prepareSeconds:number;initialEnemies:number;increaseEvery:number;maxEnemies:number;restoreBetweenWaves:boolean};
+export const SURVIVAL_RULES:Readonly<SurvivalOptions>=Object.freeze({prepareSeconds:5,initialEnemies:3,increaseEvery:2,maxEnemies:12,restoreBetweenWaves:true});
+export function createSurvivalMatch(difficulty:BotDifficulty='easy',options:SurvivalOptions=SURVIVAL_RULES){
+ if(!Number.isFinite(options.prepareSeconds)||options.prepareSeconds<0||![options.initialEnemies,options.increaseEvery,options.maxEnemies].every(n=>Number.isInteger(n)&&n>0)||options.initialEnemies>options.maxEnemies)throw new Error('Invalid survival options');
+ const selected=isBotDifficulty(difficulty)?difficulty:'easy',totalWaves={easy:10,normal:20,hard:30}[selected];
+ type Slot={id:string;name:string;agent:ReturnType<typeof createDuel>;delay:number};
+ let slots:Slot[]=[],wave=1,lives=3,playerHealth=100,playerKills=0,playerDead=0,respawnVersion=0,damageVersion=0,ammoRefreshVersion=0;
+ let phase:'preparing'|'combat'|'respawning'|'won'|'lost'='preparing',prepareRemaining=options.prepareSeconds,spawned=0,defeated=0;
+ let playerPosition={...GROUP_SPAWNS[0]!},lastAttacker={...BOT_SPAWN};
+ const total=()=>Math.min(options.maxEnemies,options.initialEnemies+Math.floor((wave-1)/options.increaseEvery));
+ function spawnWave(){
+  if(options.restoreBetweenWaves){playerHealth=100;ammoRefreshVersion++;}phase='combat';spawned=Math.min(3,total());defeated=0;
+  const occupied:Point[]=[playerPosition];slots=Array.from({length:spawned},(_,i)=>{let point=GROUP_SPAWNS[i+1]!;if(occupied.some(p=>Math.hypot(p.x-point.x,p.z-point.z)<PROTOTYPE.radius*2))point=distantSpawn(occupied);occupied.push(point);return {id:`bot-${i+1}`,name:`봇 ${i+1}`,agent:createDuel(selected,point),delay:0};});
+ }
+ function hurt(id:string,damage=25){
+  if(!Number.isFinite(damage)||damage<0)throw new Error('Invalid damage');
+  const slot=slots.find(b=>b.id===id);if(phase!=='combat'||playerHealth===0||!slot)return false;
+  const killed=slot.agent.hurt('bot',damage);if(killed){playerKills++;defeated++;slot.delay=3;
+   if(defeated===total()){if(wave===totalWaves){phase='won';}else{wave++;spawned=0;defeated=0;phase='preparing';prepareRemaining=options.prepareSeconds;if(options.restoreBetweenWaves){playerHealth=100;ammoRefreshVersion++;}}}
+  }return killed;
+ }
+ function hurtPlayer(id:string,damage=25){
+  if(!Number.isFinite(damage)||damage<0)throw new Error('Invalid damage');const slot=slots.find(b=>b.id===id);
+  if(phase!=='combat'||playerHealth===0||!slot||slot.agent.state().botHealth===0||damage===0)return false;
+  playerHealth=Math.max(0,playerHealth-damage);damageVersion++;lastAttacker=slot.agent.state().position;
+  if(playerHealth===0){lives--;if(lives===0){phase='lost';playerDead=0;}else{phase='respawning';playerDead=3;}return true;}return false;
+ }
+ function update(dt:number,p:Point,visible:(from:Point,id?:string)=>boolean,fire:(from:Point,target:Point,id?:string)=>boolean|void){
+  if(!Number.isFinite(dt)||dt<0)throw new Error('Invalid elapsed time');if(phase==='won'||phase==='lost')return;
+  if(phase==='respawning'){playerDead=Math.max(0,playerDead-dt);if(playerDead<1e-8){playerDead=0;playerHealth=100;respawnVersion++;playerPosition={...GROUP_SPAWNS[0]!};spawnWave();}return;}
+  playerPosition={...p};
+  if(phase==='preparing'){prepareRemaining=Math.max(0,prepareRemaining-dt);if(prepareRemaining<1e-8){prepareRemaining=0;spawnWave();}return;}
+  for(const slot of slots){
+   if(phase!=='combat')break;const state=slot.agent.state();
+   if(state.botHealth===0){slot.delay=Math.max(0,slot.delay-dt);if(slot.delay<1e-8&&spawned<total()){const others=[playerPosition,...slots.filter(b=>b.id!==slot.id&&b.agent.state().botHealth>0).map(b=>b.agent.state().position)];slot.agent=createDuel(selected,distantSpawn(others));spawned++;}continue;}
+   slot.agent.update(dt,playerPosition,from=>visible(from,slot.id),(from,target)=>{const clear=fire(from,target,slot.id)!==false;if(clear&&Math.hypot(playerPosition.x-target.x,playerPosition.z-target.z)<=.65)hurtPlayer(slot.id);return false;});
+  }
+ }
+ function state(){
+  const bots=slots.map(b=>{const s=b.agent.state();return {id:b.id,name:b.name,health:s.botHealth,kills:0,dead:b.delay,position:s.position,locked:phase==='combat'?s.locked:null,warning:s.warning,aim:s.aim,ammo:s.botAmmo};});
+  const warning=bots.find(b=>b.health>0&&b.locked);
+  return {mode:'survival' as const,difficulty:selected,wave,totalWaves,lives,phase,prepareRemaining,total:total(),spawned,defeated,remaining:total()-defeated,ammoRefreshVersion,
+   playerHealth,playerKills,playerDead,respawnVersion,damageVersion,playerPosition:{...playerPosition},position:{...lastAttacker},winner:phase==='won'?'player' as const:phase==='lost'?'bot' as const:'',winnerName:phase==='won'?'생존 성공':phase==='lost'?'생명 소진':'',bots,
+   botHealth:bots[0]?.health??0,botKills:3-lives,botDead:0,aim:phase==='combat'?Math.max(0,...bots.map(b=>b.aim)):0,warning:warning?.warning??0,locked:warning?.locked??null,botAmmo:bots[0]?.ammo??0};
+ }
+ return {hurt,hurtPlayer,update,state};
+}

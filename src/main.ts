@@ -18,12 +18,12 @@ import { isCharacterType } from './characters.ts';
 import { viewMovement } from './view.ts';
 import { isWeaponId,WEAPONS } from './weapons.ts';
 import './style.css';
-const readMode=(value:string):'practice'|'duel'|'ffa'=>value==='ffa'?'ffa':value==='duel'?'duel':'practice';
+const readMode=(value:string):'practice'|'duel'|'ffa'|'survival'=>value==='survival'?'survival':value==='ffa'?'ffa':value==='duel'?'duel':'practice';
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <section id="home-screen" class="home-screen" aria-labelledby="home-title">
     <div class="home-intro"><span class="eyebrow">HARBOR / NIGHT ARENA</span><h1 id="home-title">항구의 밤</h1><p>불빛이 내려앉은 항구, 당신의 로봇으로 출격하세요.</p></div>
-    <div class="home-modes"><button id="home-online"><span>01 / ONLINE</span><strong>온라인 대전</strong><p>사람 대 사람 1대1</p><small>방 코드 · 친구 초대 · 자동 매칭</small></button><button id="home-bot"><span>02 / SOLO</span><strong>봇 대전</strong><p>봇 1대1 · 봇 3명 개인전</p><small>난이도·캐릭터·무기를 고르고 출격</small></button><button id="home-practice"><span>03 / TRAINING</span><strong>표적 연습</strong><p>이동과 조준, 네 가지 무기 익히기</p><small>부담 없이 연습하기</small></button></div>
+    <div class="home-modes"><button id="home-online"><span>01 / ONLINE</span><strong>온라인 대전</strong><p>사람 대 사람 1대1</p><small>방 코드 · 친구 초대 · 자동 매칭</small></button><button id="home-bot"><span>02 / SOLO</span><strong>봇 대전</strong><p>1대1 · 개인전 · 웨이브 생존</p><small>난이도·캐릭터·무기를 고르고 출격</small></button><button id="home-practice"><span>03 / TRAINING</span><strong>표적 연습</strong><p>이동과 조준, 네 가지 무기 익히기</p><small>부담 없이 연습하기</small></button></div>
     <p class="home-controls">PC: WASD 이동 · E 획득 · 1~3 무기 교체 · 마우스 조준 &nbsp; / &nbsp; 모바일: 가로 화면 · 터치 조작</p>
   </section>
   <section id="online-lobby" class="online-lobby" hidden aria-labelledby="online-title"><div><button id="online-back">홈으로</button><h2 id="online-title">온라인 1대1</h2><p>먼저 10킬 · 두 사람이 연결되면 시작합니다.</p><label>캐릭터<select id="online-character"><option value="robot">소형 로봇</option><option value="robot-cat">고양이형 로봇</option></select></label><label>시작 무기<select id="online-weapon"><option value="pistol">권총</option><option value="machinegun">기관총</option><option value="shotgun">산탄총</option><option value="sniper">저격총</option></select></label><div class="online-actions"><button id="online-create">방 만들기</button><button id="online-quick">자동 매칭</button></div><label>방 코드<input id="online-code" maxlength="8" autocomplete="off" placeholder="8자리 코드"></label><button id="online-join">코드로 입장</button><p id="online-message" role="status"></p><p>온라인 대전에서는 메뉴를 열어도 상대의 경기는 계속됩니다.</p></div></section>
@@ -36,7 +36,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <button id="pause-open">일시정지</button><button id="pointer-lock" class="mouse-only">마우스 고정</button>
       <button id="reset">출발점</button>
       <button id="practice-reset">다시 시작</button>
-      <select id="game-mode" aria-label="게임 모드"><option value="duel">봇 1대1</option><option value="ffa">봇 3명 개인전</option><option value="practice">표적 연습</option></select>
+      <select id="game-mode" aria-label="게임 모드"><option value="duel">봇 1대1</option><option value="ffa">봇 3명 개인전</option><option value="survival">웨이브 생존</option><option value="practice">표적 연습</option></select>
       <label id="bot-difficulty-setting">봇 난이도<select id="bot-difficulty" aria-label="봇 난이도, 변경 시 새 경기"><option value="easy">쉬움</option><option value="normal">보통</option><option value="hard">어려움</option></select></label>
       <label class="pc-jump-setting"><select id="jump-key" aria-label="PC 점프 키 선택"><option value="Space" selected>스페이스: 점프</option><option value="KeyJ">J: 점프</option></select></label>
       <label class="weapon-setting">시작 무기 · 변경 시 새 경기<select id="weapon-select" aria-label="시작 무기 선택, 변경 시 경기 초기화"><option value="pistol">권총</option><option value="machinegun">기관총</option><option value="shotgun">산탄총</option><option value="sniper">저격총</option></select></label>
@@ -45,7 +45,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   </header>
   <div class="location"><span class="live-dot"></span><span id="zone">중앙 광장</span><span class="location-divider"></span><span>해안 지구</span></div>
   <section class="help" id="help" hidden>
-    <button id="help-close" class="panel-close" aria-label="도움말 닫기">닫기</button><h2>조작과 게임 안내</h2><p>봇 3명 개인전에서는 봇끼리 싸우지 않고 나만 공격합니다. 나와 각 봇의 점수를 따로 기록하며 먼저 10킬이면 승리합니다. 사망하면 3초 후 다른 캐릭터들과 먼 지점에서 시작 총으로 부활합니다.</p><p>봇 대전은 쉬움·보통·어려움 중 선택합니다. 보통·어려움은 더 빨리 조준하고 좌우로 움직이며, 발사 경고 중에는 멈춥니다. 난이도를 변경하면 새 경기를 시작합니다.</p><p>보급 상자 근처에서 E키 또는 획득 버튼으로 무기를 줍습니다. 최대 3개를 소지하며 숫자 1~3 또는 아래 슬롯 버튼으로 바꿉니다. 가득 차면 버릴 총을 선택하세요. 상자는 20초 후 다시 나오며, 사망하면 시작 총만 남습니다.</p>
+    <button id="help-close" class="panel-close" aria-label="도움말 닫기">닫기</button><h2>조작과 게임 안내</h2><p>생존: 생명 3개, 쉬움 10·보통 20·어려움 30웨이브. 동시 최대 3명이며 첫 적 3명에서 2웨이브마다 1명씩 늘어 최대 12명입니다. 준비 시간은 5초이며 체력·탄창을 회복합니다. 사망 시 3초 후 현재 웨이브의 적·상자와 소지 무기를 초기화해 시작 총으로 재도전합니다.</p><p>봇 3명 개인전에서는 봇끼리 싸우지 않고 나만 공격합니다. 나와 각 봇의 점수를 따로 기록하며 먼저 10킬이면 승리합니다. 사망하면 3초 후 다른 캐릭터들과 먼 지점에서 시작 총으로 부활합니다.</p><p>봇 대전은 쉬움·보통·어려움 중 선택합니다. 보통·어려움은 더 빨리 조준하고 좌우로 움직이며, 발사 경고 중에는 멈춥니다. 난이도를 변경하면 새 경기를 시작합니다.</p><p>보급 상자 근처에서 E키 또는 획득 버튼으로 무기를 줍습니다. 최대 3개를 소지하며 숫자 1~3 또는 아래 슬롯 버튼으로 바꿉니다. 가득 차면 버릴 총을 선택하세요. 상자는 20초 후 다시 나오며, 사망하면 시작 총만 남습니다.</p>
     <p>로봇의 눈높이에서 거리를 탐색합니다. 화면 중앙의 조준점이 바라보는 방향입니다.</p>
     <p><strong>PC</strong> WASD 이동 · Shift 달리기 · 마우스 드래그로 시점 변경 · 짧게 클릭하면 발사. 메뉴의 마우스 고정 버튼으로 자유롭게 조준할 수 있습니다. Esc를 누르면 고정을 해제하고 일시정지합니다.</p>
     <p><strong>휴대폰</strong> 왼쪽 스틱 이동 · 화면 빈 공간을 좌우·위아래로 드래그해 시점 변경</p>
@@ -89,7 +89,8 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <section id="character-picker" class="character-picker" role="dialog" aria-modal="true" aria-labelledby="character-title" hidden>
     <div class="character-sheet"><span class="eyebrow">CHOOSE YOUR CHARACTER</span>
       <button id="setup-home">홈으로</button><h2 id="character-title">출발 준비</h2><p>캐릭터와 게임 모드, 시작 무기를 골라주세요. 설정을 바꾸면 새 경기를 시작합니다.</p>
-      <div class="start-settings"><label>게임 모드<select id="start-mode"><option value="duel">봇 1대1</option><option value="ffa">봇 3명 개인전</option><option value="practice">표적 연습</option></select></label><label id="start-difficulty-setting">봇 난이도<select id="start-difficulty"><option value="easy">쉬움</option><option value="normal">보통</option><option value="hard">어려움</option></select></label><label>시작 무기<select id="start-weapon"><option value="pistol">권총</option><option value="machinegun">기관총</option><option value="shotgun">산탄총</option><option value="sniper">저격총</option></select></label></div>
+      <div class="start-settings"><label>게임 모드<select id="start-mode"><option value="duel">봇 1대1</option><option value="ffa">봇 3명 개인전</option><option value="survival">웨이브 생존</option><option value="practice">표적 연습</option></select></label><label id="start-difficulty-setting">봇 난이도<select id="start-difficulty"><option value="easy">쉬움</option><option value="normal">보통</option><option value="hard">어려움</option></select></label><label>시작 무기<select id="start-weapon"><option value="pistol">권총</option><option value="machinegun">기관총</option><option value="shotgun">산탄총</option><option value="sniper">저격총</option></select></label></div>
+      <p id="survival-mode-note" hidden>생명 3개로 쉬움 10·보통 20·어려움 30웨이브에 도전합니다. 5초 준비 후 시작하며, 사망하면 현재 웨이브를 시작 총으로 재도전합니다.</p>
       <p id="ffa-mode-note" hidden>봇 3명은 나만 공격합니다. 나와 각 봇이 먼저 10킬을 경쟁하며, 사망하면 3초 후 먼 지점에서 부활합니다.</p>
       <div class="character-options">
         <button data-character="robot"><span class="robot-icon" aria-hidden="true">▰<i>● ●</i></span><strong>소형 로봇</strong><span>둥근 머리 · 청록색 눈 · 작은 안테나</span><small>왼쪽 시안</small></button>
@@ -333,9 +334,9 @@ async function start() {
     const duel=world.duelState();
     document.querySelector<HTMLElement>('.practice-score')!.hidden=duel.active;
     document.querySelector<HTMLElement>('#duel-hud')!.hidden=!duel.active;
-    document.querySelector('#duel-score')!.textContent=duel.mode==='ffa'?`개인전 · 나 ${duel.playerKills}킬 · ${BOT_DIFFICULTIES[duel.difficulty].name}`:`나 ${duel.playerKills} : ${duel.botKills} 봇 · ${BOT_DIFFICULTIES[duel.difficulty].name} · 10킬`;
+    document.querySelector('#duel-score')!.textContent=duel.mode==='survival'?`웨이브 ${duel.wave} / ${duel.totalWaves} · ${BOT_DIFFICULTIES[duel.difficulty].name}`:duel.mode==='ffa'?`개인전 · 나 ${duel.playerKills}킬 · ${BOT_DIFFICULTIES[duel.difficulty].name}`:`나 ${duel.playerKills} : ${duel.botKills} 봇 · ${BOT_DIFFICULTIES[duel.difficulty].name} · 10킬`;
     const scores=document.querySelector<HTMLElement>('#ffa-scores')!;if(duel.mode==='ffa'&&duel.active){scores.hidden=false;scores.textContent=duel.bots.map((b,i)=>`${b.name}(${['빨강','파랑','노랑'][i]}) ${b.kills}킬 · ${b.health===0?Math.ceil(b.dead)+'초 후 부활':'HP '+b.health}`).join('\n');}
-    document.querySelector('#duel-health')!.textContent=duel.mode==='ffa'?`내 체력 ${duel.playerHealth} · 목표 10킬`:`내 체력 ${duel.playerHealth} · 봇 체력 ${duel.botHealth}`;
+    document.querySelector('#duel-health')!.textContent=duel.mode==='survival'?`체력 ${duel.playerHealth} · 생명 ${duel.lives}`:duel.mode==='ffa'?`내 체력 ${duel.playerHealth} · 목표 10킬`:`내 체력 ${duel.playerHealth} · 봇 체력 ${duel.botHealth}`;
     document.querySelector<HTMLProgressElement>('#player-health')!.value=duel.playerHealth;
     document.querySelector('#duel-hud')!.classList.toggle('critical',duel.playerHealth<=25);
     if(duel.damageVersion>previousDamage){damageTime=0.35;}
@@ -347,6 +348,11 @@ async function start() {
     const status=document.querySelector('#duel-status')!;
     status.classList.toggle('incoming',!!duel.locked);
     document.querySelector('#duel-status')!.textContent=duel.winner?(duel.winner==='player'?'승리!':duel.mode==='ffa'?`${duel.winnerName} 승리 · 패배`:'패배')+' · 다시 시작으로 재경기':duel.playerDead>0?`쓰러졌습니다 · ${Math.ceil(duel.playerDead)}초 후 부활`:duel.botDead>0?`봇 처치 · ${Math.ceil(duel.botDead)}초 후 상대 부활`:duel.locked?'발사 임박! 옆으로 이동하세요':duel.aim>0?'상대가 조준 중 · 엄폐하세요':'벽과 건물로 몸을 숨기세요';
+    if(duel.mode==='survival'){
+      const alive=duel.bots.filter(b=>b.health>0).length,reinforcing=alive===0&&duel.spawned<duel.total;
+      const spawnWait=Math.ceil(Math.min(3,...duel.bots.filter(b=>b.health===0).map(b=>b.dead)));
+      status.textContent=duel.phase==='won'?'생존 성공! 모든 웨이브 클리어 · 다시 시작':duel.phase==='lost'?'생명을 모두 잃었습니다 · 다시 시작':duel.phase==='preparing'?`준비 ${Math.ceil(duel.prepareRemaining)}초 · 이번 웨이브 적 ${duel.total}명`:duel.phase==='respawning'?`${Math.ceil(duel.playerDead)}초 후 현재 웨이브 재도전 · 생명 ${duel.lives}`:reinforcing?`증원 ${spawnWait}초 · 남은 적 ${duel.remaining}명`:`${duel.locked?'발사 임박! · ':''}남은 적 ${duel.remaining}명 · 현재 ${alive}명 출현`;
+    }
     document.body.classList.toggle('player-hurt',duel.active&&duel.playerHealth>0&&duel.playerHealth<=50);
     document.querySelector<HTMLButtonElement>('#reset')!.disabled=duel.active;
     const blocked=duel.active&&(duel.playerHealth===0||!!duel.winner);
@@ -487,7 +493,7 @@ async function start() {
     const runBattle=world.duelState();runButton.disabled=runBattle.active&&(runBattle.playerHealth===0||!!runBattle.winner);
     damageTime=Math.max(0,damageTime-elapsed);impactTime=Math.max(0,impactTime-elapsed);document.querySelector<HTMLElement>('#impact-marker')!.hidden=impactTime<=0||!picker.hidden||comparing;
     document.querySelector<HTMLElement>('#bot-difficulty-setting')!.hidden=onlineActive||document.querySelector<HTMLSelectElement>('#game-mode')!.value==='practice';document.querySelector<HTMLElement>('#start-difficulty-setting')!.hidden=document.querySelector<HTMLSelectElement>('#start-mode')!.value==='practice';
-    document.querySelector<HTMLElement>('#ffa-mode-note')!.hidden=document.querySelector<HTMLSelectElement>('#start-mode')!.value!=='ffa';
+    document.querySelector<HTMLElement>('#ffa-mode-note')!.hidden=document.querySelector<HTMLSelectElement>('#start-mode')!.value!=='ffa';document.querySelector<HTMLElement>('#survival-mode-note')!.hidden=document.querySelector<HTMLSelectElement>('#start-mode')!.value!=='survival';
     noticeTime=Math.max(0,noticeTime-elapsed);refreshHud();refreshInventory();
     hitTime = Math.max(0, hitTime - elapsed);
     shotTime=Math.max(0,shotTime-elapsed);feedbackTime=Math.max(0,feedbackTime-elapsed);
