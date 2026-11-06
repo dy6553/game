@@ -1,3 +1,4 @@
+import { simulationSteps } from './simulation.ts';
 import { createPerformanceHud } from './performance-hud.ts';
 import { createRenderBudget } from './render-budget.ts';
 import { sprintMultiplier } from './sprint.ts';
@@ -18,7 +19,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <button id="menu-toggle" aria-expanded="false" aria-controls="game-toolbar">메뉴</button>
     <div id="game-toolbar" class="toolbar" aria-label="화면 설정">
       <button id="character-open">캐릭터 선택</button>
-      <button id="reference-open" aria-pressed="false">시안 비교</button>
+      <button id="pause-open">일시정지</button><button id="pointer-lock" class="mouse-only">마우스 고정</button>
       <button id="reset">출발점</button>
       <button id="practice-reset">다시 시작</button>
       <select id="game-mode" aria-label="게임 모드"><option value="duel">봇 1대1 · 쉬움</option><option value="practice">표적 연습</option></select>
@@ -29,18 +30,21 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   </header>
   <div class="location"><span class="live-dot"></span><span id="zone">중앙 광장</span><span class="location-divider"></span><span>해안 지구</span></div>
   <section class="help" id="help" hidden>
-    <h2>밤의 거리를 걸어보세요</h2>
+    <button id="help-close" class="panel-close" aria-label="도움말 닫기">닫기</button><h2>조작과 게임 안내</h2>
     <p>로봇의 눈높이에서 거리를 탐색합니다. 화면 중앙의 조준점이 바라보는 방향입니다.</p>
-    <p><strong>PC</strong> WASD 이동 · Shift 달리기 · 마우스 드래그로 시점 변경 · 짧게 클릭하면 발사. 더블클릭으로 마우스 고정을 시도하며 ESC로 해제합니다.</p>
+    <p><strong>PC</strong> WASD 이동 · Shift 달리기 · 마우스 드래그로 시점 변경 · 짧게 클릭하면 발사. 메뉴의 마우스 고정 버튼으로 자유롭게 조준할 수 있습니다. Esc를 누르면 고정을 해제하고 일시정지합니다.</p>
     <p><strong>휴대폰</strong> 왼쪽 스틱 이동 · 화면 빈 공간을 좌우·위아래로 드래그해 시점 변경</p>
     <p><strong>달리기</strong> PC는 Shift를 누르고 앞으로 이동하세요. 휴대폰은 스틱 위의 달리기 버튼으로 켜고 끕니다. 이동 속도는 1.5배이며 발사·재장전·확대 조준 중에는 걷습니다. 스태미나 제한은 없습니다.</p>
     <p><strong>점프</strong> 휴대폰은 점프 버튼을 누릅니다. PC는 스페이스바로 점프합니다. 메뉴에서 J키로 변경할 수 있습니다.</p>
-    <p>권총은 탄창 12발, 표적은 체력 100입니다. 4발 맞히면 파괴됩니다. PC R키 또는 재장전 버튼으로 1.5초 동안 재장전합니다. 예비 탄약은 무제한입니다.</p>
+    <p id="weapon-help"></p>
     <p>봇 1대1: 양쪽 체력 100, 먼저 10킬 승리. 자동 회복 없이 사망 3초 후 부활합니다. 붉은 표시가 상대 봇입니다. 봇은 1초 조준 후 위치를 고정하고 0.4초 경고 뒤 발사합니다. 경고 때 옆으로 이동하면 피할 수 있으며, 벽 뒤로 숨으면 조준이 초기화됩니다.</p>
     <p>맵을 남쪽 상점 거리와 양옆 골목으로 넓혔습니다. 중앙 거리 양쪽의 열린 출입구와 남쪽 거리의 상점, 총 6곳의 1층에 들어갈 수 있습니다. 문 버튼 없이 걸어서 출입합니다.</p>
     <p>시작 무기는 메뉴에서 선택하며 변경하면 경기를 새로 시작합니다. 기관총은 발사 버튼을 누르고 있거나 PC 마우스 고정 상태에서 왼쪽 버튼을 누르면 연사합니다. 산탄총은 탄알 6개가 퍼지며, 저격총은 확대 버튼 또는 PC Q키로 조준합니다.</p>
     <p>야경 개선: 젖은 노면의 빛, 수면 반짝임, 벽·지붕 표면과 금속 광택을 추가했습니다. 자동 화질은 지속적인 프레임 저하가 있을 때 렌더 해상도를 조절합니다. 높음은 수동 고화질, 균형은 낮은 부하 설정입니다.</p>
+    <p>성능 표시는 최근 최대 10초의 플레이 구간을 측정합니다. 평균 FPS는 높을수록, P95 프레임 시간은 낮을수록 부드럽습니다. 끊김은 50ms를 넘은 프레임 수입니다. 메뉴·일시정지 구간은 제외하며, 화질을 비교할 때는 같은 장소에서 같은 시간 동안 움직여 보세요.</p>
     <fieldset class="audio-settings"><legend>소리</legend><label><input id="audio-mute" type="checkbox"> 음소거</label><label>전체<input id="audio-master" type="range" min="0" max="100" aria-label="전체 음량"></label><label>효과음<input id="audio-effects" type="range" min="0" max="100" aria-label="효과음 음량"></label><label>환경음<input id="audio-environment" type="range" min="0" max="100" aria-label="환경음 음량"></label><small id="audio-status">시작 버튼을 누르면 소리를 켭니다.</small></fieldset>
+    <label class="sensitivity-setting">모바일 조준 감도 <output id="look-sensitivity-value">1.00배</output><input id="look-sensitivity" type="range" min="25" max="200" step="5" value="100" aria-label="모바일 조준 감도"></label>
+    <details class="developer-settings"><summary>개발용 도구</summary><button id="reference-open" aria-pressed="false">시안 비교</button><p>배경 시안과 현재 맵을 비교합니다.</p></details>
     <label class="graphics-setting">그래픽 화질 <select id="graphics-quality"><option value="auto" selected>자동 · 기기에 맞춤</option><option value="high">높음 · 선명한 화면</option><option value="balanced">균형 · 부드러운 실행</option></select></label>
   </section>
   <div class="desktop-hint"><kbd>W</kbd><span><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><p>이동 <i>·</i> 드래그로 시점 변경</p></div>
@@ -48,7 +52,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <button id="sprint" class="sprint-button" aria-pressed="false" aria-label="달리기 켜기">달리기</button>
     <div class="move-control"><div id="joystick" role="group" aria-label="이동 가상 스틱"><div class="stick-cross"></div><div id="joystick-thumb"></div></div><span>이동</span></div>
     <button id="fire" class="single-fire" aria-label="화면 중앙 정면으로 발사">발사</button>
-    <button id="reload" class="reload-button" aria-label="권총 재장전">재장전</button>
+    <button id="reload" class="reload-button" aria-label="무기 재장전">재장전</button>
     <button id="scope" class="scope-button" hidden aria-pressed="false">확대</button>
     <button id="jump" class="jump-button" aria-label="점프">점프</button>
   </div>
@@ -59,20 +63,23 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <div class="look-hint">빈 화면을 드래그해 둘러보세요</div>
   <section class="practice-score" aria-label="표적 연습 현황"><div>명중 <span id="hits">0</span> · 파괴 <span id="destroyed">0</span>/3</div><div class="target-health">${[0,1,2].map(i=>`<div><span>표적 ${i+1}</span><progress id="health-${i}" max="100" value="100" aria-label="표적 ${i+1} 체력"></progress><b id="health-value-${i}">100</b></div>`).join('')}</div></section>
   <section id="duel-hud" class="duel-hud" aria-label="봇 대전 현황"><strong id="duel-score"></strong><div id="duel-health"></div><progress id="player-health" max="100" value="100" aria-label="내 체력"></progress><div id="health-segments" aria-hidden="true"><i></i><i></i><i></i><i></i></div><p id="duel-status" role="status"></p></section>
-  <div class="ammo-hud" aria-label="권총 탄약"><span id="weapon-name">권총</span><div><b id="ammo">12</b><span id="magazine-size"> / 12</span><small>예비 ∞</small></div><p id="weapon-status">발사 준비</p><progress id="reload-progress" max="1.5" value="0" aria-label="재장전 진행" hidden></progress></div>
+  <div class="ammo-hud" aria-label="무기 탄약"><span id="weapon-name">권총</span><div><b id="ammo">12</b><span id="magazine-size"> / 12</span><small>예비 ∞</small></div><p id="weapon-status">발사 준비</p><progress id="reload-progress" max="1.5" value="0" aria-label="재장전 진행" hidden></progress></div>
   <div id="practice-complete" class="practice-complete" role="status" hidden>표적 연습 완료 <button id="practice-again">다시 연습</button></div>
   <figure id="reference-panel" class="reference-panel" hidden><figcaption>기준 시안</figcaption><div class="reference-load"><p>비교할 배경 시안을 선택해 주세요</p><label>이미지 선택<input id="reference-file" type="file" accept="image/*" /></label><p id="reference-status">게임은 이미지를 선택하지 않아도 실행됩니다.</p></div><img id="reference-image" alt="선택한 배경 시안" hidden /></figure>
-  <div class="live-reference-label" hidden>현재 3D 배경 · 제작 중</div>
+  <div class="live-reference-label" hidden>현재 3D 배경 · 제작 중</div><button id="comparison-close" class="comparison-close" hidden>일시정지 · 비교 닫고 게임으로</button>
+  <div id="pause-indicator" class="pause-indicator" hidden><span role="status">일시정지</span><button id="pause-continue">계속하기</button></div>
   <div class="rotate-notice"><span>↻</span><h2>가로로 돌려주세요</h2><p>넓은 화면에서 이동과 조준을 함께 사용할 수 있습니다.</p></div>
   <section id="character-picker" class="character-picker" role="dialog" aria-modal="true" aria-labelledby="character-title" hidden>
     <div class="character-sheet"><span class="eyebrow">CHOOSE YOUR CHARACTER</span>
-      <h2 id="character-title">함께 거리를 누빌 캐릭터</h2><p>마음에 드는 로봇을 선택해 주세요. 플레이 중에도 바꿀 수 있습니다.</p>
+      <h2 id="character-title">출발 준비</h2><p>캐릭터와 게임 모드, 시작 무기를 골라주세요. 설정을 바꾸면 새 경기를 시작합니다.</p>
+      <div class="start-settings"><label>게임 모드<select id="start-mode"><option value="duel">봇 1대1 · 쉬움</option><option value="practice">표적 연습</option></select></label><label>시작 무기<select id="start-weapon"><option value="pistol">권총</option><option value="machinegun">기관총</option><option value="shotgun">산탄총</option><option value="sniper">저격총</option></select></label></div>
       <div class="character-options">
         <button data-character="robot"><span class="robot-icon" aria-hidden="true">▰<i>● ●</i></span><strong>소형 로봇</strong><span>둥근 머리 · 청록색 눈 · 작은 안테나</span><small>왼쪽 시안</small></button>
         <button data-character="robot-cat"><span class="robot-icon cat-icon" aria-hidden="true">▲ ▲<i>◆ ◆</i></span><strong>고양이형 로봇</strong><span>뾰족한 귀 · 금빛 눈 · 기계 꼬리</span><small>오른쪽 시안</small></button>
-      </div><button id="character-start" class="character-start">이 캐릭터로 시작</button><p class="character-note">캐릭터를 고르면 오른쪽에서 실제 3D 모델을 볼 수 있습니다.</p>
+      </div><button id="character-start" class="character-start">시작 · 드래그로 조준</button><button id="character-start-locked" class="character-start mouse-only">마우스 고정하고 시작</button><p id="pointer-status" role="status"></p><p class="character-note">캐릭터를 고르면 오른쪽에서 실제 3D 모델을 볼 수 있습니다.</p>
     </div>
   </section>
+  <section id="pause-panel" class="pause-panel" role="dialog" aria-modal="true" aria-labelledby="pause-title" hidden><div><h2 id="pause-title">일시정지</h2><p>전투와 이동이 멈췄습니다.</p><button id="resume">계속하기</button><button id="resume-locked" class="mouse-only">마우스 고정하고 계속</button><p id="pause-lock-status" role="status"></p></div></section>
   <div class="loading" id="loading" role="status"><div class="loading-ring"></div><p>밤의 거리를 준비하고 있습니다</p></div>
   <footer class="phase-note">03 / 표적 연습 · 봇 1대1</footer>
 `;
@@ -97,6 +104,18 @@ async function start() {
     world.setQuality(qualityHigh);engine.resize();world.resize();
   });
   const input = createInput(canvas);
+  input.setEnabled(false);
+  const sensitivity=document.querySelector<HTMLInputElement>('#look-sensitivity')!;
+  const setSensitivity=(value:number)=>{
+    const next=Number.isFinite(value)?Math.max(.25,Math.min(2,value)):1;
+    input.setTouchSensitivity(next);sensitivity.value=String(next*100);
+    document.querySelector('#look-sensitivity-value')!.textContent=`${next.toFixed(2)}배`;
+    return next;
+  };
+  let savedSensitivity=1;
+  try{const saved=localStorage.getItem('harbor-touch-sensitivity');if(saved!==null)savedSensitivity=Number(saved);}catch{/* Storage is optional. */}
+  setSensitivity(savedSensitivity);
+  sensitivity.addEventListener('input',()=>{const next=setSensitivity(Number(sensitivity.value)/100);try{localStorage.setItem('harbor-touch-sensitivity',String(next));}catch{}});
   const audio=createGameAudio();
   document.addEventListener('pointerdown',()=>{void audio.unlock();});
   document.addEventListener('keydown',()=>{void audio.unlock();});
@@ -110,12 +129,36 @@ async function start() {
     const code=(event.currentTarget as HTMLSelectElement).value;
     if(code==='Space'||code==='KeyJ'){input.reset();input.setJumpKey(code);canvas.focus();}
   });
+  let manualPaused=false,hasPlayed=false,wasLocked=false;
+  const pausePanel=document.querySelector<HTMLElement>('#pause-panel')!;
+  const pauseGame=()=>{
+    if(!hasPlayed||!picker.hidden)return;
+    manualPaused=true;input.setEnabled(false);audio.pause(true);
+    if(document.pointerLockElement)document.exitPointerLock();
+    pausePanel.hidden=false;document.querySelector<HTMLButtonElement>('#resume')!.focus();
+  };
+  const resumeGame=()=>{manualPaused=false;pausePanel.hidden=true;input.reset();canvas.focus();};
+  const lockMouse=()=>{
+    const report=(message:string)=>{
+      for(const id of ['pointer-status','pause-lock-status'])document.querySelector(`#${id}`)!.textContent=message;
+      if(message){pauseGame();document.querySelector('#pause-lock-status')!.textContent=message;}
+    };
+    if(!canvas.requestPointerLock){report('마우스 고정을 지원하지 않습니다. 계속하기를 누르면 드래그로 조준할 수 있습니다.');return;}
+    try{const result=canvas.requestPointerLock();result?.catch(()=>report('마우스를 고정하지 못했습니다. 계속하기로 드래그 조준을 사용하거나 고정을 다시 시도하세요.'));}catch{report('마우스를 고정하지 못했습니다. 계속하기로 드래그 조준을 사용할 수 있습니다.');}
+  };
+  document.querySelector('#pause-open')!.addEventListener('click',pauseGame);
+  document.querySelector('#resume')!.addEventListener('click',resumeGame);
+  document.querySelector('#resume-locked')!.addEventListener('click',()=>{resumeGame();lockMouse();});
+  document.querySelector('#pointer-lock')!.addEventListener('click',()=>{canvas.focus();lockMouse();});
+  document.addEventListener('pointerlockchange',()=>{const locked=document.pointerLockElement===canvas;if(wasLocked&&!locked)pauseGame();wasLocked=locked;});
+  window.addEventListener('blur',pauseGame);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)pauseGame();});
   let menuOpen=false;
   const menuButton=document.querySelector<HTMLButtonElement>('#menu-toggle')!;
   const closeMenu=()=>{menuOpen=false;document.body.classList.remove('menu-open');menuButton.setAttribute('aria-expanded','false');input.reset();};
   menuButton.addEventListener('click',()=>{
-    menuOpen=!menuOpen;document.body.classList.toggle('menu-open',menuOpen);menuButton.setAttribute('aria-expanded',String(menuOpen));input.reset();
-    if(menuOpen){document.querySelector<HTMLElement>('#help')!.hidden=true;if(document.pointerLockElement)document.exitPointerLock();}
+    menuOpen=!menuOpen;document.body.classList.toggle('menu-open',menuOpen);menuButton.setAttribute('aria-expanded',String(menuOpen));input.setEnabled(false);input.reset();
+    if(menuOpen){document.querySelector<HTMLElement>('#help')!.hidden=true;document.querySelector('#help-toggle')!.setAttribute('aria-expanded','false');if(document.pointerLockElement)document.exitPointerLock();}
   });
   document.querySelector('#game-toolbar')!.addEventListener('click',event=>{if((event.target as HTMLElement).closest('button'))closeMenu();});
   document.querySelector('#game-toolbar')!.addEventListener('change',closeMenu);
@@ -140,30 +183,45 @@ async function start() {
     document.body.classList.toggle('comparing',value);
     document.querySelector<HTMLElement>('#reference-panel')!.hidden=!value;
     document.querySelector<HTMLElement>('.live-reference-label')!.hidden=!value;
+    document.querySelector<HTMLElement>('#comparison-close')!.hidden=!value;
     referenceButton.textContent=value?'1인칭 돌아가기':'시안 비교';
     referenceButton.setAttribute('aria-pressed',String(value));
     if(document.pointerLockElement)document.exitPointerLock();
     engine.resize();world.resize();
   };
-  referenceButton.addEventListener('click',()=>setComparison(!comparing));
+  referenceButton.addEventListener('click',()=>{setComparison(!comparing);document.querySelector<HTMLElement>('#help')!.hidden=true;document.querySelector('#help-toggle')!.setAttribute('aria-expanded','false');});
+  document.querySelector('#comparison-close')!.addEventListener('click',()=>{setComparison(false);canvas.focus();});
   const picker = document.querySelector<HTMLElement>('#character-picker')!;
   const openCharacter = document.querySelector<HTMLButtonElement>('#character-open')!;
   const choices = [...document.querySelectorAll<HTMLButtonElement>('[data-character]')];
   const startButton = document.querySelector<HTMLButtonElement>('#character-start')!;
   const refreshCharacter = () => choices.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.character === world.characterType)));
-  const openPicker = () => { setComparison(false); input.reset(); if (document.pointerLockElement) document.exitPointerLock(); world.setPreview(true); refreshCharacter(); picker.hidden = false; choices[0]!.focus(); };
+  const openPicker = () => { setComparison(false);input.setEnabled(false);document.querySelector<HTMLSelectElement>('#start-mode')!.value=document.querySelector<HTMLSelectElement>('#game-mode')!.value;document.querySelector<HTMLSelectElement>('#start-weapon')!.value=document.querySelector<HTMLSelectElement>('#weapon-select')!.value; input.reset(); if (document.pointerLockElement) document.exitPointerLock(); world.setPreview(true); refreshCharacter(); picker.hidden = false; choices[0]!.focus(); };
   openCharacter.addEventListener('click', openPicker);
   choices.forEach(button => button.addEventListener('click', () => {
     const type = button.dataset.character;
     if (!isCharacterType(type)) return;
     world.selectCharacter(type); refreshCharacter(); input.reset();
   }));
-  startButton.addEventListener('click', () => { void audio.unlock();input.reset(); picker.hidden=true; world.setPreview(false); closeMenu(); canvas.focus(); });
+  const startLocked=document.querySelector<HTMLButtonElement>('#character-start-locked')!;
+  const beginGame=(locked:boolean)=>{
+    const mode=document.querySelector<HTMLSelectElement>('#game-mode')!;
+    const weapon=document.querySelector<HTMLSelectElement>('#weapon-select')!;
+    const nextMode=document.querySelector<HTMLSelectElement>('#start-mode')!.value;
+    const nextWeapon=document.querySelector<HTMLSelectElement>('#start-weapon')!.value;
+    const changed=mode.value!==nextMode||weapon.value!==nextWeapon;
+    mode.value=nextMode;weapon.value=nextWeapon;
+    if(changed&&isWeaponId(nextWeapon)){world.setMode(nextMode==='duel'?'duel':'practice');world.selectWeapon(nextWeapon);restart();}
+    void audio.unlock();input.reset();picker.hidden=true;world.setPreview(false);closeMenu();hasPlayed=true;resumeGame();
+    if(locked)lockMouse();
+  };
+  startButton.addEventListener('click',()=>beginGame(false));
+  startLocked.addEventListener('click',()=>beginGame(true));
   picker.addEventListener('keydown', event => {
     if (event.key === 'Tab') {
       event.preventDefault();
-      const buttons=[...choices,startButton];
-      const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+      const buttons=[...picker.querySelectorAll<HTMLButtonElement|HTMLSelectElement>('button,select')].filter(element=>element.getClientRects().length>0);
+      const index = buttons.indexOf(document.activeElement as HTMLButtonElement|HTMLSelectElement);
       buttons[(index + (event.shiftKey ? buttons.length - 1 : 1)) % buttons.length]!.focus();
     }
   });
@@ -207,6 +265,8 @@ async function start() {
     const blocked=duel.active&&(duel.playerHealth===0||!!duel.winner);
     document.querySelector<HTMLButtonElement>('#fire')!.disabled=blocked;
     document.querySelector('#weapon-name')!.textContent=state.weaponName;
+    reloadButton.setAttribute('aria-label',`${state.weaponName} 재장전`);document.querySelector('.ammo-hud')!.setAttribute('aria-label',`${state.weaponName} 탄약`);
+    document.querySelector('#weapon-help')!.textContent=`${state.weaponName}: 탄창 ${state.magazineSize}발 · 재장전 ${state.reloadSeconds}초. PC R키 또는 재장전 버튼을 사용하세요. 표적 체력은 100, 예비 탄약은 무제한입니다.`;
     document.querySelector('#magazine-size')!.textContent=` / ${state.magazineSize}`;
     const scopeButton=document.querySelector<HTMLButtonElement>('#scope')!;
     scopeButton.hidden=state.weaponId!=='sniper';scopeButton.disabled=blocked;
@@ -229,7 +289,7 @@ async function start() {
   };
   const reset = () => { position = { ...PROTOTYPE.spawn }; input.resetLook();world.resetJump(); };
   document.querySelector('#reset')!.addEventListener('click', reset);
-  const restart=()=>{reset();world.resetPractice();noticeTime=0;hitTime=0;shotTime=0;feedbackTime=0;damageTime=0;impactTime=0;previousDamage=0;refreshHud();};
+  const restart=()=>{reset();world.resetPractice();lastReload=0;lastGrounded=true;lastPlayerHealth=100;lastRespawn=0;lastWinner='';footDistance=0;footAlternating=false;emptyAt=0;lastHudKey='';noticeTime=0;hitTime=0;shotTime=0;feedbackTime=0;damageTime=0;impactTime=0;previousDamage=0;refreshHud();};
   document.querySelector('#practice-reset')!.addEventListener('click',restart);
   document.querySelector('#practice-again')!.addEventListener('click',restart);
   document.querySelector<HTMLSelectElement>('#game-mode')!.addEventListener('change',event=>{
@@ -240,14 +300,25 @@ async function start() {
   });
   window.addEventListener('keydown',event=>{
     const tag=(event.target as HTMLElement|null)?.tagName;
-    if(event.code==='KeyQ'&&!event.repeat&&!menuOpen&&picker.hidden&&!comparing&&document.querySelector<HTMLElement>('#help')!.hidden&&!['INPUT','SELECT','TEXTAREA'].includes(tag??'')){event.preventDefault();world.toggleScope();audio.play('scope');}
+    if(event.code==='KeyQ'&&!event.repeat&&!manualPaused&&!menuOpen&&picker.hidden&&!comparing&&document.querySelector<HTMLElement>('#help')!.hidden&&!['INPUT','SELECT','TEXTAREA'].includes(tag??'')){event.preventDefault();world.toggleScope();audio.play('scope');}
   });
-  document.querySelector('#scope')!.addEventListener('click',()=>{world.toggleScope();audio.play('scope');canvas.focus();});
+  document.querySelector('#scope')!.addEventListener('click',()=>{if(manualPaused||menuOpen||!picker.hidden||comparing||!document.querySelector<HTMLElement>('#help')!.hidden)return;world.toggleScope();audio.play('scope');canvas.focus();});
   const help = document.querySelector<HTMLElement>('#help')!;
+  const closeHelp=()=>{help.hidden=true;document.querySelector('#help-toggle')!.setAttribute('aria-expanded','false');input.reset();};
+  document.querySelector('#pause-continue')!.addEventListener('click',()=>{closeHelp();closeMenu();resumeGame();});
+  document.querySelector('#help-close')!.addEventListener('click',()=>{closeHelp();canvas.focus();});
   document.querySelector('#help-toggle')!.addEventListener('click', event => {
-    help.hidden = !help.hidden;
+    help.hidden = !help.hidden;input.setEnabled(false);input.reset();
     (event.currentTarget as HTMLElement).setAttribute('aria-expanded', String(!help.hidden));
   });
+  window.addEventListener('keydown',event=>{
+    if(event.code!=='Escape'||!picker.hidden)return;
+    if(!help.hidden){event.preventDefault();closeHelp();canvas.focus();}
+    else if(comparing){event.preventDefault();setComparison(false);}
+    else if(menuOpen){event.preventDefault();closeMenu();canvas.focus();}
+    else if(!manualPaused&&!document.pointerLockElement){event.preventDefault();pauseGame();}
+  });
+  pausePanel.addEventListener('keydown',event=>{if(event.key!=='Tab')return;event.preventDefault();const buttons=[...pausePanel.querySelectorAll<HTMLButtonElement>('button')].filter(button=>button.getClientRects().length>0);const index=buttons.indexOf(document.activeElement as HTMLButtonElement);buttons[(index+(event.shiftKey?buttons.length-1:1))%buttons.length]!.focus();});
   window.addEventListener('resize', () => { closeMenu(); engine.resize(); world.resize(); });
   canvas.addEventListener('contextmenu', event => event.preventDefault());
   world.update(position, 1);
@@ -260,9 +331,11 @@ async function start() {
   engine.runRenderLoop(() => {
     const elapsed=resetClock?0:Math.max(0,engine.getDeltaTime()/1000);resetClock=false;
     const dt = Math.min(elapsed, 0.05);
-    performanceHud.update(elapsed);
     const portraitTouch = matchMedia('(pointer: coarse) and (orientation: portrait)').matches;
-    const canPlay=!document.hidden&&!portraitTouch&&picker.hidden&&!comparing&&!menuOpen&&help.hidden&&document.hasFocus();
+    const canPlay=!manualPaused&&!document.hidden&&!portraitTouch&&picker.hidden&&!comparing&&!menuOpen&&help.hidden&&document.hasFocus();
+    input.setEnabled(canPlay);
+    document.querySelector<HTMLElement>('#pause-indicator')!.hidden=manualPaused||!picker.hidden||comparing||portraitTouch||(!menuOpen&&help.hidden);
+    performanceHud.update(elapsed,canPlay);
     if(graphicsMode==='auto'){
       const density=budget.sample(elapsed,canPlay);
       if(density!==null){engine.setHardwareScalingLevel(1/density);engine.resize();world.resize();}
@@ -272,37 +345,39 @@ async function start() {
     audio.pause(!canPlay);
     document.querySelector('#audio-status')!.textContent=audio.available?'사운드 활성화':'화면을 눌러 소리 켜기';
     if (canPlay) {
-      const queued=input.consumeShots(),reloadRequested=input.consumeReloads();
-      const before=world.practiceState();
-      const movement = viewMovement(input.look.yaw, input.move.x, input.move.y);
-      const duel=world.duelState(),canAct=!duel.active||(duel.playerHealth>0&&!duel.winner);
-      const runScale=sprintMultiplier({requested:input.sprintingRequested,forward:input.move.y,canAct,firing:queued>0||input.firing||before.cooldown>0||shotTime>0,reloading:before.reloadRemaining>0||reloadRequested>0,scoped:before.scoped},1.5);
-      const oldPosition={...position};
-      if(canAct)position = moveWithCollisions(position, {
-        x: movement.x * PROTOTYPE.speed * runScale * dt, z: movement.z * PROTOTYPE.speed * runScale * dt,
-      });
-      if(input.consumeJumps()>0&&canAct&&world.jump())audio.play('jump');
-      world.update(position, elapsed, input.look);
-      if(reloadRequested>0&&world.reload())audio.play('reload');
-      const current=world.practiceState();
-      if(lastReload>0&&current.reloadRemaining===0)audio.play('ready');
-      lastReload=current.reloadRemaining;
-      if(!lastGrounded&&current.grounded)audio.play('land');lastGrounded=current.grounded;
-      const walked=Math.hypot(position.x-oldPosition.x,position.z-oldPosition.z);
-      if(canAct&&current.grounded&&walked<2){footDistance+=walked;if(footDistance>2.2){footDistance=0;footAlternating=!footAlternating;audio.play(footAlternating?'step':'step2');}}
-      const battle=world.duelState();
-      if(battle.active&&battle.playerHealth<lastPlayerHealth)audio.play(battle.playerHealth===0?'death':'hurt');
-      if(battle.respawnVersion>lastRespawn)audio.play('respawn');
-      if(battle.winner&&battle.winner!==lastWinner)audio.play(battle.winner==='player'?'win':'lose');
-      lastPlayerHealth=battle.playerHealth;lastRespawn=battle.respawnVersion;lastWinner=battle.winner;
-      for(const event of world.consumeSounds()){const spatial=spatialSound(event.x-position.x,event.z-position.z,input.look.yaw);audio.play(event.kind,spatial.pan,spatial.gain);}
-      const shots=queued>0?queued:(input.firing&&world.practiceState().automatic?1:0);
-      for (let i = 0; i < shots; i++) {
-        const shot = world.shoot();
-        if(shot.fired){shotTime=0.08;audio.play(world.practiceState().weaponId);if(shot.hit)audio.play(shot.eliminated?'kill':'hit',0,.6);else if('impact' in shot&&shot.impact)audio.play('wall',0,.35);}
-        if(!shot.fired&&'reason' in shot&&shot.reason==='empty'&&performance.now()>emptyAt){audio.play('empty');emptyAt=performance.now()+500;}
-        if (shot.hit) {impactTime=0.2;document.querySelector('#impact-marker')!.classList.toggle('kill','eliminated' in shot&&!!shot.eliminated);hitTime=0.16;feedbackTime=0.35;shotFeedback.textContent='eliminated' in shot&&shot.eliminated?(world.duelState().active?'봇 처치':'표적 파괴'):`명중 −${'damage' in shot?shot.damage:0}`;}
-        else if(!shot.fired && 'reason' in shot && shot.reason!=='cooldown'){notice=shot.reason==='empty'?'탄창이 비었습니다 · 재장전하세요':'재장전 중에는 발사할 수 없습니다';noticeTime=0.8;}
+      for(const step of simulationSteps(elapsed)){
+        const queued=input.consumeShots(),reloadRequested=input.consumeReloads();
+        const before=world.practiceState();
+        const movement = viewMovement(input.look.yaw, input.move.x, input.move.y);
+        const duel=world.duelState(),canAct=!duel.active||(duel.playerHealth>0&&!duel.winner);
+        const runScale=sprintMultiplier({requested:input.sprintingRequested,forward:input.move.y,canAct,firing:queued>0||input.firing||before.cooldown>0||shotTime>0,reloading:before.reloadRemaining>0||reloadRequested>0,scoped:before.scoped},1.5);
+        const oldPosition={...position};
+        if(canAct)position = moveWithCollisions(position, {
+          x: movement.x * PROTOTYPE.speed * runScale * step, z: movement.z * PROTOTYPE.speed * runScale * step,
+        });
+        if(input.consumeJumps()>0&&canAct&&world.jump())audio.play('jump');
+        world.update(position, step, input.look);
+        if(reloadRequested>0&&world.reload())audio.play('reload');
+        const current=world.practiceState();
+        if(lastReload>0&&current.reloadRemaining===0)audio.play('ready');
+        lastReload=current.reloadRemaining;
+        if(!lastGrounded&&current.grounded)audio.play('land');lastGrounded=current.grounded;
+        const walked=Math.hypot(position.x-oldPosition.x,position.z-oldPosition.z);
+        if(canAct&&current.grounded&&walked<2){footDistance+=walked;if(footDistance>2.2){footDistance=0;footAlternating=!footAlternating;audio.play(footAlternating?'step':'step2');}}
+        const battle=world.duelState();
+        if(battle.active&&battle.playerHealth<lastPlayerHealth)audio.play(battle.playerHealth===0?'death':'hurt');
+        if(battle.respawnVersion>lastRespawn)audio.play('respawn');
+        if(battle.winner&&battle.winner!==lastWinner)audio.play(battle.winner==='player'?'win':'lose');
+        lastPlayerHealth=battle.playerHealth;lastRespawn=battle.respawnVersion;lastWinner=battle.winner;
+        for(const event of world.consumeSounds()){const spatial=spatialSound(event.x-position.x,event.z-position.z,input.look.yaw);audio.play(event.kind,spatial.pan,spatial.gain);}
+        const shots=queued>0?queued:(input.firing&&world.practiceState().automatic?1:0);
+        for (let i = 0; i < shots; i++) {
+          const shot = world.shoot();
+          if(shot.fired){shotTime=0.08;audio.play(world.practiceState().weaponId);if(shot.hit)audio.play(shot.eliminated?'kill':'hit',0,.6);else if('impact' in shot&&shot.impact)audio.play('wall',0,.35);}
+          if(!shot.fired&&'reason' in shot&&shot.reason==='empty'&&performance.now()>emptyAt){audio.play('empty');emptyAt=performance.now()+500;}
+          if (shot.hit) {impactTime=0.2;document.querySelector('#impact-marker')!.classList.toggle('kill','eliminated' in shot&&!!shot.eliminated);hitTime=0.16;feedbackTime=0.35;shotFeedback.textContent='eliminated' in shot&&shot.eliminated?(world.duelState().active?'봇 처치':'표적 파괴'):`명중 −${'damage' in shot?shot.damage:0}`;}
+          else if(!shot.fired && 'reason' in shot && shot.reason!=='cooldown'){notice=shot.reason==='empty'?'탄창이 비었습니다 · 재장전하세요':'재장전 중에는 발사할 수 없습니다';noticeTime=0.8;}
+        }
       }
       zone.textContent = indoorAt(position)?'상점 내부':position.z < -28?'남쪽 상점 거리':position.z > 28 ? '항구 산책로' : Math.abs(position.x) > 20 ? '건물 사이 골목'
         : Math.abs(position.z) < 11 && Math.abs(position.x) < 11 ? '중앙 광장' : '해안 거리';

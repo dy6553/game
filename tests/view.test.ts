@@ -52,6 +52,17 @@ test('independent touches move, turn and fire; cancellation releases only the ma
     assert.equal(input.look.yaw,yaw);assert.equal(input.move.y,1);assert.equal(input.consumeShots(),0,'swiping does not fire');
     send(stick,'pointercancel',1,50,17);assert.deepEqual(input.move,{x:0,y:0});
     send(stick,'pointerdown',4,50,17);win.dispatchEvent(new Event('blur'));assert.deepEqual(input.move,{x:0,y:0});assert.equal(input.sprintingRequested,false,'blur clears sprint');
+    input.setEnabled(false);
+    win.dispatchEvent(Object.assign(new Event('keydown'),{code:'KeyW',repeat:false}));
+    send(canvas,'pointerdown',10,100,50);send(canvas,'pointermove',10,120,50);send(fire,'pointerdown',11,200,100);
+    assert.deepEqual(input.move,{x:0,y:0});assert.equal(input.consumeShots(),0);assert.equal(input.look.yaw,yaw,'paused view cannot turn');
+    input.setEnabled(true);assert.deepEqual(input.move,{x:0,y:0},'resume cannot inherit paused keys');
+    input.resetLook();input.setTouchSensitivity(.5);send(canvas,'pointerdown',12,100,50);send(canvas,'pointermove',12,120,50);
+    const half=input.look.yaw;input.resetLook();input.setTouchSensitivity(1.5);send(canvas,'pointerdown',13,100,50);send(canvas,'pointermove',13,120,50);
+    assert.ok(Math.abs(input.look.yaw-half*3)<1e-9,'mobile sensitivity changes swipe rotation');
+    input.reset();let locks=0;Object.assign(canvas,{requestPointerLock(){locks++;}});
+    canvas.dispatchEvent(new Event('dblclick'));assert.equal(locks,0,'double-click is no longer a pointer-lock gesture');
+
   }finally{
     if(oldDoc)Object.defineProperty(globalThis,'document',oldDoc);else Reflect.deleteProperty(globalThis,'document');
     if(oldWin)Object.defineProperty(globalThis,'window',oldWin);else Reflect.deleteProperty(globalThis,'window');

@@ -2,6 +2,8 @@ import { normalized } from './world.ts';
 import { turnView } from './view.ts';
 
 export function createInput(canvas: HTMLCanvasElement) {
+  let enabled = true;
+  let touchSensitivity = 1;
   const keys = new Set<string>();
   const joystick = document.querySelector<HTMLElement>('#joystick')!;
   const thumb = document.querySelector<HTMLElement>('#joystick-thumb')!;
@@ -20,6 +22,7 @@ export function createInput(canvas: HTMLCanvasElement) {
   let shots = 0;
   let reloads = 0;
   let jumps = 0;
+
   let pressedAt = { x: 0, y: 0 };
   let mouseDragged = false;
 
@@ -33,6 +36,7 @@ export function createInput(canvas: HTMLCanvasElement) {
     jumps = 0;
   };
   window.addEventListener('keydown', event => {
+    if (!enabled) return;
     const tag=(event.target as HTMLElement|null)?.tagName;
     if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'||(tag==='BUTTON'&&event.code==='Space'))return;
     if(event.code==='ShiftLeft'||event.code==='ShiftRight'){event.preventDefault();keys.add(event.code);return;}
@@ -48,6 +52,7 @@ export function createInput(canvas: HTMLCanvasElement) {
   window.addEventListener('orientationchange', reset);
   window.addEventListener('resize', reset);
   canvas.addEventListener('pointerdown', event => {
+    if (!enabled) return;
     if (lookPointer !== null || (event.pointerType === 'mouse' && event.button !== 0)) return;
     event.preventDefault(); canvas.focus();
     if (event.pointerType === 'mouse' && document.pointerLockElement === canvas) { mouseHeld=true;shots++; return; }
@@ -56,11 +61,12 @@ export function createInput(canvas: HTMLCanvasElement) {
     canvas.setPointerCapture(event.pointerId);
   });
   canvas.addEventListener('pointermove', event => {
+    if (!enabled) return;
     if (document.pointerLockElement === canvas && event.pointerType === 'mouse') {
       look = turnView(look, event.movementX, event.movementY, 0.0025);
     } else if (event.pointerId === lookPointer) {
       if (Math.hypot(event.clientX - pressedAt.x, event.clientY - pressedAt.y) > 6) mouseDragged = true;
-      look = turnView(look, event.clientX - last.x, event.clientY - last.y);
+      look = turnView(look, event.clientX - last.x, event.clientY - last.y, .004 * (event.pointerType === 'touch' ? touchSensitivity : 1));
       last = { x: event.clientX, y: event.clientY };
     }
   });
@@ -74,22 +80,17 @@ export function createInput(canvas: HTMLCanvasElement) {
   ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(type =>
     canvas.addEventListener(type, event => releaseLook(event as PointerEvent)));
   document.addEventListener('pointerlockchange', reset);
-  fire.addEventListener('pointerdown', event => {event.preventDefault();if(firePointer!==null)return;firePointer=event.pointerId;fire.setPointerCapture(event.pointerId);shots++;});
+  fire.addEventListener('pointerdown', event => {if(!enabled)return;event.preventDefault();if(firePointer!==null)return;firePointer=event.pointerId;fire.setPointerCapture(event.pointerId);shots++;});
   ['pointerup','pointercancel','lostpointercapture'].forEach(type=>fire.addEventListener(type,event=>{if((event as PointerEvent).pointerId===firePointer)firePointer=null;}));
   window.addEventListener('pointerup',()=>{mouseHeld=false;});
   window.addEventListener('pointercancel',()=>{mouseHeld=false;});
-  fire.addEventListener('click', event => { if (event.detail === 0) shots++; });
-  reload?.addEventListener('pointerdown',event=>{event.preventDefault();reloads++;});
-  reload?.addEventListener('click',event=>{if(event.detail===0)reloads++;});
-  sprint?.addEventListener('pointerdown',event=>{event.preventDefault();sprintToggle=!sprintToggle;});
-  sprint?.addEventListener('click',event=>{if(event.detail===0)sprintToggle=!sprintToggle;});
-  jump?.addEventListener('pointerdown',event=>{event.preventDefault();jumps++;});
-  jump?.addEventListener('click',event=>{if(event.detail===0)jumps++;});
-  canvas.addEventListener('dblclick', () => {
-    if (matchMedia('(pointer: fine)').matches && canvas.requestPointerLock) {
-      try { const result = canvas.requestPointerLock(); result?.catch(() => {}); } catch { /* Drag remains available. */ }
-    }
-  });
+  fire.addEventListener('click', event => { if (enabled && event.detail === 0) shots++; });
+  reload?.addEventListener('pointerdown',event=>{if(!enabled)return;event.preventDefault();reloads++;});
+  reload?.addEventListener('click',event=>{if(enabled&&event.detail===0)reloads++;});
+  sprint?.addEventListener('pointerdown',event=>{if(!enabled)return;event.preventDefault();sprintToggle=!sprintToggle;});
+  sprint?.addEventListener('click',event=>{if(enabled&&event.detail===0)sprintToggle=!sprintToggle;});
+  jump?.addEventListener('pointerdown',event=>{if(!enabled)return;event.preventDefault();jumps++;});
+  jump?.addEventListener('click',event=>{if(enabled&&event.detail===0)jumps++;});
   const updateStick = (event: PointerEvent) => {
     const rect = joystick.getBoundingClientRect();
     const radius = rect.width * 0.33;
@@ -99,11 +100,13 @@ export function createInput(canvas: HTMLCanvasElement) {
     thumb.style.transform = `translate(${stick.x * radius}px, ${-stick.y * radius}px)`;
   };
   joystick.addEventListener('pointerdown', event => {
+    if (!enabled) return;
     if (stickPointer !== null) return;
     event.preventDefault(); stickPointer = event.pointerId;
     joystick.setPointerCapture(event.pointerId); updateStick(event);
   });
   joystick.addEventListener('pointermove', event => {
+    if (!enabled) return;
     if (event.pointerId === stickPointer) updateStick(event);
   });
   const releaseStick = (event: PointerEvent) => {
@@ -116,6 +119,8 @@ export function createInput(canvas: HTMLCanvasElement) {
     joystick.addEventListener(type, event => releaseStick(event as PointerEvent)));
 
   return {
+    setEnabled(value: boolean) { if (enabled !== value) { enabled = value; reset(); } },
+    setTouchSensitivity(value: number) { if (Number.isFinite(value)) touchSensitivity = Math.max(.25, Math.min(2, value)); },
     reset,
     get move() {
       return normalized(stick.x + Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft')),
