@@ -585,7 +585,7 @@ export function createHarborScene(engine: Engine) {
   }
   let remote: {model:ReturnType<typeof createCharacter>;fx:ReturnType<typeof createRobotImpact>;type:CharacterType;health:number}|null=null;
   const remoteParent=new TransformNode('online-opponent',scene);
-  let lastNetworkEvent=-1;
+  let lastNetworkEvent=-1,onlineQualityHigh=true;
   function endOnline(){
     if(remote){for(const mesh of remote.model.meshes)shadows.removeShadowCaster(mesh);remote.fx.dispose();remote.model.root.dispose();remote=null;}
     lastNetworkEvent=-1;effects.clear();botEffects.clear();recoil.clear();
@@ -597,7 +597,7 @@ export function createHarborScene(engine: Engine) {
     recoil.update(dt);effects.update(dt);botEffects.update(dt);
     update(me,0,look,true);for(const target of targets)target.root.setEnabled(false);
     if(other){
-      if(!remote||remote.type!==other.character){endOnline();const model=createCharacter(scene,remoteParent,other.character);const fx=createRobotImpact(scene,model.root,model.meshes);remote={model,fx,type:other.character,health:other.health};for(const mesh of model.meshes){mesh.isPickable=false;shadows.addShadowCaster(mesh);}remoteParent.position.set(other.x,other.jump.height,other.z);}
+      if(!remote||remote.type!==other.character){endOnline();const model=createCharacter(scene,remoteParent,other.character);const fx=createRobotImpact(scene,model.root,model.meshes);fx.setQuality(onlineQualityHigh);remote={model,fx,type:other.character,health:other.health};for(const mesh of model.meshes){mesh.isPickable=false;shadows.addShadowCaster(mesh);}remoteParent.position.set(other.x,other.jump.height,other.z);}
       if(remote.health===0&&other.health>0){remote.fx.reset();remoteParent.position.set(other.x,other.jump.height,other.z);}
       const factor=1-Math.exp(-dt*18);remoteParent.position.x+=(other.x-remoteParent.position.x)*factor;remoteParent.position.z+=(other.z-remoteParent.position.z)*factor;remoteParent.position.y=other.jump.height;remoteParent.rotation.y=other.yaw;
       remote.fx.update(dt);remoteParent.setEnabled(other.health>0||remote.fx.showingDeath);remote.health=other.health;
@@ -627,7 +627,7 @@ export function createHarborScene(engine: Engine) {
     impactState:()=>({...robotImpact.stats(),recoil:recoil.read()}),
     setShake(level:ShakeLevel){recoil.setShake(level);},
     setQuality(high:boolean){
-      atmosphere.setQuality(high);robotImpact.setQuality(high);
+      onlineQualityHigh=high;remote?.fx.setQuality(high);atmosphere.setQuality(high);robotImpact.setQuality(high);
       const mapSize=high?2048:1024;if(shadows.mapSize!==mapSize)shadows.mapSize=mapSize;
       for(const texture of scene.textures)texture.anisotropicFilteringLevel=high?8:4;
     },

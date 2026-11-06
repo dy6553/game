@@ -4,8 +4,8 @@ const json=(body,status=200)=>Response.json(body,{status});
 const code=()=>crypto.randomUUID().replaceAll('-','').slice(0,8).toUpperCase();
 export class Room extends DurableObject {
  game=createNetworkGame();sessions={};sockets=new Map();timer=null;last=Date.now();disconnectedAt=0;startedAt=0;finishedAt=0;matchStarted=false;packets=new WeakMap();
- constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;ctx.blockConcurrencyWhile(async()=>{const saved=await ctx.storage.get('checkpoint');if(saved){this.game=createNetworkGame(saved.state);this.sessions=saved.sessions;this.last=saved.last;}});}
- async save(){await this.ctx.storage.put('checkpoint',{state:this.game.state,sessions:this.sessions,last:this.last});}
+ constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;ctx.blockConcurrencyWhile(async()=>{const saved=await ctx.storage.get('checkpoint');if(saved){this.game=createNetworkGame(saved.state);this.sessions=saved.sessions;this.last=saved.last;this.startedAt=saved.startedAt??saved.last;this.finishedAt=saved.finishedAt??0;this.matchStarted=saved.matchStarted??saved.state.players.length===2;this.disconnectedAt=saved.disconnectedAt||saved.last;}});}
+ async save(){await this.ctx.storage.put('checkpoint',{state:this.game.state,sessions:this.sessions,last:this.last,startedAt:this.startedAt,finishedAt:this.finishedAt,matchStarted:this.matchStarted,disconnectedAt:this.disconnectedAt});}
  async fetch(request){const url=new URL(request.url);
   if(url.pathname==='/reserve')return this.ctx.blockConcurrencyWhile(async()=>{
    if(Date.now()-this.last>120000&&this.sockets.size===0){this.game=createNetworkGame();this.sessions={};}
@@ -21,16 +21,17 @@ export class Room extends DurableObject {
     if(typeof event.data!=='string'||event.data.length>2048){server.close(1008,'메시지 크기 초과');return;}
     const msg=JSON.parse(event.data);let id=this.sockets.get(server);
     if(!id){if(msg.type!=='hello'||typeof msg.token!=='string'||!this.sessions[msg.token]){server.close(1008,'잘못된 입장 정보');return;}
+     if(this.disconnectedAt&&Date.now()-this.disconnectedAt>30000){server.close(1008,'재접속 시간이 지났습니다.');this.closeRoom('상대 연결을 복구하지 못해 경기를 종료했습니다.');return;}
      id=this.sessions[msg.token];for(const [socket,other] of this.sockets)if(other===id){this.sockets.delete(socket);socket.close(1000,'새 연결로 복귀했습니다.');}
-     this.sockets.set(server,id);clearTimeout(timeout);this.game.join(id);this.last=Date.now();this.disconnectedAt=0;
+     this.sockets.set(server,id);clearTimeout(timeout);this.game.join(id);this.last=Date.now();if(this.game.state.players.every(p=>p.connected))this.disconnectedAt=0;
      server.send(JSON.stringify({type:'welcome',id,state:this.game.state}));this.start();return;
     }
     const now=Date.now(),rate=this.packets.get(server)??{at:now,count:0};if(now-rate.at>1000){rate.at=now;rate.count=0;}if(++rate.count>80){server.close(1008,'전송 속도 초과');return;}this.packets.set(server,rate);
     if(msg.type==='input')this.game.input(id,msg.command);
-    if(msg.type==='leave'){delete this.sessions[msg.token];this.closeRoom('상대가 방을 나갔습니다.');}
+    if(msg.type==='leave'){this.closeRoom('상대가 방을 나갔습니다.');}
    }catch{server.close(1008,'잘못된 메시지');}
   });
-  const close=()=>{clearTimeout(timeout);const id=this.sockets.get(server);this.sockets.delete(server);if(id){this.game.disconnect(id);this.disconnectedAt=Date.now();this.last=Date.now();this.ctx.waitUntil(this.save());}if(!this.sockets.size)this.stop();};
+  const close=()=>{clearTimeout(timeout);const id=this.sockets.get(server);this.sockets.delete(server);if(id){this.game.disconnect(id);this.disconnectedAt ||=Date.now();this.last=Date.now();this.ctx.waitUntil(this.save());}if(!this.sockets.size)this.stop();};
   server.addEventListener('close',close);server.addEventListener('error',close);
   return new Response(null,{status:101,webSocket:client});
  }
