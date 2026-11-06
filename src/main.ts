@@ -43,6 +43,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <p>야경 개선: 젖은 노면의 빛, 수면 반짝임, 벽·지붕 표면과 금속 광택을 추가했습니다. 자동 화질은 지속적인 프레임 저하가 있을 때 렌더 해상도를 조절합니다. 높음은 수동 고화질, 균형은 낮은 부하 설정입니다.</p>
     <p>성능 표시는 최근 최대 10초의 플레이 구간을 측정합니다. 평균 FPS는 높을수록, P95 프레임 시간은 낮을수록 부드럽습니다. 끊김은 50ms를 넘은 프레임 수입니다. 메뉴·일시정지 구간은 제외하며, 화질을 비교할 때는 같은 장소에서 같은 시간 동안 움직여 보세요.</p>
     <fieldset class="audio-settings"><legend>소리</legend><label><input id="audio-mute" type="checkbox"> 음소거</label><label>전체<input id="audio-master" type="range" min="0" max="100" aria-label="전체 음량"></label><label>효과음<input id="audio-effects" type="range" min="0" max="100" aria-label="효과음 음량"></label><label>환경음<input id="audio-environment" type="range" min="0" max="100" aria-label="환경음 음량"></label><small id="audio-status">시작 버튼을 누르면 소리를 켭니다.</small></fieldset>
+    <label class="graphics-setting">화면 흔들림<select id="screen-shake"><option value="off">끄기</option><option value="low" selected>약하게</option><option value="normal">보통</option></select></label><p>총기 반동·로봇 피격·처치 연출을 추가했습니다. 화면 흔들림은 조절할 수 있으며, 조준 방향과 무기 피해량은 바꾸지 않습니다.</p>
     <label class="sensitivity-setting">모바일 조준 감도 <output id="look-sensitivity-value">1.00배</output><input id="look-sensitivity" type="range" min="25" max="200" step="5" value="100" aria-label="모바일 조준 감도"></label>
     <details class="developer-settings"><summary>개발용 도구</summary><button id="reference-open" aria-pressed="false">시안 비교</button><p>배경 시안과 현재 맵을 비교합니다.</p></details>
     <label class="graphics-setting">그래픽 화질 <select id="graphics-quality"><option value="auto" selected>자동 · 기기에 맞춤</option><option value="high">높음 · 선명한 화면</option><option value="balanced">균형 · 부드러운 실행</option></select></label>
@@ -98,6 +99,10 @@ async function start() {
   const world = createHarborScene(engine);
   world.setQuality(qualityHigh);
   world.setMode('duel');
+  const shake=document.querySelector<HTMLSelectElement>('#screen-shake')!;
+  const setShake=(value:string)=>{const level=value==='off'||value==='normal'?value:'low';shake.value=level;world.setShake(level);return level;};
+  let savedShake='low';try{savedShake=localStorage.getItem('harbor-screen-shake')??'low';}catch{}setShake(savedShake);
+  shake.addEventListener('change',()=>{const level=setShake(shake.value);try{localStorage.setItem('harbor-screen-shake',level);}catch{}});
   document.querySelector<HTMLSelectElement>('#graphics-quality')!.addEventListener('change',event=>{
     graphicsMode=(event.currentTarget as HTMLSelectElement).value;budget=createRenderBudget(densityCap());
     engine.setHardwareScalingLevel(1/budget.density);qualityHigh=graphicsMode==='high'||(graphicsMode==='auto'&&!mobile);

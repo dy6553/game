@@ -1,5 +1,9 @@
 # 게임·기술 설계 — 현재 구현 기준
 
+## 사격 임팩트 구조 — 2026-11-06
+
+src/impact.ts는 무기별 시각 반동과 카메라 롤/화각 변화를, src/robot-impact.ts는 로봇 전용 재질·피격/쓰러짐·32개 고정 이펙트 풀을 관리한다. scene.ts에서 전투 이벤트에 연결하며 main.ts에서 흔들림 설정을 저장한다. [상세·검증](combat-impact.md).
+
 ## 최신 구조 변경 — 2026-11-06
 
 `src/simulation.ts`는 프레임 시간을 최대25ms 단계로 분할하며 이동·전투에 동일하게 적용한다(긴 정지는 모든 규칙에250ms 상한). `src/frame-metrics.ts`는 플레이 구간의 평균FPS·P95·50ms 초과 프레임 수를 집계한다. main.ts는 시작 설정·명시적 고정·일시정지·도움말·감도 저장을 관리하며 input.ts의 setEnabled로 정지 입력을 차단한다. [상세 수정·검증](review-improvements.md)을 참조한다.

@@ -1,3 +1,5 @@
+import { createRecoil,type ShakeLevel } from './impact.ts';
+import { createRobotImpact } from './robot-impact.ts';
 import { WEAPONS,pelletOffsets,type WeaponId } from './weapons.ts';
 import { createDuel } from './duel.ts';
 import type { Engine } from '@babylonjs/core/Engines/engine.js';
@@ -422,7 +424,9 @@ export function createHarborScene(engine: Engine) {
   const opponentMark=box('opponent-marker',0,2.6,0,0.7,0.08,0.08,material('opponent-red','#ff856d','#f74f2d'));
   opponentMark.parent=botParent;opponentMark.isPickable=false;
   const botGun=box('opponent-pistol',0.32,1.65,0.65,0.14,0.16,0.5,metal);
-  botGun.parent=botParent;botGun.isPickable=true;botGun.metadata={opponent:true};
+  botGun.parent=opponent.root;botGun.isPickable=true;botGun.metadata={opponent:true};
+  const opponentBody=[...opponent.meshes,botGun];
+  const robotImpact=createRobotImpact(scene,opponent.root,opponentBody);
   botParent.setEnabled(false);
   const botEffects=createShotEffects(scene,camera);
   const warningMat=material('incoming-warning','#ff9d59','#ff5935');warningMat.alpha=0.65;
@@ -435,7 +439,10 @@ export function createHarborScene(engine: Engine) {
     warningRing.setEnabled(duelMode&&!!state.locked&&!preview&&!reference);
     if(state.locked){warningRing.position.set(state.locked.x,0.07,state.locked.z);warningRing.scaling.setAll(1+state.warning);}
     opponentMark.scaling.y=state.locked?2.5:1;
-    botParent.setEnabled(duelMode&&state.botHealth>0&&!preview&&!reference);
+    const alive=state.botHealth>0;
+    for(const mesh of opponentBody)mesh.isPickable=alive;
+    opponentMark.setEnabled(alive);
+    botParent.setEnabled(duelMode&&(alive||robotImpact.showingDeath)&&!preview&&!reference);
     botParent.position.set(state.position.x,0,state.position.z);
     botParent.rotation.y=Math.atan2(camera.position.x-state.position.x,camera.position.z-state.position.z);
     opponentMark.scaling.x=Math.max(0.001,state.botHealth/100);
@@ -447,14 +454,15 @@ export function createHarborScene(engine: Engine) {
   let hits=0,destroyed=0,shots=0;
   const effects=createShotEffects(scene,camera);
   let preview = false, reference = false;
-  let recoil = 0, animationTime = 0;
+  const recoil=createRecoil();
+  let animationTime = 0;
   function resize() { camera.getProjectionMatrix(true); }
   function setReference(value: boolean) {
-    effects.clear();botEffects.clear();reference=value;player.setEnabled(value);plinth.setEnabled(false);viewModel.setEnabled(!value);
+    effects.clear();botEffects.clear();robotImpact.clearParticles();recoil.clear();reference=value;player.setEnabled(value);plinth.setEnabled(false);viewModel.setEnabled(!value);
     camera.fov=value?0.95:1.25;camera.getProjectionMatrix(true);
   }
   function setPreview(value: boolean) {
-    effects.clear();botEffects.clear();reference=false;preview = value;plinth.setEnabled(value); player.setEnabled(value); viewModel.setEnabled(!value);
+    effects.clear();botEffects.clear();robotImpact.clearParticles();recoil.clear();reference=false;preview = value;plinth.setEnabled(value); player.setEnabled(value); viewModel.setEnabled(!value);
     camera.fov=value?0.85:1.25;camera.getProjectionMatrix(true);
     previewLight.setEnabled(value);
     for(const light of streetLights) light.setEnabled(!value);
@@ -465,12 +473,14 @@ export function createHarborScene(engine: Engine) {
     const texel=64/shadows.mapSize;
     moon.position.set(Math.round((p.x+24.75)/texel)*texel,55,Math.round((p.z-13.75)/texel)*texel);
     waterNormals.uOffset+=paused?0:Math.min(dt,.1)*.012;
-    animationTime+=dt;recoil=Math.max(0,recoil-dt*9);
-    viewModel.position.z=0.18-recoil*0.05;
+    const active=!paused&&!preview&&!reference;
+    if(active){animationTime+=dt;recoil.update(dt);robotImpact.update(dt);}
+    const kick=recoil.read();
+    viewModel.position.z=0.18-kick.push;
     const reloadMotion=weapon.reloadRemaining>0?Math.sin((1-weapon.reloadRemaining/spec.reloadSeconds)*Math.PI):0;
     viewModel.position.y=-0.055+Math.sin(animationTime*1.8)*0.002-reloadMotion*0.16;
     viewModel.rotation.z=-reloadMotion*0.3;
-    viewModel.rotation.x=-recoil*0.055;
+    viewModel.rotation.x=-kick.tilt;
     if(!paused&&!preview&&!reference)effects.update(dt);
     for (const target of targets) {
       target.flash = Math.max(0, target.flash - dt);
@@ -478,6 +488,7 @@ export function createHarborScene(engine: Engine) {
     }
     if(duelMode&&!paused&&!preview&&!reference){
       botEffects.update(dt);
+      const wasBotDead=duel.state().botHealth===0;
       duel.update(dt,p,point=>{
         const from=new Vector3(point.x,1.8,point.z),to=new Vector3(p.x,1.95+jumpState.height,p.z);
         const direction=to.subtract(from),distance=direction.length();
@@ -493,7 +504,8 @@ export function createHarborScene(engine: Engine) {
         return !wall?.hit;
       });
       const state=duel.state();
-      if(state.respawnVersion!==seenRespawn){seenRespawn=state.respawnVersion;p.x=0;p.z=-8;weapon=createWeapon(spec);cooldown=0;scoped=false;jumpState=createJump();}
+      if(wasBotDead&&state.botHealth>0)robotImpact.reset();
+      if(state.respawnVersion!==seenRespawn){seenRespawn=state.respawnVersion;p.x=0;p.z=-8;weapon=createWeapon(spec);cooldown=0;scoped=false;jumpState=createJump();recoil.clear();}
     }
     player.position.x = p.x; player.position.z = p.z;
     player.position.y=preview||reference?0:jumpState.height;
@@ -507,8 +519,8 @@ export function createHarborScene(engine: Engine) {
       camera.setTarget(new Vector3(p.x+1.25,1.35,p.z));
     } else {
       camera.position.set(p.x,(character.type==='robot-cat'?1.9:1.95)+jumpState.height,p.z);
-      camera.fov=scoped?.38:1.25;viewModel.setEnabled(!scoped);
-      camera.rotation.set(look.pitch, look.yaw, 0);
+      camera.fov=(scoped?.38:1.25)+kick.fov;viewModel.setEnabled(!scoped);
+      camera.rotation.set(look.pitch, look.yaw, kick.roll);
     }
     scopeBody.setEnabled(weaponId==='sniper');secondBarrel.setEnabled(weaponId==='shotgun');
     gun.scaling.z=weaponId==='pistol'?1:1.6;barrel.scaling.z=weaponId==='sniper'?2:weaponId==='pistol'?1:1.5;
@@ -522,7 +534,7 @@ export function createHarborScene(engine: Engine) {
     if(cooldown>1e-8)return {fired:false,hit:false,reason:'cooldown'};
     const attempt=tryFire(weapon);weapon=attempt.state;
     if(!attempt.fired)return {fired:false,hit:false,reason:attempt.reason};
-    shots++;recoil=1;cooldown=spec.interval;
+    shots++;recoil.fire(weaponId);cooldown=spec.interval;
     let anyHit=false,anyEliminated=false,impact=false,totalDamage=0;
     let lastPoint=camera.position.clone();
     const offsets=pelletOffsets(spec);
@@ -541,7 +553,7 @@ export function createHarborScene(engine: Engine) {
     }
     const hit = duelMode ? pick?.pickedMesh?.metadata?.opponent === true : pick?.pickedMesh?.metadata?.practiceTarget === true;
     let eliminated=false;
-    if(hit&&duelMode){const before=duel.state().botHealth;eliminated=duel.hurt('bot',spec.damage);totalDamage+=before-duel.state().botHealth;syncBot();}
+    if(hit&&duelMode){const before=duel.state().botHealth;eliminated=duel.hurt('bot',spec.damage);const damage=before-duel.state().botHealth;totalDamage+=damage;if(damage>0)robotImpact.hit(end,end.x-duel.state().position.x,eliminated);syncBot();}
     if(hit&&!duelMode) {
       const target=targets[pick!.pickedMesh!.metadata.targetIndex]!;
       const damage=applyDamage(target.health,spec.damage);totalDamage+=target.health-damage.health;
@@ -564,7 +576,7 @@ export function createHarborScene(engine: Engine) {
   }
   function resetPractice() {
     weapon=createWeapon(spec);cooldown=0;scoped=false;jumpState=createJump();hits=0;destroyed=0;shots=0;
-    effects.clear();botEffects.clear();recoil=0;duel=createDuel();seenRespawn=0;syncBot();
+    effects.clear();botEffects.clear();recoil.clear();robotImpact.reset();duel=createDuel();seenRespawn=0;syncBot();
     for(const target of targets){
       target.health=PRACTICE_RULES.maxHealth;target.flash=0;target.root.setEnabled(!duelMode);
       target.healthBar.scaling.x=1;target.healthBar.position.x=target.x;
@@ -585,8 +597,10 @@ export function createHarborScene(engine: Engine) {
     duelState:()=>({...duel.state(),active:duelMode}),
     reload,resetPractice,practiceState,
     effectsState:effects.stats,
+    impactState:()=>({...robotImpact.stats(),recoil:recoil.read()}),
+    setShake(level:ShakeLevel){recoil.setShake(level);},
     setQuality(high:boolean){
-      atmosphere.setQuality(high);
+      atmosphere.setQuality(high);robotImpact.setQuality(high);
       const mapSize=high?2048:1024;if(shadows.mapSize!==mapSize)shadows.mapSize=mapSize;
       for(const texture of scene.textures)texture.anisotropicFilteringLevel=high?8:4;
     },
