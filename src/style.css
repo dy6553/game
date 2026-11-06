@@ -168,3 +168,5 @@ body.comparing .ammo-hud,body.comparing .practice-complete { display:none; }
 #scope-overlay{z-index:1}.touch-controls,.ammo-hud,.duel-hud,.practice-score,.crosshair,.shot-feedback{z-index:2}@media(pointer:coarse),(max-width:900px),(max-height:550px){.ammo-hud>span{display:block;font-size:9px}}
 
 .audio-settings{border:1px solid #7899ac55;border-radius:8px;margin:14px 0;padding:10px}.audio-settings label{display:flex;align-items:center;justify-content:space-between;font-size:12px;margin:7px 0;gap:10px}.audio-settings input[type=range]{width:65%;accent-color:#8bd6ca}.audio-settings small{font-size:10px;color:#adc8d0}
+
+.sprint-button{position:absolute;left:max(40px,env(safe-area-inset-left));bottom:calc(max(14px,env(safe-area-inset-bottom)) + 124px);width:62px;height:48px;padding:4px;border-radius:14px;pointer-events:auto;touch-action:none;font-size:11px;background:#243e50cc}.sprint-button[aria-pressed=true]{background:#9ce1c9;color:#102c2a}.sprint-button:disabled{opacity:.5}@media(max-height:330px){.sprint-button{left:max(138px,env(safe-area-inset-left));bottom:calc(max(14px,env(safe-area-inset-bottom)) + 58px)}}

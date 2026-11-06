@@ -1,3 +1,4 @@
+import { sprintMultiplier } from './sprint.ts';
 import { createGameAudio,spatialSound } from './audio.ts';
 import { Engine } from '@babylonjs/core/Engines/engine.js';
 import { createInput } from './input.ts';
@@ -28,8 +29,9 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <section class="help" id="help" hidden>
     <h2>밤의 거리를 걸어보세요</h2>
     <p>로봇의 눈높이에서 거리를 탐색합니다. 화면 중앙의 조준점이 바라보는 방향입니다.</p>
-    <p><strong>PC</strong> WASD 이동 · 마우스 드래그로 시점 변경 · 짧게 클릭하면 발사. 더블클릭으로 마우스 고정을 시도하며 ESC로 해제합니다.</p>
+    <p><strong>PC</strong> WASD 이동 · Shift 달리기 · 마우스 드래그로 시점 변경 · 짧게 클릭하면 발사. 더블클릭으로 마우스 고정을 시도하며 ESC로 해제합니다.</p>
     <p><strong>휴대폰</strong> 왼쪽 스틱 이동 · 화면 빈 공간을 좌우·위아래로 드래그해 시점 변경</p>
+    <p><strong>달리기</strong> PC는 Shift를 누르고 앞으로 이동하세요. 휴대폰은 스틱 위의 달리기 버튼으로 켜고 끕니다. 이동 속도는 1.5배이며 발사·재장전·확대 조준 중에는 걷습니다. 스태미나 제한은 없습니다.</p>
     <p><strong>점프</strong> 휴대폰은 점프 버튼을 누릅니다. PC는 스페이스바로 점프합니다. 메뉴에서 J키로 변경할 수 있습니다.</p>
     <p>권총은 탄창 12발, 표적은 체력 100입니다. 4발 맞히면 파괴됩니다. PC R키 또는 재장전 버튼으로 1.5초 동안 재장전합니다. 예비 탄약은 무제한입니다.</p>
     <p>봇 1대1: 양쪽 체력 100, 먼저 10킬 승리. 자동 회복 없이 사망 3초 후 부활합니다. 붉은 표시가 상대 봇입니다. 봇은 1초 조준 후 위치를 고정하고 0.4초 경고 뒤 발사합니다. 경고 때 옆으로 이동하면 피할 수 있으며, 벽 뒤로 숨으면 조준이 초기화됩니다.</p>
@@ -41,6 +43,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   </section>
   <div class="desktop-hint"><kbd>W</kbd><span><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><p>이동 <i>·</i> 드래그로 시점 변경</p></div>
   <div class="touch-controls">
+    <button id="sprint" class="sprint-button" aria-pressed="false" aria-label="달리기 켜기">달리기</button>
     <div class="move-control"><div id="joystick" role="group" aria-label="이동 가상 스틱"><div class="stick-cross"></div><div id="joystick-thumb"></div></div><span>이동</span></div>
     <button id="fire" class="single-fire" aria-label="화면 중앙 정면으로 발사">발사</button>
     <button id="reload" class="reload-button" aria-label="권총 재장전">재장전</button>
@@ -256,15 +259,18 @@ async function start() {
     audio.pause(!canPlay);
     document.querySelector('#audio-status')!.textContent=audio.available?'사운드 활성화':'화면을 눌러 소리 켜기';
     if (canPlay) {
+      const queued=input.consumeShots(),reloadRequested=input.consumeReloads();
+      const before=world.practiceState();
       const movement = viewMovement(input.look.yaw, input.move.x, input.move.y);
       const duel=world.duelState(),canAct=!duel.active||(duel.playerHealth>0&&!duel.winner);
+      const runScale=sprintMultiplier({requested:input.sprintingRequested,forward:input.move.y,canAct,firing:queued>0||input.firing||before.cooldown>0||shotTime>0,reloading:before.reloadRemaining>0||reloadRequested>0,scoped:before.scoped},1.5);
       const oldPosition={...position};
       if(canAct)position = moveWithCollisions(position, {
-        x: movement.x * PROTOTYPE.speed * dt, z: movement.z * PROTOTYPE.speed * dt,
+        x: movement.x * PROTOTYPE.speed * runScale * dt, z: movement.z * PROTOTYPE.speed * runScale * dt,
       });
       if(input.consumeJumps()>0&&canAct&&world.jump())audio.play('jump');
       world.update(position, elapsed, input.look);
-      if(input.consumeReloads()>0&&world.reload())audio.play('reload');
+      if(reloadRequested>0&&world.reload())audio.play('reload');
       const current=world.practiceState();
       if(lastReload>0&&current.reloadRemaining===0)audio.play('ready');
       lastReload=current.reloadRemaining;
@@ -277,7 +283,6 @@ async function start() {
       if(battle.winner&&battle.winner!==lastWinner)audio.play(battle.winner==='player'?'win':'lose');
       lastPlayerHealth=battle.playerHealth;lastRespawn=battle.respawnVersion;lastWinner=battle.winner;
       for(const event of world.consumeSounds()){const spatial=spatialSound(event.x-position.x,event.z-position.z,input.look.yaw);audio.play(event.kind,spatial.pan,spatial.gain);}
-      const queued=input.consumeShots();
       const shots=queued>0?queued:(input.firing&&world.practiceState().automatic?1:0);
       for (let i = 0; i < shots; i++) {
         const shot = world.shoot();
@@ -289,6 +294,11 @@ async function start() {
       zone.textContent = indoorAt(position)?'상점 내부':position.z < -28?'남쪽 상점 거리':position.z > 28 ? '항구 산책로' : Math.abs(position.x) > 20 ? '건물 사이 골목'
         : Math.abs(position.z) < 11 && Math.abs(position.x) < 11 ? '중앙 광장' : '해안 거리';
     } else { input.consumeShots();input.consumeReloads();input.consumeJumps();world.update(position, dt, input.look,true);world.consumeSounds(); }
+    const runButton=document.querySelector<HTMLButtonElement>('#sprint')!;
+    const runningRequested=input.sprintingRequested;
+    runButton.setAttribute('aria-pressed',String(runningRequested));runButton.setAttribute('aria-label',runningRequested?'달리기 끄기':'달리기 켜기');
+    runButton.textContent=runningRequested?'달리기 켜짐':'달리기';
+    const runBattle=world.duelState();runButton.disabled=runBattle.active&&(runBattle.playerHealth===0||!!runBattle.winner);
     damageTime=Math.max(0,damageTime-elapsed);impactTime=Math.max(0,impactTime-elapsed);document.querySelector<HTMLElement>('#impact-marker')!.hidden=impactTime<=0||!picker.hidden||comparing;
     noticeTime=Math.max(0,noticeTime-elapsed);refreshHud();
     hitTime = Math.max(0, hitTime - elapsed);

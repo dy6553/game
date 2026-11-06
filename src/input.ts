@@ -8,6 +8,8 @@ export function createInput(canvas: HTMLCanvasElement) {
   const fire = document.querySelector<HTMLButtonElement>('#fire')!;
   const reload = document.querySelector<HTMLButtonElement>('#reload');
   const jump = document.querySelector<HTMLButtonElement>('#jump');
+  const sprint=document.querySelector<HTMLButtonElement>('#sprint');
+  let sprintToggle=false;
   let jumpKey:'Space'|'KeyJ'='Space';
   let stickPointer: number | null = null;
   let stick = { x: 0, y: 0 };
@@ -22,7 +24,7 @@ export function createInput(canvas: HTMLCanvasElement) {
   let mouseDragged = false;
 
   const reset = () => {
-    firePointer=null;mouseHeld=false;
+    sprintToggle=false;firePointer=null;mouseHeld=false;
     keys.clear(); stickPointer = null; stick = { x: 0, y: 0 };
     thumb.style.transform = 'translate(0, 0)';
     lookPointer = null;
@@ -33,6 +35,7 @@ export function createInput(canvas: HTMLCanvasElement) {
   window.addEventListener('keydown', event => {
     const tag=(event.target as HTMLElement|null)?.tagName;
     if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'||(tag==='BUTTON'&&event.code==='Space'))return;
+    if(event.code==='ShiftLeft'||event.code==='ShiftRight'){event.preventDefault();keys.add(event.code);return;}
     if(jumpKey&&event.code===jumpKey){event.preventDefault();if(!event.repeat)jumps++;return;}
     if(event.code==='KeyR') { event.preventDefault();if(!event.repeat)reloads++;return; }
     if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) {
@@ -78,6 +81,8 @@ export function createInput(canvas: HTMLCanvasElement) {
   fire.addEventListener('click', event => { if (event.detail === 0) shots++; });
   reload?.addEventListener('pointerdown',event=>{event.preventDefault();reloads++;});
   reload?.addEventListener('click',event=>{if(event.detail===0)reloads++;});
+  sprint?.addEventListener('pointerdown',event=>{event.preventDefault();sprintToggle=!sprintToggle;});
+  sprint?.addEventListener('click',event=>{if(event.detail===0)sprintToggle=!sprintToggle;});
   jump?.addEventListener('pointerdown',event=>{event.preventDefault();jumps++;});
   jump?.addEventListener('click',event=>{if(event.detail===0)jumps++;});
   canvas.addEventListener('dblclick', () => {
@@ -118,6 +123,7 @@ export function createInput(canvas: HTMLCanvasElement) {
     },
     get look() { return look; },
     resetLook() { look = { yaw: 0, pitch: 0 }; reset(); },
+    get sprintingRequested(){return sprintToggle||keys.has('ShiftLeft')||keys.has('ShiftRight');},
     get firing(){return firePointer!==null||mouseHeld;},
     consumeShots() { const count = shots; shots = 0; return count; },
     consumeReloads() { const count=reloads;reloads=0;return count; },

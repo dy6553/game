@@ -20,9 +20,9 @@ test('independent touches move, turn and fire; cancellation releases only the ma
     style={transform:''}; focus(){} setPointerCapture(_id:number){}
     getBoundingClientRect(){return {left:0,top:0,width:100,height:100};}
   }
-  const canvas=new Element(),stick=new Element(),thumb=new Element(),fire=new Element(),reload=new Element(),jump=new Element();
+  const canvas=new Element(),stick=new Element(),thumb=new Element(),fire=new Element(),reload=new Element(),jump=new Element(),sprint=new Element();
   const doc=Object.assign(new EventTarget(),{hidden:false,pointerLockElement:null,
-    querySelector(s:string){return s==='#joystick'?stick:s==='#fire'?fire:s==='#reload'?reload:s==='#jump'?jump:thumb;}});
+    querySelector(s:string){return s==='#joystick'?stick:s==='#fire'?fire:s==='#reload'?reload:s==='#jump'?jump:s==='#sprint'?sprint:thumb;}});
   const win=new EventTarget();
   const oldDoc=Object.getOwnPropertyDescriptor(globalThis,'document'),oldWin=Object.getOwnPropertyDescriptor(globalThis,'window');
   Object.defineProperty(globalThis,'document',{value:doc,configurable:true});
@@ -30,6 +30,11 @@ test('independent touches move, turn and fire; cancellation releases only the ma
   const send=(el:Element,type:string,id:number,x:number,y:number)=>el.dispatchEvent(Object.assign(new Event(type,{cancelable:true}),{pointerId:id,clientX:x,clientY:y,pointerType:'touch'}));
   try {
     const input=createInput(canvas as unknown as HTMLCanvasElement);
+    assert.equal(input.sprintingRequested,false);
+    win.dispatchEvent(Object.assign(new Event('keydown',{cancelable:true}),{code:'ShiftLeft',repeat:false}));assert.equal(input.sprintingRequested,true);
+    win.dispatchEvent(Object.assign(new Event('keyup'),{code:'ShiftLeft'}));assert.equal(input.sprintingRequested,false);
+    send(sprint,'pointerdown',9,50,100);assert.equal(input.sprintingRequested,true);
+    input.reset();assert.equal(input.sprintingRequested,false,'reset clears mobile sprint');
     send(stick,'pointerdown',1,50,17);send(canvas,'pointerdown',2,120,50);send(canvas,'pointermove',2,160,50);
     send(fire,'pointerdown',3,200,100);
     assert.equal(input.firing,true,'fire finger stays held independently');
@@ -46,7 +51,7 @@ test('independent touches move, turn and fire; cancellation releases only the ma
     const yaw=input.look.yaw;send(canvas,'pointercancel',2,160,50);send(canvas,'pointermove',2,200,50);
     assert.equal(input.look.yaw,yaw);assert.equal(input.move.y,1);assert.equal(input.consumeShots(),0,'swiping does not fire');
     send(stick,'pointercancel',1,50,17);assert.deepEqual(input.move,{x:0,y:0});
-    send(stick,'pointerdown',4,50,17);win.dispatchEvent(new Event('blur'));assert.deepEqual(input.move,{x:0,y:0});
+    send(stick,'pointerdown',4,50,17);win.dispatchEvent(new Event('blur'));assert.deepEqual(input.move,{x:0,y:0});assert.equal(input.sprintingRequested,false,'blur clears sprint');
   }finally{
     if(oldDoc)Object.defineProperty(globalThis,'document',oldDoc);else Reflect.deleteProperty(globalThis,'document');
     if(oldWin)Object.defineProperty(globalThis,'window',oldWin);else Reflect.deleteProperty(globalThis,'window');
