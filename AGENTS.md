@@ -1,5 +1,10 @@
 # 프로젝트 작업 지침
 
+## 공개 온라인 연결 — 2026-11-06
+
+웹 https://project-3uu6s.vercel.app 에 공개 서버 https://game.yuni100106yuni.workers.dev 를 연결했다. Vercel production VITE_ONLINE_URL 설정 및 재배포 완료. 공개 서버에 실제 WebSocket 2개를 연결해 방 생성·입장·정원 제한·잘못된 Origin 차단·서버 판정 처치·재접속·나가기·자동 매칭을 통과했다. 실제 기기 간 플레이/GPU/네트워크 체감 검증은 남는다. 루트 wrangler.jsonc로 Cloudflare가 정적 웹 대신 서버 코드를 배포하도록 수정했다.
+
+
 ## 홈·온라인 최신 상태 — 2026-11-06
 
 홈 화면과 봇/표적 연습 진입, 사람 간 1대1 클라이언트 및 Cloudflare Durable Objects 서버를 구현했다. 사용자 추천 구성 승인에 따른 작업이다. 자동 검사49개·빌드 및 로컬 실제 WebSocket 2개 검증을 완료했다. Cloudflare 인증이 없어 공개 온라인 서버 연결은 미완료이며 현재 웹에서는 준비 중으로 안내한다. 실제 기기 검증은 남는다. 상세 상태와 무료 한도·연결 방법은 [홈 및 온라인 대전](docs/home-online-plan.md)을 따른다.
