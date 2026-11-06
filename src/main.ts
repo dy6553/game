@@ -1,8 +1,9 @@
+import {nearbyPickup,createInventory} from './inventory.ts';
 import { createPlaytest } from './playtest.ts';
 import { createRemoteMotion } from './remote-motion.ts';
 import { createOnlineMotion } from './online-motion.ts';
 import { createOnlineClient } from './online.ts';
-import type { MatchState } from './network-game.ts';
+import type { MatchState,Command } from './network-game.ts';
 import { simulationSteps } from './simulation.ts';
 import { createPerformanceHud } from './performance-hud.ts';
 import { createRenderBudget } from './render-budget.ts';
@@ -14,14 +15,14 @@ import { createHarborScene } from './scene.ts';
 import { moveWithCollisions, PROTOTYPE,indoorAt } from './world.ts';
 import { isCharacterType } from './characters.ts';
 import { viewMovement } from './view.ts';
-import { isWeaponId } from './weapons.ts';
+import { isWeaponId,WEAPONS } from './weapons.ts';
 import './style.css';
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <section id="home-screen" class="home-screen" aria-labelledby="home-title">
     <div class="home-intro"><span class="eyebrow">HARBOR / NIGHT ARENA</span><h1 id="home-title">항구의 밤</h1><p>불빛이 내려앉은 항구, 당신의 로봇으로 출격하세요.</p></div>
     <div class="home-modes"><button id="home-online"><span>01 / ONLINE</span><strong>온라인 대전</strong><p>사람 대 사람 1대1</p><small>방 코드 · 친구 초대 · 자동 매칭</small></button><button id="home-bot"><span>02 / SOLO</span><strong>봇 대전</strong><p>쉬운 봇과 1대1 · 먼저 10킬</p><small>캐릭터와 무기를 고르고 출격</small></button><button id="home-practice"><span>03 / TRAINING</span><strong>표적 연습</strong><p>이동과 조준, 네 가지 무기 익히기</p><small>부담 없이 연습하기</small></button></div>
-    <p class="home-controls">PC: WASD 이동 · 마우스 조준 &nbsp; / &nbsp; 모바일: 가로 화면 · 터치 조작</p>
+    <p class="home-controls">PC: WASD 이동 · E 획득 · 1~3 무기 교체 · 마우스 조준 &nbsp; / &nbsp; 모바일: 가로 화면 · 터치 조작</p>
   </section>
   <section id="online-lobby" class="online-lobby" hidden aria-labelledby="online-title"><div><button id="online-back">홈으로</button><h2 id="online-title">온라인 1대1</h2><p>먼저 10킬 · 두 사람이 연결되면 시작합니다.</p><label>캐릭터<select id="online-character"><option value="robot">소형 로봇</option><option value="robot-cat">고양이형 로봇</option></select></label><label>시작 무기<select id="online-weapon"><option value="pistol">권총</option><option value="machinegun">기관총</option><option value="shotgun">산탄총</option><option value="sniper">저격총</option></select></label><div class="online-actions"><button id="online-create">방 만들기</button><button id="online-quick">자동 매칭</button></div><label>방 코드<input id="online-code" maxlength="8" autocomplete="off" placeholder="8자리 코드"></label><button id="online-join">코드로 입장</button><p id="online-message" role="status"></p><p>온라인 대전에서는 메뉴를 열어도 상대의 경기는 계속됩니다.</p></div></section>
   <canvas id="game" tabindex="0" aria-label="항구 도시 1인칭 탐색. WASD로 이동하고 화면을 드래그해 시점을 돌립니다."></canvas>
@@ -41,7 +42,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   </header>
   <div class="location"><span class="live-dot"></span><span id="zone">중앙 광장</span><span class="location-divider"></span><span>해안 지구</span></div>
   <section class="help" id="help" hidden>
-    <button id="help-close" class="panel-close" aria-label="도움말 닫기">닫기</button><h2>조작과 게임 안내</h2>
+    <button id="help-close" class="panel-close" aria-label="도움말 닫기">닫기</button><h2>조작과 게임 안내</h2><p>보급 상자 근처에서 E키 또는 획득 버튼으로 무기를 줍습니다. 최대 3개를 소지하며 숫자 1~3 또는 아래 슬롯 버튼으로 바꿉니다. 가득 차면 버릴 총을 선택하세요. 상자는 20초 후 다시 나오며, 사망하면 시작 총만 남습니다.</p>
     <p>로봇의 눈높이에서 거리를 탐색합니다. 화면 중앙의 조준점이 바라보는 방향입니다.</p>
     <p><strong>PC</strong> WASD 이동 · Shift 달리기 · 마우스 드래그로 시점 변경 · 짧게 클릭하면 발사. 메뉴의 마우스 고정 버튼으로 자유롭게 조준할 수 있습니다. Esc를 누르면 고정을 해제하고 일시정지합니다.</p>
     <p><strong>휴대폰</strong> 왼쪽 스틱 이동 · 화면 빈 공간을 좌우·위아래로 드래그해 시점 변경</p>
@@ -68,6 +69,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <button id="scope" class="scope-button" hidden aria-pressed="false">확대</button>
     <button id="jump" class="jump-button" aria-label="점프">점프</button>
   </div>
+  <section id="inventory-ui" aria-label="무기 소지와 획득"><div id="pickup-panel" hidden><span id="pickup-label"></span><button id="pickup-action">획득 · E</button><button id="pickup-cancel" hidden>취소</button></div><div id="weapon-slots"><button data-slot="0" aria-label="무기 슬롯 1">1</button><button data-slot="1" aria-label="무기 슬롯 2">2</button><button data-slot="2" aria-label="무기 슬롯 3">3</button></div></section>
   <div id="scope-overlay" hidden aria-hidden="true"><i></i></div>
   <div id="damage-overlay" aria-hidden="true"><i id="damage-direction"></i></div><div id="impact-marker" aria-hidden="true">×</div>
   <div class="crosshair" aria-hidden="true"><i></i><b></b></div>
@@ -152,6 +154,31 @@ async function start() {
     playtest.packet();onlineState=state;onlineId=id;onlineMotion.receive(state,id);remoteMotion.receive(state,id,performance.now());
     if(!onlineActive){onlineActive=true;homeOpen=false;home.hidden=true;onlineLobby.hidden=true;document.body.classList.remove('at-home');picker.hidden=true;manualPaused=false;pausePanel.hidden=true;world.setPreview(false);const me=state.players.find(p=>p.id===id);if(me){world.selectCharacter(me.character);world.selectWeapon(me.weaponId);input.resetLook();input.setLook(me.yaw,me.pitch);}hasPlayed=true;canvas.focus();}
   },status=>{onlineStatus=status;document.querySelector('#online-message')!.textContent=status;},session=>{onlineCode=session.code;});
+  let pendingSlot:number|undefined,pendingTake:{pickup:string;replace?:number}|undefined,choosePickupId:string|undefined;
+  const inventoryUi=document.querySelector<HTMLElement>('#inventory-ui')!,slotButtons=[...document.querySelectorAll<HTMLButtonElement>('#weapon-slots button')];
+  function inventoryData(){
+    if(onlineActive&&onlineState){const me=onlineState.players.find(p=>p.id===onlineId)!;return {inventory:me.inventory??createInventory(me.weaponId),pickups:onlineState.pickups??[],position:me,ready:!!me.inventory&&!!onlineState.pickups,blocked:me.health===0||!!onlineState.winner||onlineState.players.length<2||onlineState.players.some(p=>!p.connected)||!online.connected};}
+    const battle=world.duelState();return {...world.inventoryState(),position,ready:true,blocked:battle.active&&(battle.playerHealth===0||!!battle.winner)};
+  }
+  function canUseInventory(){return !homeOpen&&!manualPaused&&picker.hidden&&!menuOpen&&help.hidden&&!comparing&&!document.hidden&&document.hasFocus()&&!matchMedia('(pointer: coarse) and (orientation: portrait)').matches;}
+  function requestPickup(replace?:number){
+    if(!canUseInventory())return;const data=inventoryData(),crate=nearbyPickup(data.position,data.pickups);if(data.blocked||!data.ready||!crate)return;
+    if(data.inventory.slots.some(s=>s.id===crate.weaponId)){notice='이미 가진 무기입니다';noticeTime=1;return;}
+    if(data.inventory.slots.length===3&&replace===undefined){choosePickupId=crate.id;return;}
+    if(onlineActive)pendingTake={pickup:crate.id,replace};else world.pickup(data.position,crate.id,replace);choosePickupId=undefined;
+  }
+  function requestSlot(slot:number){if(!canUseInventory())return;const data=inventoryData();if(data.blocked||!data.ready)return;if(choosePickupId){requestPickup(slot);return;}if(onlineActive)pendingSlot=slot;else world.switchWeapon(slot);}
+  slotButtons.forEach((button,i)=>button.addEventListener('click',()=>requestSlot(i)));
+  document.querySelector('#pickup-action')!.addEventListener('click',()=>requestPickup());
+  document.querySelector('#pickup-cancel')!.addEventListener('click',()=>{choosePickupId=undefined;});
+  window.addEventListener('keydown',event=>{const tag=(event.target as HTMLElement|null)?.tagName;if(['INPUT','SELECT','TEXTAREA'].includes(tag??''))return;if(event.code==='Escape')choosePickupId=undefined;if(!canUseInventory()||event.repeat)return;if(event.code==='KeyE'){event.preventDefault();requestPickup();}if(/^Digit[123]$/.test(event.code)){event.preventDefault();requestSlot(Number(event.code.slice(-1))-1);}});
+  function refreshInventory(){
+    inventoryUi.hidden=homeOpen||!picker.hidden||comparing;if(inventoryUi.hidden)return;
+    const data=inventoryData(),crate=nearbyPickup(data.position,data.pickups);if(!crate||crate.id!==choosePickupId||data.blocked)choosePickupId=undefined;
+    slotButtons.forEach((button,i)=>{const slot=data.inventory.slots[i],text=slot?`${i+1} · ${WEAPONS[slot.id].name}${choosePickupId?' 버리기':''}`:`${i+1} · 비어 있음`;if(button.textContent!==text)button.textContent=text;button.disabled=!slot||data.blocked||!canUseInventory()||!data.ready;button.setAttribute('aria-pressed',String(i===data.inventory.active));});
+    const panel=document.querySelector<HTMLElement>('#pickup-panel')!;panel.hidden=!crate||data.blocked||!canUseInventory()||!data.ready;
+    if(crate){const duplicate=data.inventory.slots.some(s=>s.id===crate.weaponId);document.querySelector('#pickup-label')!.textContent=choosePickupId?'버릴 무기를 아래에서 고르세요':`${WEAPONS[crate.weaponId].name} 상자${duplicate?' · 이미 소지 중':''}`;document.querySelector<HTMLButtonElement>('#pickup-action')!.disabled=duplicate||!!choosePickupId;document.querySelector<HTMLElement>('#pickup-cancel')!.hidden=!choosePickupId;}
+  }
   let onlineControlsActive=false;const updateOnlineControls=(active:boolean)=>{if(active===onlineControlsActive)return;onlineControlsActive=active;document.querySelector<HTMLElement>('#online-copy')!.hidden=!active;for(const id of ['character-open','game-mode','weapon-select','practice-reset','reset'])document.querySelector<HTMLButtonElement>('#'+id)!.disabled=active;};
   document.querySelector('#online-copy')!.addEventListener('click',async()=>{const url=new URL(location.href);url.searchParams.set('room',onlineCode);try{await navigator.clipboard.writeText(url.href);document.querySelector('#online-copy')!.textContent='초대 링크 복사됨';}catch{document.querySelector('#online-copy')!.textContent=`방 코드 ${onlineCode}`;}});
   document.querySelector('#home-online')!.addEventListener('click',()=>{home.hidden=true;onlineLobby.hidden=false;document.querySelector('#online-message')!.textContent=online.available?'방을 만들거나 친구의 코드를 입력하세요.':'온라인 서버 연결 준비 중입니다. 봇 대전과 표적 연습은 바로 이용할 수 있습니다.';for(const id of ['online-create','online-join','online-quick'])document.querySelector<HTMLButtonElement>('#'+id)!.disabled=!online.available;});
@@ -229,7 +256,7 @@ async function start() {
   const refreshCharacter = () => choices.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.character === world.characterType)));
   const openPicker = () => { setComparison(false);input.setEnabled(false);document.querySelector<HTMLSelectElement>('#start-mode')!.value=document.querySelector<HTMLSelectElement>('#game-mode')!.value;document.querySelector<HTMLSelectElement>('#start-weapon')!.value=document.querySelector<HTMLSelectElement>('#weapon-select')!.value; input.reset(); if (document.pointerLockElement) document.exitPointerLock(); world.setPreview(true); refreshCharacter(); picker.hidden = false; choices[0]!.focus(); };
   const home=document.querySelector<HTMLElement>('#home-screen')!;
-  const openHome=()=>{online.leave();onlineMotion.reset();remoteMotion.reset();onlineActive=false;onlineState=null;onlineId='';onlineEventId=-1;world.endOnline();onlineLobby.hidden=true;updateOnlineControls(false);homeOpen=true;home.hidden=false;document.body.classList.add('at-home');manualPaused=false;pausePanel.hidden=true;closeMenu();document.querySelector<HTMLElement>('#help')!.hidden=true;picker.hidden=true;setComparison(false);input.setEnabled(false);world.setPreview(true);document.querySelector<HTMLButtonElement>('#home-bot')!.focus();};
+  const openHome=()=>{online.leave();onlineMotion.reset();remoteMotion.reset();pendingSlot=undefined;pendingTake=undefined;choosePickupId=undefined;onlineActive=false;onlineState=null;onlineId='';onlineEventId=-1;world.endOnline();onlineLobby.hidden=true;updateOnlineControls(false);homeOpen=true;home.hidden=false;document.body.classList.add('at-home');manualPaused=false;pausePanel.hidden=true;closeMenu();document.querySelector<HTMLElement>('#help')!.hidden=true;picker.hidden=true;setComparison(false);input.setEnabled(false);world.setPreview(true);document.querySelector<HTMLButtonElement>('#home-bot')!.focus();};
   const chooseMode=(value:'duel'|'practice')=>{homeMatchPending=true;homeOpen=false;home.hidden=true;document.body.classList.remove('at-home');openPicker();document.querySelector<HTMLSelectElement>('#start-mode')!.value=value;};
   document.querySelector('#online-back')!.addEventListener('click',openHome);
   document.querySelector('#home-bot')!.addEventListener('click',()=>chooseMode('duel'));
@@ -402,10 +429,10 @@ async function start() {
     document.querySelector('#audio-status')!.textContent=audio.available?'사운드 활성화':'화면을 눌러 소리 켜기';
     if(onlineActive&&onlineState){
       updateOnlineControls(true);
-      const command={x:canPlay?input.move.x:0,y:canPlay?input.move.y:0,yaw:input.look.yaw,pitch:input.look.pitch,fire:canPlay&&input.firing,shot:false,reload:false,jump:false,sprint:canPlay&&input.sprintingRequested,scope:world.practiceState().scoped};
+      const command:Omit<Command,'seq'>={x:canPlay?input.move.x:0,y:canPlay?input.move.y:0,yaw:input.look.yaw,pitch:input.look.pitch,fire:canPlay&&input.firing,shot:false,reload:false,jump:false,sprint:canPlay&&input.sprintingRequested,scope:world.practiceState().scoped};
       const predictedPosition=onlineMotion.advance(elapsed,command,online.connected);
       onlineSendTime+=Math.min(elapsed,.1);
-      if(onlineSendTime>=.05){onlineSendTime%=.05;command.shot=canPlay&&input.consumeShots()>0;command.reload=canPlay&&input.consumeReloads()>0;command.jump=canPlay&&input.consumeJumps()>0;const seq=online.send(command);if(seq!==null)onlineMotion.sent(seq,command);}
+      if(onlineSendTime>=.05){onlineSendTime%=.05;command.shot=canPlay&&input.consumeShots()>0;command.reload=canPlay&&input.consumeReloads()>0;command.jump=canPlay&&input.consumeJumps()>0;if(canPlay){command.slot=pendingSlot;command.pickup=pendingTake?.pickup;command.replace=pendingTake?.replace;}const seq=online.send(command);if(seq!==null){onlineMotion.sent(seq,command);pendingSlot=undefined;pendingTake=undefined;}}
       world.renderOnline(onlineState,onlineId,input.look,Math.min(elapsed,.1),predictedPosition,remoteMotion.sample(performance.now(),online.network.rttMs));
       for(const event of onlineState.events)if(event.id>onlineEventId){onlineEventId=event.id;audio.play(event.weapon);if(event.hit&&event.player===onlineId){audio.play(event.killed?'kill':'hit');impactTime=.2;feedbackTime=.35;shotFeedback.textContent=event.killed?'상대 처치':'명중';document.querySelector('#impact-marker')!.classList.toggle('kill',event.killed);}}
     } else if (canPlay) {
@@ -452,7 +479,7 @@ async function start() {
     runButton.textContent=runningRequested?'달리기 켜짐':'달리기';
     const runBattle=world.duelState();runButton.disabled=runBattle.active&&(runBattle.playerHealth===0||!!runBattle.winner);
     damageTime=Math.max(0,damageTime-elapsed);impactTime=Math.max(0,impactTime-elapsed);document.querySelector<HTMLElement>('#impact-marker')!.hidden=impactTime<=0||!picker.hidden||comparing;
-    noticeTime=Math.max(0,noticeTime-elapsed);refreshHud();
+    noticeTime=Math.max(0,noticeTime-elapsed);refreshHud();refreshInventory();
     hitTime = Math.max(0, hitTime - elapsed);
     shotTime=Math.max(0,shotTime-elapsed);feedbackTime=Math.max(0,feedbackTime-elapsed);
     crosshair.classList.toggle('hit', hitTime > 0);

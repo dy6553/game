@@ -1,18 +1,22 @@
+import {createInventory,createPickups,syncSlot,advanceStowed,switchSlot,takePickup,tickPickups,type Inventory,type Pickup} from './inventory.ts';
 import { moveWithCollisions,normalized,SOLIDS,BUILDINGS,PROTOTYPE } from './world.ts';
 import { WEAPONS,pelletOffsets,isWeaponId,type WeaponId } from './weapons.ts';
-import { createWeapon,advanceWeapon,beginReload,tryFire,type WeaponState } from './combat.ts';
+import { createWeapon,beginReload,tryFire,type WeaponState } from './combat.ts';
 import { createJump,beginJump,advanceJump,type JumpState } from './jump.ts';
 import { viewMovement } from './view.ts';
-export type Player = {id:string;x:number;z:number;yaw:number;pitch:number;health:number;kills:number;dead:number;weaponId:WeaponId;weapon:WeaponState;jump:JumpState;cooldown:number;connected:boolean;character:'robot'|'robot-cat';seq:number};
-export type Command={seq:number;x:number;y:number;yaw:number;pitch:number;fire:boolean;shot:boolean;reload:boolean;jump:boolean;sprint:boolean;scope:boolean};
+export type Player = {id:string;x:number;z:number;yaw:number;pitch:number;health:number;kills:number;dead:number;weaponId:WeaponId;weapon:WeaponState;jump:JumpState;cooldown:number;connected:boolean;character:'robot'|'robot-cat';seq:number;startWeapon:WeaponId;inventory:Inventory};
+export type Command={seq:number;x:number;y:number;yaw:number;pitch:number;fire:boolean;shot:boolean;reload:boolean;jump:boolean;sprint:boolean;scope:boolean;slot?:number;pickup?:string;replace?:number};
 export type ShotEvent={id:number;player:string;weapon:WeaponId;from:{x:number;y:number;z:number};to:{x:number;y:number;z:number};hit:boolean;killed:boolean};
-export type MatchState={players:Player[];winner:string;tick:number;events:ShotEvent[]};
+export type MatchState={players:Player[];winner:string;tick:number;events:ShotEvent[];pickups:Pickup[]};
 const empty=():Command=>({seq:-1,x:0,y:0,yaw:0,pitch:0,fire:false,shot:false,reload:false,jump:false,sprint:false,scope:false});
 export function parseCommand(v:unknown):Command|null{
  if(!v||typeof v!=='object')return null;const p=v as Record<string,unknown>;
  if(!['seq','x','y','yaw','pitch'].every(k=>typeof p[k]==='number'&&Number.isFinite(p[k])))return null;
  if(!Number.isSafeInteger(p.seq)||Number(p.seq)<0||Math.abs(Number(p.x))>1||Math.abs(Number(p.y))>1||Math.abs(Number(p.pitch))>1.2||Math.abs(Number(p.yaw))>Math.PI*2)return null;
  if(!['fire','shot','reload','jump','sprint','scope'].every(k=>typeof p[k]==='boolean'))return null;
+ if(p.slot!==undefined&&(!Number.isInteger(p.slot)||Number(p.slot)<0||Number(p.slot)>2))return null;
+ if(p.replace!==undefined&&(!Number.isInteger(p.replace)||Number(p.replace)<0||Number(p.replace)>2))return null;
+ if(p.pickup!==undefined&&(typeof p.pickup!=='string'||p.pickup.length>40))return null;
  return p as unknown as Command;
 }
 export function moveNetworkPlayer(p:Pick<Player,'x'|'z'|'health'|'weapon'|'cooldown'>,c:Omit<Command,'seq'>,dt:number){
@@ -31,27 +35,33 @@ function wallDistance(origin:number[],direction:number[]){let result=150;
  return result;
 }
 export function createNetworkGame(saved?:MatchState){
- const state:MatchState=saved?structuredClone(saved):{players:[],winner:'',tick:0,events:[]};
+ const state:MatchState=saved?structuredClone(saved):{players:[],winner:'',tick:0,events:[],pickups:createPickups()};
+ state.pickups??=createPickups();
  const inputs=new Map<string,{command:Command;at:number}>();let now=0,eventId=state.tick*10;
- for(const p of state.players)p.connected=false;
- const spawn=(p:Player,index:number)=>{p.x=0;p.z=index===0?-8:18;p.yaw=index===0?0:Math.PI;p.pitch=0;p.health=100;p.dead=0;p.jump=createJump();p.weapon=createWeapon(WEAPONS[p.weaponId]);p.cooldown=0;};
+ for(const p of state.players){p.connected=false;p.startWeapon??=p.weaponId;p.inventory??=createInventory(p.weaponId);syncSlot(p.inventory,p.weapon,p.cooldown);}
+ const spawn=(p:Player,index:number)=>{p.x=0;p.z=index===0?-8:18;p.yaw=index===0?0:Math.PI;p.pitch=0;p.health=100;p.dead=0;p.jump=createJump();p.weaponId=p.startWeapon;p.inventory=createInventory(p.startWeapon);p.weapon=createWeapon(WEAPONS[p.weaponId]);p.cooldown=0;};
  return {state,
   join(id:string,weapon:unknown='pistol',character:unknown='robot'){
    const existing=state.players.find(p=>p.id===id);if(existing){existing.connected=true;inputs.delete(id);return existing;}
    if(state.players.length>=2||state.winner)throw new Error('방이 가득 찼습니다.');
-   const p:Player={id,x:0,z:0,yaw:0,pitch:0,health:100,kills:0,dead:0,weaponId:isWeaponId(weapon)?weapon:'pistol',weapon:createWeapon(WEAPONS.pistol),jump:createJump(),cooldown:0,connected:true,character:character==='robot-cat'?'robot-cat':'robot',seq:-1};
+   const p:Player={id,x:0,z:0,yaw:0,pitch:0,health:100,kills:0,dead:0,weaponId:isWeaponId(weapon)?weapon:'pistol',weapon:createWeapon(WEAPONS.pistol),jump:createJump(),cooldown:0,connected:true,character:character==='robot-cat'?'robot-cat':'robot',seq:-1,startWeapon:isWeaponId(weapon)?weapon:'pistol',inventory:createInventory(isWeaponId(weapon)?weapon:'pistol')};
    spawn(p,state.players.length);state.players.push(p);return p;
   },
   disconnect(id:string){const p=state.players.find(p=>p.id===id);if(p)p.connected=false;inputs.delete(id);},
   input(id:string,raw:unknown){const command=parseCommand(raw),p=state.players.find(p=>p.id===id);if(!command||!p?.connected||command.seq<=p.seq)return false;p.seq=command.seq;
-   const old=inputs.get(id)?.command;command.shot ||=old?.shot??false;command.reload ||=old?.reload??false;command.jump ||=old?.jump??false;inputs.set(id,{command,at:now});return true;},
+   const old=inputs.get(id)?.command;command.shot ||=old?.shot??false;command.reload ||=old?.reload??false;command.jump ||=old?.jump??false;if(command.slot===undefined)command.slot=old?.slot;if(command.pickup===undefined){command.pickup=old?.pickup;command.replace=old?.replace;}inputs.set(id,{command,at:now});return true;},
   step(){const dt=.05;now+=dt;state.tick++;state.events=[];
    if(state.winner||state.players.length!==2||state.players.some(p=>!p.connected)){inputs.clear();return;}
+   tickPickups(state.pickups,dt);
    for(const [index,p] of state.players.entries()){
     const entry=inputs.get(p.id),c=entry&&now-entry.at<.3?entry.command:empty();
     if(p.health===0){p.dead=Math.max(0,p.dead-dt);if(p.dead<1e-8)spawn(p,index);continue;}
     if(entry&&now-entry.at<.3){p.yaw=c.yaw;p.pitch=c.pitch;}
-    const spec=WEAPONS[p.weaponId];p.weapon=advanceWeapon(p.weapon,dt,spec);p.cooldown=Math.max(0,p.cooldown-dt);
+    syncSlot(p.inventory,p.weapon,p.cooldown);advanceStowed(p.inventory,dt,true);
+    if(c.slot!==undefined)switchSlot(p.inventory,c.slot);
+    if(c.pickup)takePickup(p.inventory,p,state.pickups,c.pickup,c.replace);
+    const active=p.inventory.slots[p.inventory.active]!;p.weaponId=active.id;p.weapon=active.weapon;p.cooldown=active.cooldown;
+    const spec=WEAPONS[p.weaponId];
     if(c.reload)p.weapon=beginReload(p.weapon,spec);if(c.jump)p.jump=beginJump(p.jump);p.jump=advanceJump(p.jump,dt);
     Object.assign(p,moveNetworkPlayer(p,c,dt));
     if((c.shot||(c.fire&&spec.automatic))&&p.cooldown<1e-8){const attempt=tryFire(p.weapon);p.weapon=attempt.state;if(attempt.fired){p.cooldown=spec.interval;
@@ -65,7 +75,7 @@ export function createNetworkGame(saved?:MatchState){
       state.events.push({id:++eventId,player:p.id,weapon:p.weaponId,from:{x:origin[0]!,y:origin[1]!,z:origin[2]!},to:{x:origin[0]!+direction[0]!*range,y:origin[1]!+direction[1]!*range,z:origin[2]!+direction[2]!*range},hit,killed});
      }
     }}
-    c.shot=false;c.reload=false;c.jump=false;
+    syncSlot(p.inventory,p.weapon,p.cooldown);c.shot=false;c.reload=false;c.jump=false;c.slot=undefined;c.pickup=undefined;c.replace=undefined;
    }
   },
  };

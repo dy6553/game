@@ -1,3 +1,4 @@
+import {createInventory,createPickups,syncSlot,advanceStowed,switchSlot,takePickup,tickPickups} from './inventory.ts';
 import type { MatchState } from './network-game.ts';
 import { createRecoil,type ShakeLevel } from './impact.ts';
 import { createRobotImpact } from './robot-impact.ts';
@@ -40,7 +41,7 @@ export function createHarborScene(engine: Engine) {
   scene.ambientColor = new Color3(0.12, 0.105, 0.12);
   scene.fogMode=Scene.FOGMODE_EXP2;scene.fogDensity=0.004;scene.fogColor=new Color3(0.07,0.095,0.155);
   const camera = new FreeCamera('camera', new Vector3(36, 55, -36), scene);
-  camera.mode = FreeCamera.PERSPECTIVE_CAMERA;
+  camera.mode = FreeCamera.PERSPECTIVE_CAMERA;camera.updateUpVectorFromRotation=true;
   camera.fov = 1.25;
   camera.minZ = 0.06; camera.maxZ = 500;
   const sky = new HemisphericLight('sky', new Vector3(0, 1, 0), scene);
@@ -449,13 +450,17 @@ export function createHarborScene(engine: Engine) {
     opponentMark.scaling.x=Math.max(0.001,state.botHealth/100);
     botParent.computeWorldMatrix(true);
   }
-  let weaponId:WeaponId='pistol',spec=WEAPONS.pistol,cooldown=0,scoped=false;
+  let weaponId:WeaponId='pistol',startWeapon:WeaponId='pistol',spec=WEAPONS.pistol,cooldown=0,scoped=false;let inventory=createInventory(startWeapon),pickups=createPickups();
   let weapon=createWeapon(spec);
   let jumpState=createJump();
   let hits=0,destroyed=0,shots=0;
   const effects=createShotEffects(scene,camera);
   let preview = false, reference = false;
   const recoil=createRecoil();
+  function equip(){const slot=inventory.slots[inventory.active]!;weaponId=slot.id;spec=WEAPONS[weaponId];weapon=slot.weapon;cooldown=slot.cooldown;scoped=false;recoil.clear();}
+  const supplyMaterial=material('supply-crate','#4d8c93','#16313a');
+  const supplyMeshes=createPickups().map(c=>{const mesh=MeshBuilder.CreateBox(c.id,{width:1.2,height:.75,depth:.8},scene);mesh.position.set(c.x,.4,c.z);mesh.material=supplyMaterial;mesh.isPickable=false;return mesh;});
+  function syncSupplies(){for(const mesh of supplyMeshes){const crate=pickups.find(c=>c.id===mesh.name);mesh.setEnabled(!preview&&!reference&&!!crate&&crate.remaining===0);}}
   let animationTime = 0;
   function resize() { camera.getProjectionMatrix(true); }
   function setReference(value: boolean) {
@@ -469,7 +474,7 @@ export function createHarborScene(engine: Engine) {
     for(const light of streetLights) light.setEnabled(!value);
   }
   function update(p: Point, dt: number, look: Look = { yaw: 0, pitch: 0 }, paused=false) {
-    if(!preview&&!reference&&!paused){weapon=advanceWeapon(weapon,dt,spec);cooldown=Math.max(0,cooldown-dt);jumpState=advanceJump(jumpState,dt);}
+    if(!preview&&!reference&&!paused){syncSlot(inventory,weapon,cooldown);advanceStowed(inventory,dt);tickPickups(pickups,dt);weapon=advanceWeapon(weapon,dt,spec);cooldown=Math.max(0,cooldown-dt);jumpState=advanceJump(jumpState,dt);}
     if(!paused)atmosphere.update(dt,p);
     const texel=64/shadows.mapSize;
     moon.position.set(Math.round((p.x+24.75)/texel)*texel,55,Math.round((p.z-13.75)/texel)*texel);
@@ -506,7 +511,7 @@ export function createHarborScene(engine: Engine) {
       });
       const state=duel.state();
       if(wasBotDead&&state.botHealth>0)robotImpact.reset();
-      if(state.respawnVersion!==seenRespawn){seenRespawn=state.respawnVersion;p.x=0;p.z=-8;weapon=createWeapon(spec);cooldown=0;scoped=false;jumpState=createJump();recoil.clear();}
+      if(state.respawnVersion!==seenRespawn){seenRespawn=state.respawnVersion;p.x=0;p.z=-8;weaponId=startWeapon;spec=WEAPONS[weaponId];inventory=createInventory(startWeapon);weapon=createWeapon(spec);cooldown=0;scoped=false;jumpState=createJump();recoil.clear();}
     }
     player.position.x = p.x; player.position.z = p.z;
     player.position.y=preview||reference?0:jumpState.height;
@@ -526,7 +531,7 @@ export function createHarborScene(engine: Engine) {
     scopeBody.setEnabled(weaponId==='sniper');secondBarrel.setEnabled(weaponId==='shotgun');
     gun.scaling.z=weaponId==='pistol'?1:1.6;barrel.scaling.z=weaponId==='sniper'?2:weaponId==='pistol'?1:1.5;
     const inside=indoorAt(p);for(const item of interiorLights)item.light.setEnabled(!preview&&!reference&&item.id===inside?.id);
-    syncBot();
+    syncBot();syncSupplies();
   }
   setPreview(false);
   resize();
@@ -576,7 +581,7 @@ export function createHarborScene(engine: Engine) {
     const next=beginReload(weapon,spec);const started=next!==weapon;weapon=next;return started;
   }
   function resetPractice() {
-    weapon=createWeapon(spec);cooldown=0;scoped=false;jumpState=createJump();hits=0;destroyed=0;shots=0;
+    weaponId=startWeapon;spec=WEAPONS[weaponId];inventory=createInventory(startWeapon);pickups=createPickups();weapon=createWeapon(spec);cooldown=0;scoped=false;jumpState=createJump();hits=0;destroyed=0;shots=0;
     effects.clear();botEffects.clear();recoil.clear();robotImpact.reset();duel=createDuel();seenRespawn=0;syncBot();
     for(const target of targets){
       target.health=PRACTICE_RULES.maxHealth;target.flash=0;target.root.setEnabled(!duelMode);
@@ -585,19 +590,19 @@ export function createHarborScene(engine: Engine) {
   }
   let remote: {model:ReturnType<typeof createCharacter>;fx:ReturnType<typeof createRobotImpact>;type:CharacterType;health:number}|null=null;
   const remoteParent=new TransformNode('online-opponent',scene);
-  let lastNetworkEvent=-1,onlineQualityHigh=true;
-  function endOnline(){
+  let lastNetworkEvent=-1,onlineQualityHigh=true,networkJumpTick=-1,networkJumpAge=0;
+  function endOnline(preserveJump=false){
     if(remote){for(const mesh of remote.model.meshes)shadows.removeShadowCaster(mesh);remote.fx.dispose();remote.model.root.dispose();remote=null;}
-    lastNetworkEvent=-1;effects.clear();botEffects.clear();recoil.clear();
+    lastNetworkEvent=-1;if(!preserveJump){networkJumpTick=-1;networkJumpAge=0;}effects.clear();botEffects.clear();recoil.clear();
   }
   function renderOnline(state:MatchState,id:string,look:Look,dt:number,predictedPosition?:Point,remotePosition?:(Point&{id:string})){
     const me=state.players.find(p=>p.id===id);if(!me)return;
     const other=state.players.find(p=>p.id!==id);
-    duelMode=false;preview=false;reference=false;weaponId=me.weaponId;spec=WEAPONS[weaponId];weapon={...me.weapon};jumpState={...me.jump};
+    duelMode=false;preview=false;reference=false;if(weaponId!==me.weaponId||me.health===0)scoped=false;weaponId=me.weaponId;spec=WEAPONS[weaponId];weapon={...me.weapon};cooldown=me.cooldown;if(networkJumpTick!==state.tick){networkJumpTick=state.tick;networkJumpAge=0;}else networkJumpAge=Math.min(.15,networkJumpAge+dt);jumpState=advanceJump(me.jump,networkJumpAge);inventory=me.inventory??createInventory(me.weaponId);pickups=state.pickups??[];
     recoil.update(dt);effects.update(dt);botEffects.update(dt);
     update(predictedPosition??me,0,look,true);for(const target of targets)target.root.setEnabled(false);
     if(other){
-      if(!remote||remote.type!==other.character){endOnline();const model=createCharacter(scene,remoteParent,other.character);const fx=createRobotImpact(scene,model.root,model.meshes);fx.setQuality(onlineQualityHigh);remote={model,fx,type:other.character,health:other.health};for(const mesh of model.meshes){mesh.isPickable=false;shadows.addShadowCaster(mesh);}remoteParent.position.set(other.x,other.jump.height,other.z);}
+      if(!remote||remote.type!==other.character){endOnline(true);const model=createCharacter(scene,remoteParent,other.character);const fx=createRobotImpact(scene,model.root,model.meshes);fx.setQuality(onlineQualityHigh);remote={model,fx,type:other.character,health:other.health};for(const mesh of model.meshes){mesh.isPickable=false;shadows.addShadowCaster(mesh);}remoteParent.position.set(other.x,other.jump.height,other.z);}
       if(remote.health===0&&other.health>0){remote.fx.reset();remoteParent.position.set(other.x,other.jump.height,other.z);}
       const target=remotePosition?.id===other.id?remotePosition:other;const factor=1-Math.exp(-dt*35);remoteParent.position.x+=(target.x-remoteParent.position.x)*factor;remoteParent.position.z+=(target.z-remoteParent.position.z)*factor;remoteParent.position.y+=(other.jump.height-remoteParent.position.y)*factor;remoteParent.rotation.y+=Math.atan2(Math.sin(other.yaw-remoteParent.rotation.y),Math.cos(other.yaw-remoteParent.rotation.y))*factor;
       remote.fx.update(dt);remoteParent.setEnabled(other.health>0||remote.fx.showingDeath);remote.health=other.health;
@@ -615,12 +620,15 @@ export function createHarborScene(engine: Engine) {
   }
   return {
     jump(){if(preview||reference||(duelMode&&(duel.state().playerHealth===0||!!duel.state().winner)))return false;const next=beginJump(jumpState);const started=next!==jumpState;jumpState=next;return started;},
-    selectWeapon(id:WeaponId){weaponId=id;spec=WEAPONS[id];resetPractice();},
+    selectWeapon(id:WeaponId){startWeapon=id;weaponId=id;spec=WEAPONS[id];resetPractice();},
     toggleScope(){if(weaponId!=='sniper'||preview||reference||(duelMode&&(duel.state().playerHealth===0||!!duel.state().winner)))return false;scoped=!scoped;return scoped;},
     resetJump(){jumpState=createJump();},
     setMode(mode:'practice'|'duel'){duelMode=mode==='duel';resetPractice();},
     consumeSounds(){return soundEvents.splice(0);},
     duelState:()=>({...duel.state(),active:duelMode}),
+    inventoryState(){syncSlot(inventory,weapon,cooldown);return {inventory,pickups};},
+    pickup(p:Point,id:string,replace?:number){if(preview||reference||(duelMode&&(duel.state().playerHealth===0||!!duel.state().winner)))return 'unavailable';syncSlot(inventory,weapon,cooldown);const result=takePickup(inventory,p,pickups,id,replace);if(result==='added')equip();return result;},
+    switchWeapon(slot:number){if(preview||reference||(duelMode&&(duel.state().playerHealth===0||!!duel.state().winner)))return false;syncSlot(inventory,weapon,cooldown);if(!switchSlot(inventory,slot))return false;equip();return true;},
     reload,resetPractice,practiceState,
     renderOnline,endOnline,
     effectsState:effects.stats,
