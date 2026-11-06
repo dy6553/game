@@ -399,6 +399,7 @@ export function createHarborScene(engine: Engine) {
   const warningMat=material('incoming-warning','#ff9d59','#ff5935');warningMat.alpha=0.65;
   const warningRing=MeshBuilder.CreateTorus('incoming-shot-ring',{diameter:1.3,thickness:0.055,tessellation:32},scene);
   warningRing.material=warningMat;warningRing.isPickable=false;warningRing.setEnabled(false);
+  const soundEvents:{kind:'pistol';x:number;z:number}[]=[];
   let seenRespawn=0;
   function syncBot(){
     const state=duel.state();
@@ -456,6 +457,7 @@ export function createHarborScene(engine: Engine) {
         const delta=end.subtract(start),distance=delta.length();
         const wall=scene.pickWithRay(new Ray(start,delta.scale(1/distance),distance),mesh=>mesh.isPickable&&mesh.isEnabled()&&!mesh.metadata?.opponent);
         const impact=wall?.pickedPoint??end;
+        if(soundEvents.length<16)soundEvents.push({kind:'pistol',x:point.x,z:point.z});
         botEffects.emit(start,impact,wall?.getNormal(true)??delta.normalize().scale(-1),!!wall?.hit,false);
         return !wall?.hit;
       });
@@ -489,7 +491,7 @@ export function createHarborScene(engine: Engine) {
     const attempt=tryFire(weapon);weapon=attempt.state;
     if(!attempt.fired)return {fired:false,hit:false,reason:attempt.reason};
     shots++;recoil=1;cooldown=spec.interval;
-    let anyHit=false,anyEliminated=false,totalDamage=0;
+    let anyHit=false,anyEliminated=false,impact=false,totalDamage=0;
     let lastPoint=camera.position.clone();
     const offsets=pelletOffsets(spec);
     for(let pellet=0;pellet<offsets.length;pellet++){
@@ -519,9 +521,10 @@ export function createHarborScene(engine: Engine) {
       if(eliminated){target.root.setEnabled(false);destroyed++;}
     }
     effects.emit(start,end,pick?.getNormal(true)??direction.scale(-1),pick?.hit===true,hit,pellet===0);
+    impact=impact||pick?.hit===true;
     anyHit=anyHit||hit;anyEliminated=anyEliminated||eliminated;lastPoint=end;
     }
-    return { fired: true, hit:anyHit, eliminated:anyEliminated, damage:totalDamage,point:lastPoint };
+    return { fired: true, hit:anyHit, eliminated:anyEliminated, damage:totalDamage,impact,point:lastPoint };
   }
   function reload() {
     if(preview||reference||(duelMode&&(duel.state().playerHealth===0||!!duel.state().winner)))return false;
@@ -546,6 +549,7 @@ export function createHarborScene(engine: Engine) {
     toggleScope(){if(weaponId!=='sniper'||preview||reference||(duelMode&&(duel.state().playerHealth===0||!!duel.state().winner)))return false;scoped=!scoped;return scoped;},
     resetJump(){jumpState=createJump();},
     setMode(mode:'practice'|'duel'){duelMode=mode==='duel';resetPractice();},
+    consumeSounds(){return soundEvents.splice(0);},
     duelState:()=>({...duel.state(),active:duelMode}),
     reload,resetPractice,practiceState,
     effectsState:effects.stats,

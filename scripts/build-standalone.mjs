@@ -16,7 +16,7 @@ await build({
 const files = await readdir(outDir);
 const js = await readFile(path.join(outDir, 'harbor.js'), 'utf8');
 const css = (await Promise.all(files.filter(name => name.endsWith('.css')).map(name => readFile(path.join(outDir, name), 'utf8')))).join('\n');
-const licenses = await readFile(path.join(root, 'THIRD_PARTY_LICENSES.txt'), 'utf8');
+const licenses = await readFile(path.join(root, 'THIRD_PARTY_RUNTIME_LICENSES.txt'), 'utf8');
 const bootstrap = `(function(){
   function report(message){
     var node=document.getElementById('boot-status')||document.getElementById('loading');

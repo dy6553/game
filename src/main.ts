@@ -1,3 +1,4 @@
+import { createGameAudio,spatialSound } from './audio.ts';
 import { Engine } from '@babylonjs/core/Engines/engine.js';
 import { createInput } from './input.ts';
 import { createHarborScene } from './scene.ts';
@@ -34,6 +35,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <p>봇 1대1: 양쪽 체력 100, 먼저 10킬 승리. 자동 회복 없이 사망 3초 후 부활합니다. 붉은 표시가 상대 봇입니다. 봇은 1초 조준 후 위치를 고정하고 0.4초 경고 뒤 발사합니다. 경고 때 옆으로 이동하면 피할 수 있으며, 벽 뒤로 숨으면 조준이 초기화됩니다.</p>
     <p>시작 무기는 메뉴에서 선택하며 변경하면 경기를 새로 시작합니다. 기관총은 발사 버튼을 누르고 있거나 PC 마우스 고정 상태에서 왼쪽 버튼을 누르면 연사합니다. 산탄총은 탄알 6개가 퍼지며, 저격총은 확대 버튼 또는 PC Q키로 조준합니다.</p>
     <p>야경 개선: 젖은 노면의 빛, 수면 반짝임, 벽·지붕 표면과 금속 광택을 추가했습니다. 균형 화질에서는 추가 가로등 빛 번짐을 줄입니다.</p>
+    <fieldset class="audio-settings"><legend>소리</legend><label><input id="audio-mute" type="checkbox"> 음소거</label><label>전체<input id="audio-master" type="range" min="0" max="100" aria-label="전체 음량"></label><label>효과음<input id="audio-effects" type="range" min="0" max="100" aria-label="효과음 음량"></label><label>환경음<input id="audio-environment" type="range" min="0" max="100" aria-label="환경음 음량"></label><small id="audio-status">시작 버튼을 누르면 소리를 켭니다.</small></fieldset>
     <label class="graphics-setting">그래픽 화질 <select id="graphics-quality"><option value="high">높음 · 선명한 화면</option><option value="balanced">균형 · 부드러운 실행</option></select></label>
   </section>
   <div class="desktop-hint"><kbd>W</kbd><span><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><p>이동 <i>·</i> 드래그로 시점 변경</p></div>
@@ -85,6 +87,15 @@ async function start() {
     world.setQuality(high);engine.resize();world.resize();
   });
   const input = createInput(canvas);
+  const audio=createGameAudio();
+  document.addEventListener('pointerdown',()=>{void audio.unlock();});
+  document.addEventListener('keydown',()=>{void audio.unlock();});
+  for(const key of ['master','effects','environment'] as const){const slider=document.querySelector<HTMLInputElement>(`#audio-${key}`)!;slider.value=String(audio.settings[key]*100);slider.addEventListener('input',()=>audio.configure({[key]:Number(slider.value)/100}));}
+  const mute=document.querySelector<HTMLInputElement>('#audio-mute')!;mute.checked=audio.settings.muted;mute.addEventListener('change',()=>audio.configure({muted:mute.checked}));
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)audio.pause(true);});
+  window.addEventListener('blur',()=>audio.pause(true));
+  let lastReload=0,lastGrounded=true,lastPlayerHealth=100,lastRespawn=0,lastWinner='',footDistance=0,footAlternating=false,emptyAt=0;
+
   document.querySelector<HTMLSelectElement>('#jump-key')!.addEventListener('change',event=>{
     const code=(event.currentTarget as HTMLSelectElement).value;
     if(code==='Space'||code==='KeyJ'){input.reset();input.setJumpKey(code);canvas.focus();}
@@ -137,7 +148,7 @@ async function start() {
     if (!isCharacterType(type)) return;
     world.selectCharacter(type); refreshCharacter(); input.reset();
   }));
-  startButton.addEventListener('click', () => { input.reset(); picker.hidden=true; world.setPreview(false); closeMenu(); canvas.focus(); });
+  startButton.addEventListener('click', () => { void audio.unlock();input.reset(); picker.hidden=true; world.setPreview(false); closeMenu(); canvas.focus(); });
   picker.addEventListener('keydown', event => {
     if (event.key === 'Tab') {
       event.preventDefault();
@@ -219,9 +230,9 @@ async function start() {
   });
   window.addEventListener('keydown',event=>{
     const tag=(event.target as HTMLElement|null)?.tagName;
-    if(event.code==='KeyQ'&&!event.repeat&&!menuOpen&&picker.hidden&&!comparing&&document.querySelector<HTMLElement>('#help')!.hidden&&!['INPUT','SELECT','TEXTAREA'].includes(tag??'')){event.preventDefault();world.toggleScope();}
+    if(event.code==='KeyQ'&&!event.repeat&&!menuOpen&&picker.hidden&&!comparing&&document.querySelector<HTMLElement>('#help')!.hidden&&!['INPUT','SELECT','TEXTAREA'].includes(tag??'')){event.preventDefault();world.toggleScope();audio.play('scope');}
   });
-  document.querySelector('#scope')!.addEventListener('click',()=>{world.toggleScope();canvas.focus();});
+  document.querySelector('#scope')!.addEventListener('click',()=>{world.toggleScope();audio.play('scope');canvas.focus();});
   const help = document.querySelector<HTMLElement>('#help')!;
   document.querySelector('#help-toggle')!.addEventListener('click', event => {
     help.hidden = !help.hidden;
@@ -240,26 +251,43 @@ async function start() {
     const elapsed=resetClock?0:Math.max(0,engine.getDeltaTime()/1000);resetClock=false;
     const dt = Math.min(elapsed, 0.05);
     const portraitTouch = matchMedia('(pointer: coarse) and (orientation: portrait)').matches;
-    if (!document.hidden && !portraitTouch && picker.hidden && !comparing && !menuOpen && help.hidden) {
+    const canPlay=!document.hidden&&!portraitTouch&&picker.hidden&&!comparing&&!menuOpen&&help.hidden&&document.hasFocus();
+    audio.pause(!canPlay);
+    document.querySelector('#audio-status')!.textContent=audio.available?'사운드 활성화':'화면을 눌러 소리 켜기';
+    if (canPlay) {
       const movement = viewMovement(input.look.yaw, input.move.x, input.move.y);
       const duel=world.duelState(),canAct=!duel.active||(duel.playerHealth>0&&!duel.winner);
+      const oldPosition={...position};
       if(canAct)position = moveWithCollisions(position, {
         x: movement.x * PROTOTYPE.speed * dt, z: movement.z * PROTOTYPE.speed * dt,
       });
-      if(input.consumeJumps()>0&&canAct)world.jump();
+      if(input.consumeJumps()>0&&canAct&&world.jump())audio.play('jump');
       world.update(position, elapsed, input.look);
-      if(input.consumeReloads()>0)world.reload();
+      if(input.consumeReloads()>0&&world.reload())audio.play('reload');
+      const current=world.practiceState();
+      if(lastReload>0&&current.reloadRemaining===0)audio.play('ready');
+      lastReload=current.reloadRemaining;
+      if(!lastGrounded&&current.grounded)audio.play('land');lastGrounded=current.grounded;
+      const walked=Math.hypot(position.x-oldPosition.x,position.z-oldPosition.z);
+      if(canAct&&current.grounded&&walked<2){footDistance+=walked;if(footDistance>2.2){footDistance=0;footAlternating=!footAlternating;audio.play(footAlternating?'step':'step2');}}
+      const battle=world.duelState();
+      if(battle.active&&battle.playerHealth<lastPlayerHealth)audio.play(battle.playerHealth===0?'death':'hurt');
+      if(battle.respawnVersion>lastRespawn)audio.play('respawn');
+      if(battle.winner&&battle.winner!==lastWinner)audio.play(battle.winner==='player'?'win':'lose');
+      lastPlayerHealth=battle.playerHealth;lastRespawn=battle.respawnVersion;lastWinner=battle.winner;
+      for(const event of world.consumeSounds()){const spatial=spatialSound(event.x-position.x,event.z-position.z,input.look.yaw);audio.play(event.kind,spatial.pan,spatial.gain);}
       const queued=input.consumeShots();
       const shots=queued>0?queued:(input.firing&&world.practiceState().automatic?1:0);
       for (let i = 0; i < shots; i++) {
         const shot = world.shoot();
-        if(shot.fired)shotTime=0.08;
+        if(shot.fired){shotTime=0.08;audio.play(world.practiceState().weaponId);if(shot.hit)audio.play(shot.eliminated?'kill':'hit',0,.6);else if('impact' in shot&&shot.impact)audio.play('wall',0,.35);}
+        if(!shot.fired&&'reason' in shot&&shot.reason==='empty'&&performance.now()>emptyAt){audio.play('empty');emptyAt=performance.now()+500;}
         if (shot.hit) {impactTime=0.2;document.querySelector('#impact-marker')!.classList.toggle('kill','eliminated' in shot&&!!shot.eliminated);hitTime=0.16;feedbackTime=0.35;shotFeedback.textContent='eliminated' in shot&&shot.eliminated?(world.duelState().active?'봇 처치':'표적 파괴'):`명중 −${'damage' in shot?shot.damage:0}`;}
         else if(!shot.fired && 'reason' in shot && shot.reason!=='cooldown'){notice=shot.reason==='empty'?'탄창이 비었습니다 · 재장전하세요':'재장전 중에는 발사할 수 없습니다';noticeTime=0.8;}
       }
       zone.textContent = position.z > 28 ? '항구 산책로' : Math.abs(position.x) > 20 ? '건물 사이 골목'
         : Math.abs(position.z) < 11 && Math.abs(position.x) < 11 ? '중앙 광장' : '해안 거리';
-    } else { input.consumeShots();input.consumeReloads();input.consumeJumps();world.update(position, dt, input.look,true); }
+    } else { input.consumeShots();input.consumeReloads();input.consumeJumps();world.update(position, dt, input.look,true);world.consumeSounds(); }
     damageTime=Math.max(0,damageTime-elapsed);impactTime=Math.max(0,impactTime-elapsed);document.querySelector<HTMLElement>('#impact-marker')!.hidden=impactTime<=0||!picker.hidden||comparing;
     noticeTime=Math.max(0,noticeTime-elapsed);refreshHud();
     hitTime = Math.max(0, hitTime - elapsed);
@@ -268,7 +296,7 @@ async function start() {
     crosshair.classList.toggle('firing',shotTime>0);shotFeedback.hidden=feedbackTime<=0||!picker.hidden||comparing;
     world.scene.render();
   });
-  window.addEventListener('pagehide', () => { input.reset(); });
+  window.addEventListener('pagehide', () => { input.reset();audio.pause(true); });
 }
 start().catch((error: unknown) => {
   console.error(error);
