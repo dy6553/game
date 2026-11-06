@@ -38,3 +38,19 @@ test('storage alarm independently closes disconnected rooms without incoming pac
  const a=await r.connect('a'),b=await r.connect('b');r.advance(50);a.close();b.close();const returned=await r.connect('a');
  await r.room.alarm();assert.equal(returned.closed,true);assert.equal(r.room.game.state.players.length,0);
 });
+
+test('new rooms receive a trusted player-region placement hint and ignore spoofed client hints',async()=>{
+ const source=readFileSync(new URL('../server/worker.js',import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replaceAll('export class ','class ').replace('export default ','globalThis.worker=');
+ const sandbox:any={createNetworkGame,Date,crypto,URL,Headers,Request,Response,DurableObject:class{ctx:any;env:any;constructor(ctx:any,env:any){this.ctx=ctx;this.env=env;}}};
+ vm.runInNewContext(source+'\nglobalThis.Lobby=Lobby;',sandbox);
+ const storage=new Map(),hints:any[]=[];
+ const ctx={blockConcurrencyWhile:async(f:()=>unknown)=>f(),storage:{get:async(k:string)=>storage.get(k),put:async(k:string,v:unknown)=>storage.set(k,v),delete:async(k:string)=>storage.delete(k),setAlarm:async()=>{}}};
+ const env:any={ALLOWED_ORIGINS:'https://project-3uu6s.vercel.app',ROOMS:{idFromName:(x:string)=>x,get:(_id:string,options:any)=>{hints.push(options?.locationHint);return{fetch:async()=>Response.json({id:'player',token:'token'})};}}};
+ const lobby=new sandbox.Lobby(ctx,env);env.LOBBY={idFromName:(x:string)=>x,get:()=>lobby};
+ for(const continent of ['AS',undefined]){
+  const request=new Request('https://worker/session',{method:'POST',headers:{Origin:env.ALLOWED_ORIGINS,'X-Harbor-Location':'enam'},body:JSON.stringify({action:'create'})});
+  if(continent)Object.defineProperty(request,'cf',{value:{continent}});
+  assert.equal((await sandbox.worker.fetch(request,env)).status,200);
+ }
+ assert.deepEqual(hints,['apac',undefined]);
+});

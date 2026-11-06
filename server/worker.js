@@ -58,7 +58,8 @@ export class Lobby extends DurableObject {
   if(body.action==='join'&&!/^[0-9A-F]{8}$/.test(roomCode??''))return json({error:'방 코드 8자리를 확인해 주세요.'},400);
   if(body.action==='quick'){const pending=await this.ctx.storage.get('waiting');if(pending&&now-pending.at<60000)roomCode=pending.code;await this.ctx.storage.delete('waiting');}
   if(!roomCode)roomCode=code();
-  const stub=this.env.ROOMS.get(this.env.ROOMS.idFromName(roomCode));
+  const hint=request.headers.get('X-Harbor-Location');
+  const stub=this.env.ROOMS.get(this.env.ROOMS.idFromName(roomCode),hint?{locationHint:hint}:undefined);
   // Joining must never silently create a room for a mistyped code.
   const known=await this.ctx.storage.get('room:'+roomCode);
   if(body.action==='join'&&(!known||now-known>120000))return json({error:'방이 없거나 입장 시간이 지났습니다.'},404);
@@ -72,14 +73,16 @@ export class Lobby extends DurableObject {
 export default {async fetch(request,env){
  const origin=request.headers.get('Origin'),allowed=env.ALLOWED_ORIGINS.split(',');
  if(!origin||!allowed.includes(origin))return json({error:'허용되지 않은 접속 주소'},403);
- const headers={'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Methods':'POST,GET,OPTIONS','Access-Control-Allow-Headers':'Content-Type','Vary':'Origin','X-Harbor-Version':'reconnect-alarm-v1'};
+ const headers={'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Methods':'POST,GET,OPTIONS','Access-Control-Allow-Headers':'Content-Type','Vary':'Origin','X-Harbor-Version':'nearby-room-v1'};
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
  const url=new URL(request.url);let response;
  try{
   if(url.pathname==='/session'&&request.method==='POST'){
    const text=await request.text();if(text.length>1024)return json({error:'요청 크기 초과'},413);const body=JSON.parse(text);
    if(!['create','join','quick'].includes(body.action))return json({error:'잘못된 요청'},400);
-   response=await env.LOBBY.get(env.LOBBY.idFromName('public')).fetch(new Request('https://lobby/',{method:'POST',body:text,headers:request.headers}));
+   const headers=new Headers(request.headers);headers.delete('X-Harbor-Location');
+   const hints={AS:'apac',OC:'oc',NA:'wnam',SA:'sam',EU:'weur',AF:'afr'};const hint=hints[request.cf?.continent];if(hint)headers.set('X-Harbor-Location',hint);
+   response=await env.LOBBY.get(env.LOBBY.idFromName('public')).fetch(new Request('https://lobby/',{method:'POST',body:text,headers}));
   }else if(/^\/room\/[0-9A-F]{8}$/.test(url.pathname)&&request.headers.get('Upgrade')==='websocket'){
    return env.ROOMS.get(env.ROOMS.idFromName(url.pathname.split('/')[2])).fetch(request);
   }else response=json({error:'경로를 찾을 수 없습니다.'},404);

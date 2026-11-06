@@ -590,7 +590,7 @@ export function createHarborScene(engine: Engine) {
     if(remote){for(const mesh of remote.model.meshes)shadows.removeShadowCaster(mesh);remote.fx.dispose();remote.model.root.dispose();remote=null;}
     lastNetworkEvent=-1;effects.clear();botEffects.clear();recoil.clear();
   }
-  function renderOnline(state:MatchState,id:string,look:Look,dt:number,predictedPosition?:Point){
+  function renderOnline(state:MatchState,id:string,look:Look,dt:number,predictedPosition?:Point,remotePosition?:(Point&{id:string})){
     const me=state.players.find(p=>p.id===id);if(!me)return;
     const other=state.players.find(p=>p.id!==id);
     duelMode=false;preview=false;reference=false;weaponId=me.weaponId;spec=WEAPONS[weaponId];weapon={...me.weapon};jumpState={...me.jump};
@@ -599,7 +599,7 @@ export function createHarborScene(engine: Engine) {
     if(other){
       if(!remote||remote.type!==other.character){endOnline();const model=createCharacter(scene,remoteParent,other.character);const fx=createRobotImpact(scene,model.root,model.meshes);fx.setQuality(onlineQualityHigh);remote={model,fx,type:other.character,health:other.health};for(const mesh of model.meshes){mesh.isPickable=false;shadows.addShadowCaster(mesh);}remoteParent.position.set(other.x,other.jump.height,other.z);}
       if(remote.health===0&&other.health>0){remote.fx.reset();remoteParent.position.set(other.x,other.jump.height,other.z);}
-      const factor=1-Math.exp(-dt*18);remoteParent.position.x+=(other.x-remoteParent.position.x)*factor;remoteParent.position.z+=(other.z-remoteParent.position.z)*factor;remoteParent.position.y+=(other.jump.height-remoteParent.position.y)*factor;remoteParent.rotation.y+=Math.atan2(Math.sin(other.yaw-remoteParent.rotation.y),Math.cos(other.yaw-remoteParent.rotation.y))*factor;
+      const target=remotePosition?.id===other.id?remotePosition:other;const factor=1-Math.exp(-dt*35);remoteParent.position.x+=(target.x-remoteParent.position.x)*factor;remoteParent.position.z+=(target.z-remoteParent.position.z)*factor;remoteParent.position.y+=(other.jump.height-remoteParent.position.y)*factor;remoteParent.rotation.y+=Math.atan2(Math.sin(other.yaw-remoteParent.rotation.y),Math.cos(other.yaw-remoteParent.rotation.y))*factor;
       remote.fx.update(dt);remoteParent.setEnabled(other.health>0||remote.fx.showingDeath);remote.health=other.health;
     }
     for(const event of state.events)if(event.id>lastNetworkEvent){
