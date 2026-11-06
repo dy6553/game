@@ -15,6 +15,11 @@ export function parseCommand(v:unknown):Command|null{
  if(!['fire','shot','reload','jump','sprint','scope'].every(k=>typeof p[k]==='boolean'))return null;
  return p as unknown as Command;
 }
+export function moveNetworkPlayer(p:Pick<Player,'x'|'z'|'health'|'weapon'|'cooldown'>,c:Omit<Command,'seq'>,dt:number){
+ if(p.health<=0)return {x:p.x,z:p.z};
+ const n=normalized(c.x,c.y),m=viewMovement(c.yaw,n.x,n.y),running=c.sprint&&n.y>0&&!c.fire&&!c.shot&&!c.scope&&p.weapon.reloadRemaining===0&&p.cooldown===0;
+ return moveWithCollisions(p,{x:m.x*PROTOTYPE.speed*(running?1.5:1)*dt,z:m.z*PROTOTYPE.speed*(running?1.5:1)*dt});
+}
 function rayBox(o:number[],d:number[],min:number[],max:number[]):number{
  let near=0,far=150;for(let i=0;i<3;i++){if(Math.abs(d[i]!)<1e-9){if(o[i]!<min[i]!||o[i]!>max[i]!)return Infinity;continue;}
  let a=(min[i]!-o[i]!)/d[i]!,b=(max[i]!-o[i]!)/d[i]!;if(a>b)[a,b]=[b,a];near=Math.max(near,a);far=Math.min(far,b);if(near>far)return Infinity;}return near;
@@ -48,8 +53,7 @@ export function createNetworkGame(saved?:MatchState){
     if(entry&&now-entry.at<.3){p.yaw=c.yaw;p.pitch=c.pitch;}
     const spec=WEAPONS[p.weaponId];p.weapon=advanceWeapon(p.weapon,dt,spec);p.cooldown=Math.max(0,p.cooldown-dt);
     if(c.reload)p.weapon=beginReload(p.weapon,spec);if(c.jump)p.jump=beginJump(p.jump);p.jump=advanceJump(p.jump,dt);
-    const n=normalized(c.x,c.y),m=viewMovement(p.yaw,n.x,n.y),running=c.sprint&&n.y>0&&!c.fire&&!c.shot&&!c.scope&&p.weapon.reloadRemaining===0&&p.cooldown===0;
-    Object.assign(p,moveWithCollisions(p,{x:m.x*PROTOTYPE.speed*(running?1.5:1)*dt,z:m.z*PROTOTYPE.speed*(running?1.5:1)*dt}));
+    Object.assign(p,moveNetworkPlayer(p,c,dt));
     if((c.shot||(c.fire&&spec.automatic))&&p.cooldown<1e-8){const attempt=tryFire(p.weapon);p.weapon=attempt.state;if(attempt.fired){p.cooldown=spec.interval;
      const foe=state.players[1-index]!,origin=[p.x,(p.character==='robot-cat'?1.9:1.95)+p.jump.height,p.z];
      for(const offset of pelletOffsets(spec)){

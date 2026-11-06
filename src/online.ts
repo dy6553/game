@@ -23,7 +23,7 @@ export function createOnlineClient(endpoint:string,onState:(state:MatchState,id:
    const response=await fetch(url+'/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,code:action==='join'?code:undefined,weapon,character}),signal:AbortSignal.timeout(10000)});
    const data=await response.json();if(ticket!==operation)return;if(!response.ok)throw new Error(data.error??'방에 입장하지 못했습니다.');session=data;stopped=false;attempt=0;seq=0;onSession(data);connect();
   },
-  send(command:Omit<Command,'seq'>){if(!stopped&&socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify({type:'input',command:{...command,seq:seq++}}));},
+  send(command:Omit<Command,'seq'>){if(!stopped&&socket?.readyState===WebSocket.OPEN){const sent=seq++;socket.send(JSON.stringify({type:'input',command:{...command,seq:sent}}));return sent;}return null;},
   leave(){operation++;stopped=true;clearTimeout(retry);if(socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify({type:'leave'}));socket?.close();socket=null;session=null;},
  };
 }
