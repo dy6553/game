@@ -8,7 +8,7 @@ export function createInput(canvas: HTMLCanvasElement) {
   const fire = document.querySelector<HTMLButtonElement>('#fire')!;
   const reload = document.querySelector<HTMLButtonElement>('#reload');
   const jump = document.querySelector<HTMLButtonElement>('#jump');
-  let jumpKey:'Space'|'KeyJ'|undefined;
+  let jumpKey:'Space'|'KeyJ'='Space';
   let stickPointer: number | null = null;
   let stick = { x: 0, y: 0 };
   let lookPointer: number | null = null;

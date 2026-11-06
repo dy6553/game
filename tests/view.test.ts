@@ -38,7 +38,7 @@ test('independent touches move, turn and fire; cancellation releases only the ma
     win.dispatchEvent(Object.assign(new Event('keydown',{cancelable:true}),{code:'KeyR',repeat:true}));
     assert.equal(input.consumeReloads(),1,'R key repeat does not queue multiple reloads');
     send(jump,'pointerdown',6,200,150);assert.equal(input.consumeJumps(),1);
-    input.setJumpKey('Space');win.dispatchEvent(Object.assign(new Event('keydown',{cancelable:true}),{code:'Space',repeat:false}));
+    win.dispatchEvent(Object.assign(new Event('keydown',{cancelable:true}),{code:'Space',repeat:false}));
     win.dispatchEvent(Object.assign(new Event('keydown',{cancelable:true}),{code:'Space',repeat:true}));
     assert.equal(input.consumeJumps(),1,'jump key repeat does not queue an automatic jump');
     const yaw=input.look.yaw;send(canvas,'pointercancel',2,160,50);send(canvas,'pointermove',2,200,50);

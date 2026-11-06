@@ -18,7 +18,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <button id="reset">출발점</button>
       <button id="practice-reset">다시 시작</button>
       <select id="game-mode" aria-label="게임 모드"><option value="duel">봇 1대1 · 쉬움</option><option value="practice">표적 연습</option></select>
-      <label class="pc-jump-setting"><select id="jump-key" aria-label="PC 점프 키 선택"><option value="" disabled selected>점프 키 선택</option><option value="Space">스페이스: 점프</option><option value="KeyJ">J: 점프</option></select></label>
+      <label class="pc-jump-setting"><select id="jump-key" aria-label="PC 점프 키 선택"><option value="Space" selected>스페이스: 점프</option><option value="KeyJ">J: 점프</option></select></label>
       <button id="help-toggle" aria-expanded="false" aria-controls="help">도움말</button>
     </div>
   </header>
@@ -28,7 +28,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <p>로봇의 눈높이에서 거리를 탐색합니다. 화면 중앙의 조준점이 바라보는 방향입니다.</p>
     <p><strong>PC</strong> WASD 이동 · 마우스 드래그로 시점 변경 · 짧게 클릭하면 발사. 더블클릭으로 마우스 고정을 시도하며 ESC로 해제합니다.</p>
     <p><strong>휴대폰</strong> 왼쪽 스틱 이동 · 화면 빈 공간을 좌우·위아래로 드래그해 시점 변경</p>
-    <p><strong>점프</strong> 휴대폰은 점프 버튼을 누릅니다. PC는 상단에서 점프 키를 선택해 주세요.</p>
+    <p><strong>점프</strong> 휴대폰은 점프 버튼을 누릅니다. PC는 스페이스바로 점프합니다. 메뉴에서 J키로 변경할 수 있습니다.</p>
     <p>권총은 탄창 12발, 표적은 체력 100입니다. 4발 맞히면 파괴됩니다. PC R키 또는 재장전 버튼으로 1.5초 동안 재장전합니다. 예비 탄약은 무제한입니다.</p>
     <p>봇 1대1: 양쪽 체력 100, 먼저 10킬 승리. 자동 회복 없이 사망 3초 후 부활합니다. 붉은 표시가 상대 봇입니다. 봇은 1초 조준 후 위치를 고정하고 0.4초 경고 뒤 발사합니다. 경고 때 옆으로 이동하면 피할 수 있으며, 벽 뒤로 숨으면 조준이 초기화됩니다.</p>
     <p>야경 개선: 젖은 노면의 빛, 수면 반짝임, 벽·지붕 표면과 금속 광택을 추가했습니다. 균형 화질에서는 추가 가로등 빛 번짐을 줄입니다.</p>
