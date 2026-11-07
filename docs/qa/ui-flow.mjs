@@ -107,3 +107,20 @@ let jumpCalls=0;world.jump=()=>{jumpCalls++;return true;};key('keydown','KeyF');
 click('home-open');click('home-online');click('home-start');click('online-create');await new Promise(resolve=>setImmediate(resolve));const dashGame=createNetworkGame();dashGame.join('me');dashGame.join('foe');qa.emitOnline(structuredClone(dashGame.state),'me');frame(350);calls.returnSeq=10;const sendCount=calls.networkCommands.length;key('keydown','KeyF');frame(16);assert.equal(calls.networkCommands.length,sendCount+1,'a dash event sends immediately before prediction');assert.equal(calls.networkCommands.at(-1).dash,true);frame(16);assert.equal(calls.networkCommands.filter(c=>c.dash).length,1,'one key edge produces one server dash event');click('home-open');
 console.log(`PASS: ${coarse?'mobile':'desktop'} DOM flow: setup, timing, help, pause/resume, comparison, sensitivity, lock, restart sounds`);
 hooks.deregister();
+
+// Android: scope activation must not depend on a synthetic click during multitouch.
+click('home-practice');choose('home-weapon','sniper');click('home-start');frame();
+const pointer=(id,type,props)=>el(id).dispatchEvent(Object.assign(new window.Event(type,{bubbles:true,cancelable:true}),props));
+scoped=false;frame();pointer('joystick','pointerdown',{pointerId:31,pointerType:'touch',clientX:50,clientY:20,button:0});pointer('game','pointerdown',{pointerId:32,pointerType:'touch',clientX:50,clientY:50,button:0});
+const scopeStart={...calls.updates.at(-1).p};pointer('scope','pointerdown',{pointerId:33,pointerType:'touch',button:0});assert.equal(scoped,true,'scope must activate on touch-down while joystick and look are held');
+pointer('scope','click',{detail:1});assert.equal(scoped,true,'the compatibility click must not toggle a second time');frame();assert.ok(Math.hypot(calls.updates.at(-1).p.x-scopeStart.x,calls.updates.at(-1).p.z-scopeStart.z)>0,'scope preserves the held movement pointer');assert.equal(el('scope').getAttribute('aria-pressed'),'true');
+pointer('game','pointermove',{pointerId:32,pointerType:'touch',clientX:70,clientY:50});pointer('scope','pointerdown',{pointerId:34,pointerType:'touch',button:0});assert.equal(scoped,false,'another touch zooms out without releasing movement');frame();
+pointer('joystick','pointerup',{pointerId:31});pointer('game','pointerup',{pointerId:32,pointerType:'touch'});key('keydown','KeyW');key('keydown','KeyQ');assert.equal(scoped,true,'PC Q works while W is held');key('keyup','KeyQ');key('keyup','KeyW');pointer('scope','click',{detail:0});assert.equal(scoped,false,'keyboard/assistive click remains supported');
+click('pause-open');pointer('scope','pointerdown',{pointerId:35,pointerType:'touch',button:0});assert.equal(scoped,false,'paused scope touch is ignored');click('resume');
+console.log('PASS: scope during movement + look multitouch, compatibility-click deduplication, PC W+Q, keyboard click and pause guard');
+// Online HUD must clear the previous mode's disabled state and reflect scope toggles.
+click('home-open');click('home-online');choose('home-weapon','sniper');click('home-start');click('online-create');await new Promise(resolve=>setImmediate(resolve));
+const scopeGame=createNetworkGame();scopeGame.join('me','sniper');scopeGame.join('foe');el('scope').disabled=true;qa.emitOnline(structuredClone(scopeGame.state),'me');frame(350);
+assert.equal(el('scope').disabled,false,'a living online sniper must not inherit an offline disabled button');scoped=false;pointer('joystick','pointerdown',{pointerId:41,pointerType:'touch',clientX:50,clientY:20,button:0});pointer('scope','pointerdown',{pointerId:42,pointerType:'touch',button:0});assert.equal(scoped,true);assert.equal(el('scope').getAttribute('aria-pressed'),'true');frame(50);assert.equal(scoped,true);
+scopeGame.state.players[0].health=0;qa.emitOnline(structuredClone(scopeGame.state),'me');frame();assert.equal(el('scope').disabled,true);const deadScope=scoped;pointer('scope','pointerdown',{pointerId:43,pointerType:'touch',button:0});assert.equal(scoped,deadScope,'dead online player cannot toggle scope');click('home-open');
+console.log('PASS: online scope readiness, pressed state and death guard');

@@ -393,6 +393,12 @@ export function createHarborScene(engine: Engine) {
   const scopeBody=MeshBuilder.CreateCylinder('weapon-scope',{diameter:.1,height:.32,tessellation:16},scene);
   scopeBody.parent=viewModel;scopeBody.position.set(.27,-.06,.68);scopeBody.rotation.x=Math.PI/2;scopeBody.material=metal;scopeBody.isPickable=false;
   const secondBarrel=box('shotgun-second-barrel',.36,-.2,.9,.07,.07,.42,metal);secondBarrel.parent=viewModel;secondBarrel.isPickable=false;
+  // Camera-held hands/gun must keep their own depth without being sliced by nearby walls.
+  // Lobby and opponent weapons remain in the world rendering group.
+  scene.setRenderingAutoClearDepthStencil(1,true,true,true);
+  for(const mesh of viewModel.getChildMeshes()){
+    mesh.renderingGroupId=1;mesh.isPickable=false;mesh.receiveShadows=false;
+  }
   const lobbyWeapons=createLobbyWeapons(scene);lobbyWeapons.attach(character.weaponSocket);for(const mesh of lobbyWeapons.meshes)shadows.addShadowCaster(mesh);
   addStreetDetails(scene);
   const buildingParts = new Set(occluders.flatMap(building => building.meshes));

@@ -362,7 +362,10 @@ async function start() {
       document.querySelector<HTMLProgressElement>('#player-health')!.value=me.health;
       document.querySelector('#duel-status')!.textContent=onlineState.winner?(onlineState.winner===onlineId?'승리!':'패배')+' · 홈에서 새 경기':me.health===0?`${Math.ceil(me.dead)}초 후 부활`:onlineStatus;
       document.querySelector('#weapon-name')!.textContent=state.weaponName;ammo.textContent=String(me.weapon.ammo);document.querySelector('#magazine-size')!.textContent=` / ${state.magazineSize}`;weaponStatus.textContent=me.weapon.reloadRemaining>0?`재장전 ${me.weapon.reloadRemaining.toFixed(1)}초`:'발사 준비';
-      document.querySelector<HTMLButtonElement>('#fire')!.disabled=me.health===0||!!onlineState.winner;document.querySelector<HTMLButtonElement>('#scope')!.hidden=me.weaponId!=='sniper';document.querySelector('#scope')!.textContent=state.scoped?'원래 시야':'확대';document.querySelector<HTMLElement>('#scope-overlay')!.hidden=!state.scoped;
+      document.querySelector<HTMLButtonElement>('#fire')!.disabled=me.health===0||!!onlineState.winner;
+      const scopeButton=document.querySelector<HTMLButtonElement>('#scope')!;
+      scopeButton.hidden=me.weaponId!=='sniper';scopeButton.disabled=me.health===0||!!onlineState.winner||onlineState.players.length<2||onlineState.players.some(p=>!p.connected)||!online.connected;
+      scopeButton.textContent=state.scoped?'원래 시야':'확대';scopeButton.setAttribute('aria-pressed',String(state.scoped));document.querySelector<HTMLElement>('#scope-overlay')!.hidden=!state.scoped;
       jumpButton.disabled=me.health===0||!!onlineState.winner||me.jump.height>0||me.jump.velocity!==0||(me.dash?.remaining??0)>0;reloadButton.disabled=me.health===0||me.weapon.reloadRemaining>0;reloadProgress.hidden=true;complete.hidden=true;
       return;
     }
@@ -447,11 +450,19 @@ async function start() {
     retry(isOnline){if(isOnline){openHome();openOnlineLobby();}else{restart();resumeGame();}},
   });
   document.querySelector('#home-records')!.addEventListener('click',()=>resultView.history());
+  function toggleScope(){
+    if(!canUseInventory())return;
+    if(onlineActive&&onlineState){const me=onlineState.players.find(p=>p.id===onlineId);if(!me||me.health===0||onlineState.winner||onlineState.players.length<2||onlineState.players.some(p=>!p.connected)||!online.connected)return;}
+    const before=world.practiceState().scoped;world.toggleScope();
+    if(world.practiceState().scoped!==before)audio.play('scope');
+    canvas.focus();refreshHud();
+  }
   window.addEventListener('keydown',event=>{
     const tag=(event.target as HTMLElement|null)?.tagName;
-    if(event.code==='KeyQ'&&!lobbyPolish.deploying&&!gameChoices.isOpen&&!resultView.isOpen&&!homeOpen&&!event.repeat&&!manualPaused&&!menuOpen&&picker.hidden&&!comparing&&document.querySelector<HTMLElement>('#help')!.hidden&&!['INPUT','SELECT','TEXTAREA'].includes(tag??'')){event.preventDefault();world.toggleScope();audio.play('scope');}
+    if(event.code==='KeyQ'&&!event.repeat&&!event.ctrlKey&&!event.altKey&&!event.metaKey&&!['INPUT','SELECT','TEXTAREA'].includes(tag??'')){event.preventDefault();toggleScope();}
   });
-  document.querySelector('#scope')!.addEventListener('click',()=>{if(lobbyPolish.deploying||gameChoices.isOpen||resultView.isOpen||homeOpen||manualPaused||menuOpen||!picker.hidden||comparing||!document.querySelector<HTMLElement>('#help')!.hidden)return;world.toggleScope();audio.play('scope');canvas.focus();});
+  document.querySelector<HTMLButtonElement>('#scope')!.addEventListener('pointerdown',event=>{if(event.button!==0)return;event.preventDefault();toggleScope();});
+  document.querySelector<HTMLButtonElement>('#scope')!.addEventListener('click',event=>{if(event.detail===0)toggleScope();});
   const help = document.querySelector<HTMLElement>('#help')!;
   const closeHelp=()=>{help.hidden=true;document.querySelector('#help-toggle')!.setAttribute('aria-expanded','false');input.reset();};
   document.querySelector('#pause-continue')!.addEventListener('click',()=>{closeHelp();closeMenu();resumeGame();});
