@@ -6,7 +6,8 @@
   "workers_dev": true,
   "vars": {
     "ALLOWED_ORIGINS": "https://project-3uu6s.vercel.app,http://localhost:5173,http://127.0.0.1:5173",
-    "NEON_AUTH_URL": "https://ep-lingering-field-azhtw5y3.neonauth.c-3.ap-southeast-1.aws.neon.tech/neondb/auth"
+    "NEON_AUTH_URL": "https://ep-lingering-field-azhtw5y3.neonauth.c-3.ap-southeast-1.aws.neon.tech/neondb/auth",
+    "ACCOUNTS_ENABLED": "true"
   },
   "durable_objects": {
     "bindings": [
