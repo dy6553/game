@@ -27,7 +27,7 @@ import { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator.
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
 import { PRACTICE_RULES,createWeapon,tryFire,beginReload,advanceWeapon,applyDamage } from './combat.ts';
 import { createJump,beginJump,advanceJump } from './jump.ts';
-import { BUILDINGS, COVERS,buildingWalls,interiorFurniture,indoorAt,DOOR_WIDTH } from './world.ts';
+import { PROTOTYPE, BUILDINGS, COVERS,buildingWalls,interiorFurniture,indoorAt,DOOR_WIDTH } from './world.ts';
 import type { Point } from './world.ts';
 import { createCharacter } from './characters.ts';
 import type { CharacterType } from './characters.ts';
@@ -469,7 +469,7 @@ export function createHarborScene(engine: Engine) {
   let jumpState=createJump();
   let hits=0,destroyed=0,shots=0;
   const effects=createShotEffects(scene,camera);
-  let preview = false, reference = false;
+  let preview = false, reference = false, lobbyPreview=false;
   const recoil=createRecoil();
   function equip(){const slot=inventory.slots[inventory.active]!;weaponId=slot.id;spec=WEAPONS[weaponId];weapon=slot.weapon;cooldown=slot.cooldown;scoped=false;recoil.clear();}
   const supplies=createSupplyCrates(scene,createPickups());
@@ -480,9 +480,10 @@ export function createHarborScene(engine: Engine) {
     effects.clear();botEffects.clear();robotImpact.clearParticles();for(const rig of botRigs.slice(1))rig.fx.clearParticles();recoil.clear();reference=value;player.setEnabled(value);plinth.setEnabled(false);viewModel.setEnabled(!value);
     camera.fov=value?0.95:1.25;camera.getProjectionMatrix(true);
   }
-  function setPreview(value: boolean) {
+  function setPreview(value: boolean,lobby=false) {
+    lobbyPreview=value&&lobby;
     effects.clear();botEffects.clear();robotImpact.clearParticles();for(const rig of botRigs.slice(1))rig.fx.clearParticles();recoil.clear();reference=false;preview = value;plinth.setEnabled(value); player.setEnabled(value); viewModel.setEnabled(!value);
-    camera.fov=value?0.85:1.25;camera.getProjectionMatrix(true);
+    camera.fov=value?(lobbyPreview?.65:.85):1.25;camera.getProjectionMatrix(true);
     previewLight.setEnabled(value);
     for(const light of streetLights) light.setEnabled(!value);
   }
@@ -528,16 +529,17 @@ export function createHarborScene(engine: Engine) {
       if(wasBotDead&&state.botHealth>0)robotImpact.reset();
       if(state.respawnVersion!==seenRespawn){seenRespawn=state.respawnVersion;p.x=state.playerPosition.x;p.z=state.playerPosition.z;weaponId=startWeapon;spec=WEAPONS[weaponId];inventory=createInventory(startWeapon);weapon=createWeapon(spec);if(survivalMode)pickups=createPickups();cooldown=0;scoped=false;jumpState=createJump();recoil.clear();}
     }
-    player.position.x = p.x; player.position.z = p.z;
+    const displayPoint=preview&&lobbyPreview?PROTOTYPE.spawn:p;
+    player.position.x = displayPoint.x; player.position.z = displayPoint.z;
     player.position.y=preview||reference?0:jumpState.height;
     player.rotation.y = look.yaw;
     if(reference) {
       camera.position.set(42,50,-60);camera.setTarget(new Vector3(0,0,7));
     } else if (preview) {
-      camera.position.set(p.x + 1.7, 2, p.z + 4.3);
+      camera.position.set(displayPoint.x+(lobbyPreview?.7:1.7),lobbyPreview?1.7:2,displayPoint.z+(lobbyPreview?6.5:4.3));
       player.rotation.y = Math.sin(animationTime*0.5)*0.12-0.1;
-      previewLight.position.set(p.x+1,3.8,p.z+3);
-      camera.setTarget(new Vector3(p.x+1.25,1.35,p.z));
+      previewLight.position.set(displayPoint.x+1,3.8,displayPoint.z+3);
+      camera.setTarget(new Vector3(displayPoint.x+(lobbyPreview?0:1.25),lobbyPreview?1.4:1.35,displayPoint.z));
     } else {
       camera.position.set(p.x,(character.type==='robot-cat'?1.9:1.95)+jumpState.height,p.z);
       camera.fov=(scoped?.38:1.25)+kick.fov;viewModel.setEnabled(!scoped);

@@ -3,7 +3,7 @@ const CHOICES_MARKUP=`<section id="game-choice-dialog" class="game-choice-overla
 const descriptions:Record<string,string>={duel:'봇 한 명과 대결 · 먼저 10킬',ffa:'나와 봇 3명 · 각자 10킬 경쟁',survival:'생명 3개 · 웨이브를 돌파하세요',practice:'이동과 조준 · 표적 3개 연습',easy:'천천히 조준하는 봇 · 처음이라면 추천',normal:'좌우로 움직이는 봇 · 균형 잡힌 도전',hard:'빠른 이동과 조준 · 숙련자에게 추천',auto:'성과에 맞춰 조금씩 조절 · 생존 전용',pistol:'12발 · 단발 · 균형 잡힌 기본 무기',machinegun:'30발 · 연사 · 지속 사격',shotgun:'6발 · 넓게 퍼지는 근거리 사격',sniper:'5발 · 확대 조준 · 강한 한 발',robot:'푸른 눈빛의 소형 로봇','robot-cat':'고양이 귀와 따뜻한 눈빛'};
 const marks:Record<string,string>={duel:'1:1',ffa:'FFA',survival:'WAVE',practice:'AIM',easy:'I',normal:'II',hard:'III',auto:'AUTO',pistol:'PT',machinegun:'MG',shotgun:'SG',sniper:'SR',robot:'01','robot-cat':'02'};
 function titleFor(select:HTMLSelectElement){
- if(select.id.includes('difficulty'))return '난이도 선택';if(select.id.endsWith('mode'))return '게임 모드 선택';if(select.id.includes('weapon'))return '시작 무기 선택';if(select.id==='online-character')return '캐릭터 선택';
+ if(select.id.includes('difficulty'))return '난이도 선택';if(select.id.endsWith('mode'))return '게임 모드 선택';if(select.id.includes('weapon'))return '시작 무기 선택';if(select.id.endsWith('character'))return '캐릭터 선택';
  return [...(select.closest('label')?.childNodes??[])].filter(n=>n.nodeType===3).map(n=>n.textContent).join('').trim()||select.getAttribute('aria-label')||'설정 선택';
 }
 export function createGameChoices(actions:{opened():void}){
@@ -37,7 +37,7 @@ export function createGameChoices(actions:{opened():void}){
    check.className='choice-option-check';check.textContent=option.value===select.value?'선택됨 ✓':'선택 →';copy.append(name,description);button.append(mark,copy,check);
    button.addEventListener('click',()=>{if(select.disabled||option.disabled||option.hidden)return;select.value=option.value;close();select.dispatchEvent(new window.Event('change',{bubbles:true}));refresh();});options.append(button);
   }
-  options.classList.toggle('four-options',options.children.length===4);dialog.dataset.choiceSource=select.id;
+  options.classList.toggle('four-options',options.children.length===4||options.children.length===2);dialog.dataset.choiceSource=select.id;
   dialog.hidden=false;document.body.classList.add('choice-open');bindings.find(b=>b.select===select)!.button.setAttribute('aria-expanded','true');
   inertBefore=[...dialog.parentElement!.children].filter(e=>e!==dialog).map(e=>({element:e as HTMLElement,value:(e as HTMLElement).inert}));for(const {element} of inertBefore)element.inert=true;
   actions.opened();(options.querySelector<HTMLButtonElement>('[aria-pressed="true"]')??options.querySelector<HTMLButtonElement>('button')??document.querySelector<HTMLButtonElement>('#game-choice-close'))!.focus();
