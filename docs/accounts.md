@@ -1,5 +1,17 @@
 # 로그인 · 공개 공식 전적
 
+## 사용자 제공 Auth 주소 확인 — 2026-11-07
+
+사용자가 JWKS 주소를 제공했다. 정상 응답의 Ed25519/EdDSA 공개 키를 확인했고, 아래 Auth URL의 `/get-session`은 게임 Origin에서 HTTP200/null 및 credentials 허용으로 응답했다. 실제 로그인한 세션 검증을 뜻하지 않는다.
+
+- Auth URL: `https://ep-lingering-field-azhtw5y3.neonauth.c-3.ap-southeast-1.aws.neon.tech/neondb/auth`
+- JWKS: Auth URL 뒤에 `/.well-known/jwks.json`을 붙인 주소
+
+두 Worker 배포 설정에 공개 `NEON_AUTH_URL`을 반영했다. `keep_vars=true`로 대시보드에서 설정한 계정 활성화 값 등이 다음 Git 배포 때 삭제되지 않도록 한다. `DATABASE_URL`은 secret이며 Git에 넣지 않는다. 계정 활성화 값은 DB 설정 완료 전 강제로 켜지 않는다.
+
+현재 남은 운영 설정은 **같은 Neon 브랜치에서 SQL 마이그레이션 실행 → Worker DATABASE_URL secret 등록 → ACCOUNTS_ENABLED 활성화 → Vercel 공개 Auth URL 설정·재배포 → 실계정 E2E**다. CLI/연결 도구의 인증 정보가 없어 DB와 Cloudflare 비밀 설정을 대신 변경하지 못한다. 사용자는 DB 연결 문자열을 채팅에 보내지 말고 서비스의 비밀 설정란에 직접 입력한다.
+
+
 ## 확정한 범위
 
 2026-11-07 사용자 승인: 기존 Neon 프로젝트 `quiet-wind-21449169`의 이메일·비밀번호 인증. 비로그인도 봇·연습·온라인을 모두 플레이한다. 로그인한 사용자의 온라인 1대1만 서버 공식 기록으로 저장한다. 봇 기록과 기존 브라우저 개인 전적은 유지한다.
