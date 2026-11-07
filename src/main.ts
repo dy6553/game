@@ -1,3 +1,4 @@
+import {HOME_MARKUP,createHomeScreen} from './home-screen.ts';
 import {createResultJournal,createResultTracker,type ResultSnapshot} from './results.ts';
 import {RESULTS_MARKUP,createResultsView} from './results-view.ts';
 import {BOT_DIFFICULTIES,isSurvivalDifficulty} from './duel.ts';
@@ -23,11 +24,7 @@ import './style.css';
 const readMode=(value:string):'practice'|'duel'|'ffa'|'survival'=>value==='survival'?'survival':value==='ffa'?'ffa':value==='duel'?'duel':'practice';
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-  <section id="home-screen" class="home-screen" aria-labelledby="home-title">
-    <div class="home-intro"><span class="eyebrow">HARBOR / NIGHT ARENA</span><h1 id="home-title">항구의 밤</h1><p>불빛이 내려앉은 항구, 당신의 로봇으로 출격하세요.</p></div>
-    <div class="home-modes"><button id="home-online"><span>01 / ONLINE</span><strong>온라인 대전</strong><p>사람 대 사람 1대1</p><small>방 코드 · 친구 초대 · 자동 매칭</small></button><button id="home-bot"><span>02 / SOLO</span><strong>봇 대전</strong><p>1대1 · 개인전 · 웨이브 생존</p><small>난이도·캐릭터·무기를 고르고 출격</small></button><button id="home-practice"><span>03 / TRAINING</span><strong>표적 연습</strong><p>이동과 조준, 네 가지 무기 익히기</p><small>부담 없이 연습하기</small></button></div>
-    <div><button id="home-records">개인 전적</button></div><p class="home-controls">PC: WASD 이동 · E 획득 · 1~3 무기 교체 · 마우스 조준 &nbsp; / &nbsp; 모바일: 가로 화면 · 터치 조작</p>
-  </section>
+  ${HOME_MARKUP}
   <section id="online-lobby" class="online-lobby" hidden aria-labelledby="online-title"><div><button id="online-back">홈으로</button><h2 id="online-title">온라인 1대1</h2><p>먼저 10킬 · 두 사람이 연결되면 시작합니다.</p><label>캐릭터<select id="online-character"><option value="robot">소형 로봇</option><option value="robot-cat">고양이형 로봇</option></select></label><label>시작 무기<select id="online-weapon"><option value="pistol">권총</option><option value="machinegun">기관총</option><option value="shotgun">산탄총</option><option value="sniper">저격총</option></select></label><div class="online-actions"><button id="online-create">방 만들기</button><button id="online-quick">자동 매칭</button></div><label>방 코드<input id="online-code" maxlength="8" autocomplete="off" placeholder="8자리 코드"></label><button id="online-join">코드로 입장</button><p id="online-message" role="status"></p><p>온라인 대전에서는 메뉴를 열어도 상대의 경기는 계속됩니다.</p></div></section>
   ${RESULTS_MARKUP}
   <canvas id="game" tabindex="0" aria-label="항구 도시 1인칭 탐색. WASD로 이동하고 화면을 드래그해 시점을 돌립니다."></canvas>
@@ -192,7 +189,7 @@ async function start() {
   }
   let onlineControlsActive=false;const updateOnlineControls=(active:boolean)=>{if(active===onlineControlsActive)return;onlineControlsActive=active;document.querySelector<HTMLElement>('#online-copy')!.hidden=!active;for(const id of ['character-open','game-mode','bot-difficulty','weapon-select','practice-reset','reset'])document.querySelector<HTMLButtonElement>('#'+id)!.disabled=active;};
   document.querySelector('#online-copy')!.addEventListener('click',async()=>{const url=new URL(location.href);url.searchParams.set('room',onlineCode);try{await navigator.clipboard.writeText(url.href);document.querySelector('#online-copy')!.textContent='초대 링크 복사됨';}catch{document.querySelector('#online-copy')!.textContent=`방 코드 ${onlineCode}`;}});
-  document.querySelector('#home-online')!.addEventListener('click',()=>{home.hidden=true;onlineLobby.hidden=false;document.querySelector('#online-message')!.textContent=online.available?'방을 만들거나 친구의 코드를 입력하세요.':'온라인 서버 연결 준비 중입니다. 봇 대전과 표적 연습은 바로 이용할 수 있습니다.';for(const id of ['online-create','online-join','online-quick'])document.querySelector<HTMLButtonElement>('#'+id)!.disabled=!online.available;});
+  const openOnlineLobby=()=>{home.hidden=true;onlineLobby.hidden=false;document.querySelector('#online-message')!.textContent=online.available?'방을 만들거나 친구의 코드를 입력하세요.':'온라인 서버 연결 준비 중입니다. 봇 대전과 표적 연습은 바로 이용할 수 있습니다.';for(const id of ['online-create','online-join','online-quick'])document.querySelector<HTMLButtonElement>('#'+id)!.disabled=!online.available;};
   for(const [id,action] of [['online-create','create'],['online-join','join'],['online-quick','quick']] as const)document.querySelector('#'+id)!.addEventListener('click',async()=>{
     const buttons=['online-create','online-join','online-quick'].map(id=>document.querySelector<HTMLButtonElement>('#'+id)!);buttons.forEach(button=>button.disabled=true);
     try{await online.enter(action,document.querySelector<HTMLInputElement>('#online-code')!.value.trim().toUpperCase(),document.querySelector<HTMLSelectElement>('#online-weapon')!.value,document.querySelector<HTMLSelectElement>('#online-character')!.value);}catch(error){document.querySelector('#online-message')!.textContent=error instanceof Error?error.message:'방에 입장하지 못했습니다.';}finally{buttons.forEach(button=>button.disabled=!online.available);}
@@ -267,11 +264,8 @@ async function start() {
   const refreshCharacter = () => choices.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.character === world.characterType)));
   const openPicker = () => { setComparison(false);input.setEnabled(false);document.querySelector<HTMLSelectElement>('#start-mode')!.value=document.querySelector<HTMLSelectElement>('#game-mode')!.value;document.querySelector<HTMLSelectElement>('#start-difficulty')!.value=document.querySelector<HTMLSelectElement>('#bot-difficulty')!.value;document.querySelector<HTMLSelectElement>('#start-weapon')!.value=document.querySelector<HTMLSelectElement>('#weapon-select')!.value; input.reset(); if (document.pointerLockElement) document.exitPointerLock(); world.setPreview(true); refreshCharacter(); picker.hidden = false; choices[0]!.focus(); };
   const home=document.querySelector<HTMLElement>('#home-screen')!;
-  const openHome=()=>{resultTracker.cancel();resultView.hide();online.leave();onlineMotion.reset();remoteMotion.reset();pendingSlot=undefined;pendingTake=undefined;choosePickupId=undefined;onlineActive=false;onlineState=null;onlineId='';onlineEventId=-1;world.endOnline();onlineLobby.hidden=true;updateOnlineControls(false);homeOpen=true;home.hidden=false;document.body.classList.add('at-home');manualPaused=false;pausePanel.hidden=true;closeMenu();document.querySelector<HTMLElement>('#help')!.hidden=true;picker.hidden=true;setComparison(false);input.setEnabled(false);world.setPreview(true);document.querySelector<HTMLButtonElement>('#home-bot')!.focus();};
-  const chooseMode=(value:'duel'|'practice')=>{homeMatchPending=true;homeOpen=false;home.hidden=true;document.body.classList.remove('at-home');openPicker();document.querySelector<HTMLSelectElement>('#start-mode')!.value=value;};
+  const openHome=()=>{syncHomeSelection();resultTracker.cancel();resultView.hide();online.leave();onlineMotion.reset();remoteMotion.reset();pendingSlot=undefined;pendingTake=undefined;choosePickupId=undefined;onlineActive=false;onlineState=null;onlineId='';onlineEventId=-1;world.endOnline();onlineLobby.hidden=true;updateOnlineControls(false);homeOpen=true;home.hidden=false;document.body.classList.add('at-home');manualPaused=false;pausePanel.hidden=true;closeMenu();document.querySelector<HTMLElement>('#help')!.hidden=true;picker.hidden=true;setComparison(false);input.setEnabled(false);world.setPreview(true);document.querySelector<HTMLButtonElement>('#home-start')!.focus();};
   document.querySelector('#online-back')!.addEventListener('click',openHome);
-  document.querySelector('#home-bot')!.addEventListener('click',()=>chooseMode('duel'));
-  document.querySelector('#home-practice')!.addEventListener('click',()=>chooseMode('practice'));
   document.querySelector('#home-open')!.addEventListener('click',openHome);
   document.querySelector('#setup-home')!.addEventListener('click',openHome);
   openCharacter.addEventListener('click', openPicker);
@@ -300,11 +294,26 @@ async function start() {
     const changed=mode.value!==nextMode||weapon.value!==nextWeapon||difficulty.value!==nextDifficulty;
     mode.value=nextMode;weapon.value=nextWeapon;if(isSurvivalDifficulty(nextDifficulty))difficulty.value=nextDifficulty;
     if((changed||homeMatchPending)&&isWeaponId(nextWeapon)){world.setMode(readMode(nextMode),isSurvivalDifficulty(nextDifficulty)?nextDifficulty:'easy');world.selectWeapon(nextWeapon);restart();}
-    homeMatchPending=false;void audio.unlock();input.reset();picker.hidden=true;world.setPreview(false);closeMenu();hasPlayed=true;resumeGame();
+    homeOpen=false;home.hidden=true;document.body.classList.remove('at-home');homeMatchPending=false;void audio.unlock();input.reset();picker.hidden=true;world.setPreview(false);closeMenu();hasPlayed=true;resumeGame();
     if(locked)lockMouse();
   };
   startButton.addEventListener('click',()=>beginGame(false));
   startLocked.addEventListener('click',()=>beginGame(true));
+  const homeView=createHomeScreen({
+    selectCharacter(type){world.selectCharacter(type);refreshCharacter();},
+    start(selection,locked){
+      if(selection.mode==='online'){
+        document.querySelector<HTMLSelectElement>('#online-character')!.value=selection.character;document.querySelector<HTMLSelectElement>('#online-weapon')!.value=selection.weapon;openOnlineLobby();return;
+      }
+      document.querySelector<HTMLSelectElement>('#start-mode')!.value=selection.mode;document.querySelector<HTMLSelectElement>('#start-difficulty')!.value=selection.difficulty;document.querySelector<HTMLSelectElement>('#start-weapon')!.value=selection.weapon;
+      homeMatchPending=true;beginGame(locked);
+    },
+  });
+  function syncHomeSelection(){
+    const weapon=document.querySelector<HTMLSelectElement>(onlineActive?'#online-weapon':'#weapon-select')!.value,character=onlineActive?document.querySelector<HTMLSelectElement>('#online-character')!.value:world.characterType,difficulty=document.querySelector<HTMLSelectElement>('#bot-difficulty')!.value;
+    homeView.sync({mode:onlineActive?'online':readMode(document.querySelector<HTMLSelectElement>('#game-mode')!.value),weapon:isWeaponId(weapon)?weapon:'pistol',character:isCharacterType(character)?character:'robot',difficulty:isSurvivalDifficulty(difficulty)?difficulty:'easy'});
+  }
+
   picker.addEventListener('keydown', event => {
     if (event.key === 'Tab') {
       event.preventDefault();
@@ -424,7 +433,7 @@ async function start() {
   const resultView=createResultsView(journal,{
     opened(){input.setEnabled(false);input.reset();pausePanel.hidden=true;manualPaused=false;closeMenu();help.hidden=true;if(document.pointerLockElement)document.exitPointerLock();audio.pause(true);},
     home:openHome,
-    retry(isOnline){if(isOnline){openHome();document.querySelector<HTMLButtonElement>('#home-online')!.click();}else{restart();resumeGame();}},
+    retry(isOnline){if(isOnline){openHome();openOnlineLobby();}else{restart();resumeGame();}},
   });
   document.querySelector('#home-records')!.addEventListener('click',()=>resultView.history());
   window.addEventListener('keydown',event=>{
@@ -454,7 +463,7 @@ async function start() {
   await world.scene.whenReadyAsync();
   loading.hidden = true;
   openHome();
-  const invited=new URLSearchParams(window.location?.search??'').get('room');if(invited&&/^[0-9A-F]{8}$/.test(invited.toUpperCase())){document.querySelector<HTMLInputElement>('#online-code')!.value=invited.toUpperCase();document.querySelector<HTMLButtonElement>('#home-online')!.click();}
+  const invited=new URLSearchParams(window.location?.search??'').get('room');if(invited&&/^[0-9A-F]{8}$/.test(invited.toUpperCase())){document.querySelector<HTMLInputElement>('#online-code')!.value=invited.toUpperCase();openOnlineLobby();}
   let resetClock=true;
   document.addEventListener('visibilitychange',()=>{resetClock=true;});
   window.addEventListener('focus',()=>{resetClock=true;});
