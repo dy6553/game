@@ -79,7 +79,7 @@ battle.playerHealth=75;battle.respawnVersion=1;battle.winner='player';frame();as
 click('practice-reset');frame();battle.playerHealth=75;battle.respawnVersion=1;battle.winner='player';frame();assert.equal(calls.sounds.filter(s=>s==='win').length,wins+1,'same win plays again after restart');assert.equal(calls.sounds.filter(s=>s==='respawn').length,2,'first respawn plays each match');
 click('home-open');frame();assert.equal(el('home-screen').hidden,false);assert.equal(el('character-picker').hidden,true);click('home-practice');click('home-start');click('character-open');assert.equal(el('start-mode').value,'practice');click('character-start');frame();assert.equal(mode,'practice');
 assert.ok(document.querySelector('#weapon-slots'),'weapon slots must be present');assert.ok(document.querySelector('#pickup-action'),'touch pickup button must be present');assert.equal(document.querySelectorAll('#weapon-slots button').length,3);
-key('keydown','Digit1');assert.equal(calls.slot,0,'number key selects a slot');calls.slot=null;document.querySelector('#weapon-slots button').click();assert.equal(calls.slot,0,'touch slot button selects a slot');calls.slot=null;click('pause-open');frame();key('keydown','Digit2');assert.equal(calls.slot,null,'pause blocks slot selection');click('resume');frame();
+key('keydown','Digit1');assert.equal(calls.slot,0,'number key selects a slot');calls.slot=null;document.querySelector('#weapon-slots button').dispatchEvent(Object.assign(new window.Event('click',{bubbles:true}),{detail:0}));assert.equal(calls.slot,0,'touch slot button selects a slot');calls.slot=null;click('pause-open');frame();key('keydown','Digit2');assert.equal(calls.slot,null,'pause blocks slot selection');click('resume');frame();
 assert.ok(el('bot-difficulty'),'bot difficulty selector must exist');assert.ok(el('start-difficulty'),'setup difficulty selector must exist');assert.equal(el('bot-difficulty').querySelectorAll('option').length,4);
 change('game-mode','duel');battle.playerKills=4;change('bot-difficulty','hard');frame();assert.equal(battle.difficulty,'hard');assert.equal(battle.playerKills,0,'difficulty change starts a new match');click('character-open');assert.equal(el('start-difficulty').value,'hard');change('start-difficulty','normal');click('character-start');frame();assert.equal(battle.difficulty,'normal');assert.equal(el('bot-difficulty').value,'normal');assert.ok(el('duel-score').textContent.includes('보통'));change('game-mode','practice');frame();assert.equal(el('bot-difficulty-setting').hidden,true);change('game-mode','duel');frame();assert.equal(battle.difficulty,'normal');
 assert.ok(el('start-mode').querySelector('option[value="ffa"]'),'setup must offer the three-bot match');assert.ok(el('game-mode').querySelector('option[value="ffa"]'),'menu must offer the three-bot match');
@@ -118,9 +118,36 @@ pointer('game','pointermove',{pointerId:32,pointerType:'touch',clientX:70,client
 pointer('joystick','pointerup',{pointerId:31});pointer('game','pointerup',{pointerId:32,pointerType:'touch'});key('keydown','KeyW');key('keydown','KeyQ');assert.equal(scoped,true,'PC Q works while W is held');key('keyup','KeyQ');key('keyup','KeyW');pointer('scope','click',{detail:0});assert.equal(scoped,false,'keyboard/assistive click remains supported');
 click('pause-open');pointer('scope','pointerdown',{pointerId:35,pointerType:'touch',button:0});assert.equal(scoped,false,'paused scope touch is ignored');click('resume');
 console.log('PASS: scope during movement + look multitouch, compatibility-click deduplication, PC W+Q, keyboard click and pause guard');
+// Pickup/slot activation must work without a compatibility click during multitouch.
+const savedInventoryState=world.inventoryState,savedPickup=world.pickup;
+const heldPosition=calls.updates.at(-1).p;
+let pickupCalls=0;
+world.inventoryState=()=>({inventory:{active:0,slots:[{id:'sniper',weapon:{ammo:5,reloadRemaining:0},cooldown:0},{id:'pistol',weapon:{ammo:12,reloadRemaining:0},cooldown:0}]},pickups:[{id:'crate-machinegun',weaponId:'machinegun',x:heldPosition.x,z:heldPosition.z,remaining:0}]});
+world.pickup=()=>{pickupCalls++;return 'added';};frame();
+pointer('joystick','pointerdown',{pointerId:51,pointerType:'touch',clientX:50,clientY:20,button:0});pointer('game','pointerdown',{pointerId:52,pointerType:'touch',clientX:50,clientY:50,button:0});
+pointer('pickup-action','pointerdown',{pointerId:53,pointerType:'touch',button:0});assert.equal(pickupCalls,1,'pickup activates on touch-down while moving and looking');
+pointer('pickup-action','click',{detail:1});assert.equal(pickupCalls,1,'pickup compatibility click must not duplicate the request');
+const slotButton=document.querySelectorAll('#weapon-slots button')[1];
+const slotPointer=(type,props)=>slotButton.dispatchEvent(Object.assign(new window.Event(type,{bubbles:true,cancelable:true}),props));
+calls.slot=null;slotPointer('pointerdown',{pointerId:54,pointerType:'touch',button:0});assert.equal(calls.slot,1,'slot switches on touch-down while moving');
+calls.slot=null;slotPointer('click',{detail:1});assert.equal(calls.slot,null,'slot compatibility click must not repeat the request');
+slotPointer('click',{detail:0});assert.equal(calls.slot,1,'keyboard/assistive activation remains available');
+const beforeMove={...calls.updates.at(-1).p};frame();assert.ok(Math.hypot(calls.updates.at(-1).p.x-beforeMove.x,calls.updates.at(-1).p.z-beforeMove.z)>0,'inventory actions preserve movement');
+click('pause-open');calls.slot=null;pointer('pickup-action','pointerdown',{pointerId:55,pointerType:'touch',button:0});slotPointer('pointerdown',{pointerId:56,pointerType:'touch',button:0});assert.equal(pickupCalls,1,'pause blocks pickup');assert.equal(calls.slot,null,'pause blocks slots');click('resume');
+world.inventoryState=()=>({inventory:{active:0,slots:['sniper','pistol','shotgun'].map(id=>({id,weapon:{ammo:5,reloadRemaining:0},cooldown:0}))},pickups:[{id:'crate-machinegun',weaponId:'machinegun',x:calls.updates.at(-1).p.x,z:calls.updates.at(-1).p.z,remaining:0}]});frame();
+pointer('pickup-action','pointerdown',{pointerId:57,pointerType:'touch',button:0});frame();assert.equal(el('pickup-cancel').hidden,false,'full inventory asks which weapon to discard');
+pointer('pickup-cancel','pointerdown',{pointerId:58,pointerType:'touch',button:0});frame();assert.equal(el('pickup-cancel').hidden,true,'cancel also responds on touch-down');
+const beforeReplace=pickupCalls;pointer('pickup-action','pointerdown',{pointerId:59,pointerType:'touch',button:0});frame();slotPointer('pointerdown',{pointerId:60,pointerType:'touch',button:0});assert.equal(pickupCalls,beforeReplace+1,'slot touch confirms explicit replacement');
+world.inventoryState=savedInventoryState;world.pickup=savedPickup;frame();
+console.log('PASS: inventory pickup/slot during movement + look, click deduplication, keyboard activation and pause guards');
 // Online HUD must clear the previous mode's disabled state and reflect scope toggles.
 click('home-open');click('home-online');choose('home-weapon','sniper');click('home-start');click('online-create');await new Promise(resolve=>setImmediate(resolve));
 const scopeGame=createNetworkGame();scopeGame.join('me','sniper');scopeGame.join('foe');el('scope').disabled=true;qa.emitOnline(structuredClone(scopeGame.state),'me');frame(350);
 assert.equal(el('scope').disabled,false,'a living online sniper must not inherit an offline disabled button');scoped=false;pointer('joystick','pointerdown',{pointerId:41,pointerType:'touch',clientX:50,clientY:20,button:0});pointer('scope','pointerdown',{pointerId:42,pointerType:'touch',button:0});assert.equal(scoped,true);assert.equal(el('scope').getAttribute('aria-pressed'),'true');frame(50);assert.equal(scoped,true);
+const onlineMe=scopeGame.state.players[0];onlineMe.x=0;onlineMe.z=-4;onlineMe.inventory.slots.push(structuredClone(scopeGame.state.players[1].inventory.slots[0]));qa.emitOnline(structuredClone(scopeGame.state),'me');frame();
+pointer('pickup-action','pointerdown',{pointerId:61,pointerType:'touch',button:0});slotPointer('pointerdown',{pointerId:62,pointerType:'touch',button:0});frame(50);
+assert.equal(calls.networkCommands.at(-1).pickup,'crate-machinegun','online moving pickup is sent to server');assert.equal(calls.networkCommands.at(-1).slot,1,'online moving slot selection is sent to server');
+frame(50);assert.equal(calls.networkCommands.at(-1).pickup,undefined,'pickup is not resent after successful send');
+console.log('PASS: online inventory touch requests reach the command queue once');
 scopeGame.state.players[0].health=0;qa.emitOnline(structuredClone(scopeGame.state),'me');frame();assert.equal(el('scope').disabled,true);const deadScope=scoped;pointer('scope','pointerdown',{pointerId:43,pointerType:'touch',button:0});assert.equal(scoped,deadScope,'dead online player cannot toggle scope');click('home-open');
 console.log('PASS: online scope readiness, pressed state and death guard');

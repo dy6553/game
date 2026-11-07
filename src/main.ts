@@ -189,9 +189,14 @@ async function start() {
     if(onlineActive)pendingTake={pickup:crate.id,replace};else if(world.pickup(data.position,crate.id,replace)==='added')audio.play('pickup');choosePickupId=undefined;
   }
   function requestSlot(slot:number){if(!canUseInventory())return;const data=inventoryData();if(data.blocked||!data.ready)return;if(choosePickupId){requestPickup(slot);return;}if(onlineActive)pendingSlot=slot;else if(world.switchWeapon(slot))audio.play('equip');}
-  slotButtons.forEach((button,i)=>button.addEventListener('click',()=>requestSlot(i)));
-  document.querySelector('#pickup-action')!.addEventListener('click',()=>requestPickup());
-  document.querySelector('#pickup-cancel')!.addEventListener('click',()=>{choosePickupId=undefined;});
+  // Non-primary touches do not reliably produce click while movement/look are held.
+  function bindInventoryAction(button:HTMLButtonElement,action:()=>void){
+    button.addEventListener('pointerdown',event=>{if(event.button!==0||button.disabled)return;event.preventDefault();action();});
+    button.addEventListener('click',event=>{if(event.detail===0&&!button.disabled)action();});
+  }
+  slotButtons.forEach((button,i)=>bindInventoryAction(button,()=>requestSlot(i)));
+  bindInventoryAction(document.querySelector<HTMLButtonElement>('#pickup-action')!,()=>requestPickup());
+  bindInventoryAction(document.querySelector<HTMLButtonElement>('#pickup-cancel')!,()=>{choosePickupId=undefined;});
   window.addEventListener('keydown',event=>{const tag=(event.target as HTMLElement|null)?.tagName;if(['INPUT','SELECT','TEXTAREA'].includes(tag??''))return;if(event.code==='Escape')choosePickupId=undefined;if(!canUseInventory()||event.repeat)return;if(event.code==='KeyE'){event.preventDefault();requestPickup();}if(/^Digit[123]$/.test(event.code)){event.preventDefault();requestSlot(Number(event.code.slice(-1))-1);}});
   function refreshInventory(){
     inventoryUi.hidden=homeOpen||!picker.hidden||comparing;if(inventoryUi.hidden)return;
