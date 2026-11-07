@@ -1,5 +1,15 @@
 # 로그인 · 공개 공식 전적
 
+## 운영 준비 상태 — 2026-11-07 갱신
+
+운영 DB 카탈로그에서 필수 전적 테이블·삭제 트리거 존재를 확인해 `database=ready`가 됐다. SQL을 다시 실행하지 않는다. Worker `ACCOUNTS_ENABLED=true` 배포 및 `/health/accounts`의 전체 `ready=true`까지 확인했다. 서버/계정20개 집중 검사와 Worker dry-run을 통과했다.
+
+Vercel 공개 Auth URL을 설정해 실제 Chromium 모바일 화면에서 가입을 검사했으나 Neon이 POST 요청을 `403 INVALID_ORIGIN`으로 차단했다. 비로그인 GET 세션의 CORS200 응답은 이 허용 설정을 증명하지 않는다. 로그인·가입·실계정 전적 E2E는 미완료다. 테스트 가입도 Origin 검사에서 거절돼 테스트 계정은 생성되지 않았다.
+
+다음 필요한 외부 설정: Neon의 같은 production 브랜치 Better Auth → Configuration → Domains에 `https://project-3uu6s.vercel.app`을 허용한다. Origin을 위조하거나 관리 인증을 우회하지 않는다. 제어 가능한 Neon 관리 로그인/연결 도구가 현재 없어 이 설정은 계정 소유자가 콘솔에서 추가해야 한다.
+
+가입이 실패하는 화면을 계속 노출하지 않도록 Vercel `VITE_NEON_AUTH_URL`은 일단 빈 값으로 유지해 계정 버튼을 숨긴다. Worker의 DB/인증 준비는 활성화 상태다. 도메인 허용 후 공개 Auth URL을 복구·배포하고 실제 가입→세션→공식 결과→공개 조회→삭제를 재검사한다. 비밀 DB 연결값을 다시 입력하거나 공유할 필요는 없다.
+
 ## DB 등록 후 준비 상태 확인
 
 운영 확인: Worker 준비 상태가 `databaseConfigured:true`, `database:schema_missing`, `authConfigured:true`, `enabled:false`, `ready:false`로 응답했다. DB 연결은 성공했고, 필수 테이블/삭제 트리거 구성과 로그인 활성화는 아직 남아 있다. Neon 관리 로그인 자격이 현재 작업 환경에 없으므로 `server/migrations/001-official-records.sql`을 해당 브랜치 SQL Editor에서 실행한 후 상태를 다시 확인한다.
