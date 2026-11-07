@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';
 const original=await readFile(new URL('../server/worker.js',import.meta.url),'utf8');
-const source=original.replace("import { DurableObject } from 'cloudflare:workers';",'class DurableObject {constructor(ctx,env){this.ctx=ctx;this.env=env;}}').replaceAll("'../src/network-game.ts'",JSON.stringify(new URL('../src/network-game.ts',import.meta.url).href)).replaceAll("'./account-auth.js'",JSON.stringify(new URL('../server/account-auth.js',import.meta.url).href)).replaceAll("'./official-records.js'",JSON.stringify(new URL('../server/official-records.js',import.meta.url).href)).replaceAll("'./record-store.js'",JSON.stringify(new URL('../server/record-store.js',import.meta.url).href)).replaceAll("'./account-health.js'",JSON.stringify(new URL('../server/account-health.js',import.meta.url).href));
+const source=original.replace("import { DurableObject } from 'cloudflare:workers';",'class DurableObject {constructor(ctx,env){this.ctx=ctx;this.env=env;}}').replaceAll("'../src/network-game.ts'",JSON.stringify(new URL('../src/network-game.ts',import.meta.url).href)).replaceAll("'./account-auth.js'",JSON.stringify(new URL('../server/account-auth.js',import.meta.url).href)).replaceAll("'./official-records.js'",JSON.stringify(new URL('../server/official-records.js',import.meta.url).href)).replaceAll("'./record-store.js'",JSON.stringify(new URL('../server/record-store.js',import.meta.url).href)).replaceAll("'./account-health.js'",JSON.stringify(new URL('../server/account-health.js',import.meta.url).href)).replaceAll("'./account-delete.js'",JSON.stringify(new URL('../server/account-delete.js',import.meta.url).href));
 const {default:worker,Room}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 test('read-only account readiness is available before enabling login and respects allowed origins',async()=>{
  const env={ALLOWED_ORIGINS:'https://game.test'};
@@ -25,4 +25,8 @@ test('a guest cannot choose another account ID when reserving a room',async()=>{
  let forwarded;const env={ALLOWED_ORIGINS:'https://game.test',LOBBY:{idFromName(){},get(){return {async fetch(request){forwarded=await request.json();return Response.json({code:'1234ABCD'});}};}}};
  const response=await worker.fetch(new Request('https://worker/session',{method:'POST',headers:{Origin:'https://game.test'},body:JSON.stringify({action:'create',accountSubject:'victim',userId:'victim'})}),env);
  assert.equal(response.status,200);assert.equal(forwarded.accountSubject,undefined);assert.equal(forwarded.userId,undefined);
+});
+test('account deletion requires a verified login before opening the DB',async()=>{
+ const env={ALLOWED_ORIGINS:'https://game.test',ACCOUNTS_ENABLED:'true'};
+ const response=await worker.fetch(new Request('https://worker/account',{method:'DELETE',headers:{Origin:'https://game.test'},body:JSON.stringify({password:'correct-password',userId:'victim'})}),env);assert.equal(response.status,401);
 });

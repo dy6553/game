@@ -12,3 +12,10 @@ test('failed or blocked auth cannot report success or turn into an anonymous off
  const a=createAccount(sdk,async()=>{throw Error('must not request profile');},'https://game');
  await assert.rejects(a.signIn('bad','bad'));await assert.rejects(a.token());assert.equal(a.profile,null);
 });
+test('account deletion sends password to the verified server route, and failure preserves the account',async()=>{
+ let signedIn=true;const calls=[];
+ const sdk={async getSession(){return {data:{user:{id:'me'},session:{token:'signed.jwt.value'}}};},signIn:{email:async()=>({})},signUp:{email:async()=>({})},async signOut(){signedIn=false;return {};},async deleteUser(){throw Error('unsupported upstream route must not be used');}};
+ let reject=true;const a=createAccount(sdk,async(url,options)=>{calls.push({url,options});if(options.method==='DELETE')return reject?Response.json({error:'비밀번호를 확인하세요.'},{status:403}):Response.json({ok:true});return Response.json({id:'public',played:1,wins:1,recent:[]});},'https://game');
+ await a.refresh();await assert.rejects(a.remove('wrong-password'));assert.ok(a.profile);assert.equal(signedIn,true);reject=false;await a.remove('correct-password');assert.equal(a.profile,null);assert.equal(await a.token(),null,'deleted session cannot block guest play even if SDK cache is stale');assert.equal(signedIn,false);
+ const removal=calls.find(c=>c.options.method==='DELETE');assert.equal(removal.url,'https://game/account');assert.equal(removal.options.headers.Authorization,'Bearer signed.jwt.value');assert.equal(JSON.parse(removal.options.body).password,'wrong-password');
+});

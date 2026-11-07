@@ -4,6 +4,7 @@ import {createIdentityVerifier} from './account-auth.js';
 import {captureOfficialResult,createResultOutbox} from './official-records.js';
 import {createRecordStore} from './record-store.js';
 import {accountHealth} from './account-health.js';
+import {deleteOwnAccount} from './account-delete.js';
 const json=(body,status=200)=>Response.json(body,{status});
 const code=()=>crypto.randomUUID().replaceAll('-','').slice(0,8).toUpperCase();
 export class Room extends DurableObject {
@@ -90,7 +91,7 @@ export class Lobby extends DurableObject {
 export default {async fetch(request,env){
  const origin=request.headers.get('Origin'),allowed=env.ALLOWED_ORIGINS.split(',');
  if(!origin||!allowed.includes(origin))return json({error:'허용되지 않은 접속 주소'},403);
- const headers={'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Methods':'POST,GET,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization','Vary':'Origin','Cache-Control':'no-store','X-Harbor-Version':'dash-v1','X-Harbor-Accounts':env.ACCOUNTS_ENABLED==='true'?'enabled-v1':'pending-v1'};
+ const headers={'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Methods':'POST,GET,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization','Vary':'Origin','Cache-Control':'no-store','X-Harbor-Version':'dash-v1','X-Harbor-Accounts':env.ACCOUNTS_ENABLED==='true'?'enabled-v1':'pending-v1'};
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
  const url=new URL(request.url);let response;
  try{
@@ -106,6 +107,10 @@ export default {async fetch(request,env){
    const forwarded=new Headers(request.headers);forwarded.delete('Authorization');forwarded.delete('X-Harbor-Location');
    const hints={AS:'apac',OC:'oc',NA:'wnam',SA:'sam',EU:'weur',AF:'afr'};const hint=hints[request.cf?.continent];if(hint)forwarded.set('X-Harbor-Location',hint);
    response=await env.LOBBY.get(env.LOBBY.idFromName('public')).fetch(new Request('https://lobby/',{method:'POST',body:JSON.stringify(body),headers:forwarded}));
+  }else if(url.pathname==='/account'&&request.method==='DELETE'){
+   if(env.ACCOUNTS_ENABLED!=='true')throw Error('Accounts not ready');
+   let subject;try{subject=await createIdentityVerifier(env)(request);}catch{}
+   response=subject?await deleteOwnAccount(request,env,subject,createRecordStore(env)):json({error:'로그인이 필요합니다.'},401);
   }else if(url.pathname==='/account'&&request.method==='GET'){
    if(env.ACCOUNTS_ENABLED!=='true')throw Error('Accounts not ready');
    let subject;try{subject=await createIdentityVerifier(env)(request);}catch{}

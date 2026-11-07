@@ -4,6 +4,8 @@ export function createRecordStore(env,database){
  if(!database&&!env.DATABASE_URL)throw Error('Database is not configured');
  const sql=database??neon(env.DATABASE_URL,{fetchOptions:{signal:AbortSignal.timeout(10000)}});
  return {
+  async emailFor(subject){const rows=await sql`SELECT email FROM neon_auth."user" WHERE id::text=${subject}`;return rows[0]?.email??null;},
+  async remove(subject){await sql`DELETE FROM neon_auth."user" WHERE id::text=${subject}`;},
   async account(subject){
    // A valid but previously issued JWT cannot recreate a deleted managed account.
    const rows=await sql`INSERT INTO harbor.profiles(subject)
