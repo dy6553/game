@@ -1,5 +1,7 @@
 # 대시 — 2026-11-07 사용자 승인
 
+배포 확인: GitHub `793a237ee8a34465c9d87919eb86b3a7f0ea0055`, Vercel production `dpl_GqriUE8x7M6VYoLuBQtqMsTziJSW` READY 및 공개 assets와 테스트 빌드 일치. 공개 Worker `dash-v1`와 실제 두 WebSocket의4m/재사용/탄약·체력/재접속/공중 거절/방 종료를 `/tmp/harbor-dash-public-network.log`로 확인했다. 실기기 확인은 사용자 요청으로 보류했다.
+
 사용자가 온라인 실기기 검증을 뒤로 미루고 나머지 단계를 요청했다. PRD에 미정인 대시 수치를 질문했고 추천 규칙 승인을 받았다.
 
 ## 확정 규칙

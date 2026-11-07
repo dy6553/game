@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+const {PGlite}=await import(process.env.HARBOR_POSTGRES_MODULE??'@electric-sql/pglite');
+import {createRecordStore} from '../../server/record-store.js';
+const pg=new PGlite();await pg.exec('CREATE SCHEMA neon_auth; CREATE TABLE neon_auth."user"(id text PRIMARY KEY,email text);');
+await pg.exec(await readFile(new URL('../../server/migrations/001-official-records.sql',import.meta.url),'utf8'));
+await pg.query('INSERT INTO neon_auth."user"(id,email) VALUES ($1,$2),($3,$4)',['a','private-a@example.com','b','private-b@example.com']);
+const sql=(strings,...params)=>{const text=strings.reduce((s,part,i)=>s+(i?'$'+i:'')+part,'');return {text,params,then(resolve,reject){return pg.query(text,params).then(r=>r.rows).then(resolve,reject);}};};
+sql.transaction=queries=>pg.transaction(async tx=>{const results=[];for(const q of queries)results.push((await tx.query(q.text,q.params)).rows);return results;});
+const store=createRecordStore({},sql),a=await store.account('a'),b=await store.account('b');
+const event=(n)=>({matchId:`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`,endedAt:n*1000,rows:[{subject:'a',outcome:'win',kills:10,deaths:2},{subject:'b',outcome:'loss',kills:2,deaths:10}]});
+for(let n=1;n<=25;n++)await store.write(event(n));await store.write(event(1));await store.write(event(25));
+const profile=await store.profile(a.id);assert.equal(profile.played,25);assert.equal(profile.wins,25);assert.equal(profile.recent.length,20);assert.equal(profile.recent[0].endedAt,25000);assert.equal(profile.recent.at(-1).endedAt,6000);assert.equal(/private|subject|match_id|email/.test(JSON.stringify(profile)),false);
+assert.equal((await store.profile(b.id)).wins,0);
+await pg.query('DELETE FROM neon_auth."user" WHERE id=$1',['a']);assert.equal(await store.profile(a.id),null);await store.write(event(26));await assert.rejects(store.account('a'));assert.equal((await pg.query('SELECT * FROM harbor.receipts WHERE profile_id=$1',[a.id])).rows.length,0);assert.equal((await pg.query('SELECT * FROM harbor.recent WHERE profile_id=$1',[a.id])).rows.length,0);assert.equal((await store.profile(b.id)).played,26);
+console.log('PASS: actual PostgreSQL migration, 25 finished matches, replay of trimmed old results, private fields removed, latest 20 ordered, auth deletion cascades, stale JWT and queued results cannot recreate deleted profile');await pg.close();

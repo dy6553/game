@@ -1,17 +1,33 @@
 import { DurableObject } from 'cloudflare:workers';
 import { createNetworkGame } from '../src/network-game.ts';
+import {createIdentityVerifier} from './account-auth.js';
+import {captureOfficialResult,createResultOutbox} from './official-records.js';
+import {createRecordStore} from './record-store.js';
 const json=(body,status=200)=>Response.json(body,{status});
 const code=()=>crypto.randomUUID().replaceAll('-','').slice(0,8).toUpperCase();
 export class Room extends DurableObject {
+ accounts={};matchId=crypto.randomUUID();officialQueued=false;recording=null;closing=null;
  game=createNetworkGame();sessions={};sockets=new Map();timer=null;last=Date.now();disconnectedAt=0;startedAt=0;finishedAt=0;matchStarted=false;packets=new WeakMap();
- constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;ctx.blockConcurrencyWhile(async()=>{const saved=await ctx.storage.get('checkpoint');if(saved){this.game=createNetworkGame(saved.state);this.sessions=saved.sessions;this.last=saved.last;this.startedAt=saved.startedAt??saved.last;this.finishedAt=saved.finishedAt??0;this.matchStarted=saved.matchStarted??saved.state.players.length===2;this.disconnectedAt=saved.disconnectedAt||saved.last;}});}
- async save(){await this.ctx.storage.put('checkpoint',{state:this.game.state,sessions:this.sessions,last:this.last,startedAt:this.startedAt,finishedAt:this.finishedAt,matchStarted:this.matchStarted,disconnectedAt:this.disconnectedAt});}
+ constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;ctx.blockConcurrencyWhile(async()=>{const saved=await ctx.storage.get('checkpoint');if(saved){this.game=createNetworkGame(saved.state);this.accounts=saved.accounts??{};this.matchId=saved.matchId??this.matchId;this.officialQueued=saved.officialQueued??false;this.sessions=saved.sessions;this.last=saved.last;this.startedAt=saved.startedAt??saved.last;this.finishedAt=saved.finishedAt??0;this.matchStarted=saved.matchStarted??saved.state.players.length===2;this.disconnectedAt=saved.disconnectedAt||saved.last;}});}
+ async save(){await this.ctx.storage.put('checkpoint',{state:this.game.state,accounts:this.accounts,matchId:this.matchId,officialQueued:this.officialQueued,sessions:this.sessions,last:this.last,startedAt:this.startedAt,finishedAt:this.finishedAt,matchStarted:this.matchStarted,disconnectedAt:this.disconnectedAt});}
+ outbox(){return createResultOutbox(this.ctx.storage,event=>createRecordStore(this.env).write(event));}
+ async queueResult(){
+  if(this.recording)return this.recording;if(this.officialQueued)return;
+  const event=captureOfficialResult(this.matchId,this.game.state,this.accounts,Date.now());if(!event)return;
+  this.recording=(async()=>{await this.outbox().enqueue(event);this.officialQueued=true;await this.save();
+   this.ctx.waitUntil(this.deliver());})();
+  try{await this.recording;}finally{this.recording=null;}
+ }
+ async deliver(){await this.outbox().flush();if(await this.outbox().pending())await this.ctx.storage.setAlarm(Date.now()+60000);}
+ reset(){this.game=createNetworkGame();this.sessions={};this.accounts={};this.matchId=crypto.randomUUID();this.officialQueued=false;this.startedAt=0;this.finishedAt=0;this.matchStarted=false;this.disconnectedAt=0;}
  async fetch(request){const url=new URL(request.url);
   if(url.pathname==='/reserve')return this.ctx.blockConcurrencyWhile(async()=>{
-   if(Date.now()-this.last>120000&&this.sockets.size===0){this.game=createNetworkGame();this.sessions={};}
+   if(this.closing)await this.closing;
+   if(Date.now()-this.last>120000&&this.sockets.size===0){this.reset();}
    if(this.game.state.players.length>=2||this.game.state.winner)return json({error:'입장할 수 없는 방입니다.'},409);
    const input=await request.json(),id=crypto.randomUUID(),token=crypto.randomUUID();
-   const p=this.game.join(id,input.weapon,input.character);p.connected=false;this.sessions[token]=id;this.last=Date.now();await this.save();await this.ctx.storage.setAlarm(Date.now()+120000);return json({id,token});
+   if(input.accountSubject&&Object.values(this.accounts).includes(input.accountSubject))return json({error:'같은 계정으로 양쪽에 입장할 수 없습니다.'},409);
+   const p=this.game.join(id,input.weapon,input.character);if(input.accountSubject)this.accounts[id]=input.accountSubject;p.connected=false;this.sessions[token]=id;this.last=Date.now();await this.save();await this.ctx.storage.setAlarm(Date.now()+120000);return json({id,token});
   });
   if(request.headers.get('Upgrade')!=='websocket')return json({error:'WebSocket required'},426);
   const pair=new WebSocketPair(),client=pair[0],server=pair[1];server.accept();
@@ -40,14 +56,14 @@ export class Room extends DurableObject {
   if(this.game.state.winner){if(!this.finishedAt)this.finishedAt=Date.now();if(Date.now()-this.finishedAt>60000){this.closeRoom('경기가 종료되었습니다.');return;}}
   if(!this.matchStarted&&Date.now()-this.startedAt>120000){this.closeRoom('대기 시간이 지나 방을 닫았습니다.');return;}
   if(this.game.state.players.length===2&&this.game.state.players.every(p=>p.connected))this.matchStarted=true;
-  this.game.step();this.last=Date.now();const packet=JSON.stringify({type:'state',state:this.game.state});
+  this.game.step();if(this.game.state.winner)this.ctx.waitUntil(this.queueResult());this.last=Date.now();const packet=JSON.stringify({type:'state',state:this.game.state});
   for(const socket of this.sockets.keys())try{socket.send(packet);}catch{socket.close();}
   if(++ticks%40===0)this.ctx.waitUntil(this.save());
   if(ticks%1200===0&&!this.disconnectedAt)this.ctx.waitUntil(this.ctx.storage.setAlarm(Date.now()+120000));
  },50);}
  stop(){if(this.timer)clearInterval(this.timer);this.timer=null;}
- closeRoom(reason){for(const socket of this.sockets.keys()){try{socket.send(JSON.stringify({type:'closed',reason}));socket.close(1000,reason);}catch{}}this.sockets.clear();this.stop();this.game=createNetworkGame();this.sessions={};this.startedAt=0;this.finishedAt=0;this.matchStarted=false;this.disconnectedAt=0;this.ctx.waitUntil(this.ctx.storage.deleteAll());}
- async alarm(){if(this.disconnectedAt){this.closeRoom('상대 연결을 복구하지 못해 경기를 종료했습니다.');return;}if(!this.sockets.size){this.game=createNetworkGame();this.sessions={};await this.ctx.storage.deleteAll();}else await this.ctx.storage.setAlarm(Date.now()+120000);}
+ closeRoom(reason){for(const socket of this.sockets.keys()){try{socket.send(JSON.stringify({type:'closed',reason}));socket.close(1000,reason);}catch{}}this.sockets.clear();this.stop();const cleanup=async()=>{await this.ctx.storage.delete('checkpoint');if(await this.outbox().pending())await this.ctx.storage.setAlarm(Date.now()+60000);};if(!captureOfficialResult(this.matchId,this.game.state,this.accounts,Date.now())){this.reset();this.ctx.waitUntil(cleanup());return;}this.closing=(async()=>{await this.queueResult();this.reset();await cleanup();})().finally(()=>{this.closing=null;});this.ctx.waitUntil(this.closing);}
+ async alarm(){await this.deliver();if(this.disconnectedAt){this.closeRoom('상대 연결을 복구하지 못해 경기를 종료했습니다.');return;}if(!this.sockets.size){await this.queueResult();this.reset();await this.ctx.storage.delete('checkpoint');if(await this.outbox().pending())await this.ctx.storage.setAlarm(Date.now()+60000);}else await this.ctx.storage.setAlarm(Date.now()+120000);}
 }
 export class Lobby extends DurableObject {
  rates=new Map();
@@ -73,16 +89,27 @@ export class Lobby extends DurableObject {
 export default {async fetch(request,env){
  const origin=request.headers.get('Origin'),allowed=env.ALLOWED_ORIGINS.split(',');
  if(!origin||!allowed.includes(origin))return json({error:'허용되지 않은 접속 주소'},403);
- const headers={'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Methods':'POST,GET,OPTIONS','Access-Control-Allow-Headers':'Content-Type','Vary':'Origin','X-Harbor-Version':'dash-v1'};
+ const headers={'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Methods':'POST,GET,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization','Vary':'Origin','Cache-Control':'no-store','X-Harbor-Version':'dash-v1','X-Harbor-Accounts':env.ACCOUNTS_ENABLED==='true'?'enabled-v1':'pending-v1'};
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
  const url=new URL(request.url);let response;
  try{
   if(url.pathname==='/session'&&request.method==='POST'){
-   const text=await request.text();if(text.length>1024)return json({error:'요청 크기 초과'},413);const body=JSON.parse(text);
+   const text=await request.text();if(text.length>1024)throw Error('Request too large');const body=JSON.parse(text);
    if(!['create','join','quick'].includes(body.action))return json({error:'잘못된 요청'},400);
-   const headers=new Headers(request.headers);headers.delete('X-Harbor-Location');
-   const hints={AS:'apac',OC:'oc',NA:'wnam',SA:'sam',EU:'weur',AF:'afr'};const hint=hints[request.cf?.continent];if(hint)headers.set('X-Harbor-Location',hint);
-   response=await env.LOBBY.get(env.LOBBY.idFromName('public')).fetch(new Request('https://lobby/',{method:'POST',body:text,headers}));
+   let subject;try{subject=await createIdentityVerifier(env)(request);}catch{response=json({error:'로그인이 만료되었거나 올바르지 않습니다. 다시 로그인하세요.'},401);}
+   if(response){const result=new Response(response.body,response);for(const [key,value] of Object.entries(headers))result.headers.set(key,value);return result;}
+   delete body.accountSubject;delete body.userId;
+   if(subject){if(env.ACCOUNTS_ENABLED!=='true')throw Error('Accounts not ready');await createRecordStore(env).account(subject);body.accountSubject=subject;}
+   const forwarded=new Headers(request.headers);forwarded.delete('Authorization');forwarded.delete('X-Harbor-Location');
+   const hints={AS:'apac',OC:'oc',NA:'wnam',SA:'sam',EU:'weur',AF:'afr'};const hint=hints[request.cf?.continent];if(hint)forwarded.set('X-Harbor-Location',hint);
+   response=await env.LOBBY.get(env.LOBBY.idFromName('public')).fetch(new Request('https://lobby/',{method:'POST',body:JSON.stringify(body),headers:forwarded}));
+  }else if(url.pathname==='/account'&&request.method==='GET'){
+   if(env.ACCOUNTS_ENABLED!=='true')throw Error('Accounts not ready');
+   let subject;try{subject=await createIdentityVerifier(env)(request);}catch{}
+   response=subject?json(await createRecordStore(env).account(subject)):json({error:'로그인이 필요합니다.'},401);
+  }else if(/^\/profiles\/[0-9a-f-]{36}$/i.test(url.pathname)&&request.method==='GET'){
+   if(env.ACCOUNTS_ENABLED!=='true')throw Error('Accounts not ready');
+   const profile=await createRecordStore(env).profile(url.pathname.split('/')[2]);response=profile?json(profile):json({error:'전적을 찾을 수 없습니다.'},404);
   }else if(/^\/room\/[0-9A-F]{8}$/.test(url.pathname)&&request.headers.get('Upgrade')==='websocket'){
    return env.ROOMS.get(env.ROOMS.idFromName(url.pathname.split('/')[2])).fetch(request);
   }else response=json({error:'경로를 찾을 수 없습니다.'},404);

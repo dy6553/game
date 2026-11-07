@@ -16,7 +16,7 @@ window.HTMLElement.prototype.getBoundingClientRect=function(){return {left:0,top
 document.hasFocus=()=>true;document.hidden=false;
 document.exitPointerLock=()=>{document.pointerLockElement=null;document.dispatchEvent(new window.Event('pointerlockchange'));};
 const storage=new Map();
-for(const [key,value] of Object.entries({window,document,matchMedia:query=>({matches:query.includes('prefers-reduced-motion')?false:query.includes('portrait')?false:query.includes('coarse')?coarse:!coarse}),localStorage:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v)}}))Object.defineProperty(globalThis,key,{value,configurable:true});
+for(const [key,value] of Object.entries({window,document,location:new URL('https://game.test/'),matchMedia:query=>({matches:query.includes('prefers-reduced-motion')?false:query.includes('portrait')?false:query.includes('coarse')?coarse:!coarse}),localStorage:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v)}}))Object.defineProperty(globalThis,key,{value,configurable:true});
 const specifications={pistol:{name:'권총',magazineSize:12,reloadSeconds:1.5},machinegun:{name:'기관총',magazineSize:30,reloadSeconds:2},shotgun:{name:'산탄총',magazineSize:6,reloadSeconds:2.5},sniper:{name:'저격총',magazineSize:5,reloadSeconds:2.5}};
 let difficulty='easy';let mode='duel',weaponId='pistol',ammo=12,scoped=false,reloadRemaining=0;
 let battle;
@@ -43,7 +43,7 @@ const click=id=>{el(id).dispatchEvent(new window.Event('click',{bubbles:true}));
 const change=(id,value)=>{el(id).value=value;el(id).dispatchEvent(new window.Event('change',{bubbles:true}));};
 const key=(type,code)=>window.dispatchEvent(Object.assign(new window.Event(type),{code,repeat:false}));
 const frame=(ms=100)=>{uiNow+=ms;delta=ms;render();};
-assert.equal(el('loading').hidden,true,'startup completes');assert.equal(el('home-screen').hidden,false);
+assert.equal(el('loading').hidden,true,'startup completes');assert.ok(el('home-account'),'account entry must be wired into the lobby');assert.equal(el('home-account').hidden,true,'unconfigured login must not be advertised');assert.ok(el('account-panel').hidden,'account panel starts closed');assert.equal(el('home-screen').hidden,false);
 assert.ok(el('home-start'),'the main screen must offer a direct game-start button');assert.ok(el('dash'),'dash must have a touch button');
 assert.ok(el('home-mode-trigger'),'mode selection must use an in-game picker button');assert.equal(el('home-mode').hidden,true,'native select is never shown');assert.ok([...document.querySelectorAll('select')].every(s=>s.hidden),'all game selectors avoid the mobile OS sheet');
 click('home-mode-trigger');frame();assert.equal(calls.updates.at(-1).paused,true);assert.equal(el('home-screen').inert,true,'background is inert while the game sheet is open');const cancelEvent=Object.assign(new window.Event('keydown',{bubbles:true}),{key:'Escape',code:'Escape'});el('game-choice-dialog').dispatchEvent(cancelEvent);assert.equal(el('game-choice-dialog').hidden,true);assert.equal(el('home-mode').value,'duel');assert.ok(!el('home-screen').inert,'closing restores background interaction');
