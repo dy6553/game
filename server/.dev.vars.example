@@ -1,5 +1,0 @@
-# Local Worker only; copy to ignored .dev.vars and fill privately.
-# Production: register DATABASE_URL as a Cloudflare Worker secret.
-DATABASE_URL=
-NEON_AUTH_URL=
-ACCOUNTS_ENABLED=false

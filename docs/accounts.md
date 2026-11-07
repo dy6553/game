@@ -1,5 +1,13 @@
 # 로그인 · 공개 공식 전적
 
+## DB 등록 후 준비 상태 확인
+
+사용자가 Cloudflare DATABASE_URL 등록·배포를 완료했다고 알렸다. `/account`는 계정 활성화 전에503을 반환하기 때문에 비밀값 존재나 DB 연결 성공의 증거로 쓰지 않는다. 새 `GET /health/accounts`는 기존 Origin 허용 목록 안에서 비밀값 없이 설정 여부·DB 연결·필수 테이블/삭제 트리거 존재·계정 활성화 상태를 확인한다. 30초간 같은 환경의 결과를 재사용하며 카탈로그 SELECT만 실행한다. 계정·성적·비밀번호·접속 문자열·원래 DB 오류는 반환하지 않는다. 테이블 생성이나 계정 활성화를 수행하는 API가 아니다.
+
+`database`는 `missing`(설정 없음), `unavailable`(연결 검사 실패), `schema_missing`(필수 객체 누락), `ready`(객체 존재)로 구분한다. 마지막 값도 실제 가입/로그인/전적 저장 E2E 완료를 뜻하지 않는다. 운영 SQL은 인증된 Neon SQL Editor/관리 환경에서 실행한다.
+
+TDD: `/tmp/harbor-account-health-red.log` 설정·준비 상태가 항상 missing인 stub에서2개 assertion 실패, `/tmp/harbor-account-health-route-red.log` 경로404 assertion 실패를 먼저 실행했다. 수정 후 DB 상태 분류·비밀/오류 비노출·Origin 제한과 기존 방/재접속11개 집중 검사 및 Worker dry-run을 통과했다. PostgreSQL WASM에서도 마이그레이션 전후 카탈로그 쿼리를 검사한다. 운영 결과는 최신 인계 기록에 남긴다.
+
 ## 사용자 제공 Auth 주소 확인 — 2026-11-07
 
 사용자가 JWKS 주소를 제공했다. 정상 응답의 Ed25519/EdDSA 공개 키를 확인했고, 아래 Auth URL의 `/get-session`은 게임 Origin에서 HTTP200/null 및 credentials 허용으로 응답했다. 실제 로그인한 세션 검증을 뜻하지 않는다.

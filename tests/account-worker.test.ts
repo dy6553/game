@@ -1,7 +1,12 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';
 const original=await readFile(new URL('../server/worker.js',import.meta.url),'utf8');
-const source=original.replace("import { DurableObject } from 'cloudflare:workers';",'class DurableObject {constructor(ctx,env){this.ctx=ctx;this.env=env;}}').replaceAll("'../src/network-game.ts'",JSON.stringify(new URL('../src/network-game.ts',import.meta.url).href)).replaceAll("'./account-auth.js'",JSON.stringify(new URL('../server/account-auth.js',import.meta.url).href)).replaceAll("'./official-records.js'",JSON.stringify(new URL('../server/official-records.js',import.meta.url).href)).replaceAll("'./record-store.js'",JSON.stringify(new URL('../server/record-store.js',import.meta.url).href));
+const source=original.replace("import { DurableObject } from 'cloudflare:workers';",'class DurableObject {constructor(ctx,env){this.ctx=ctx;this.env=env;}}').replaceAll("'../src/network-game.ts'",JSON.stringify(new URL('../src/network-game.ts',import.meta.url).href)).replaceAll("'./account-auth.js'",JSON.stringify(new URL('../server/account-auth.js',import.meta.url).href)).replaceAll("'./official-records.js'",JSON.stringify(new URL('../server/official-records.js',import.meta.url).href)).replaceAll("'./record-store.js'",JSON.stringify(new URL('../server/record-store.js',import.meta.url).href)).replaceAll("'./account-health.js'",JSON.stringify(new URL('../server/account-health.js',import.meta.url).href));
 const {default:worker,Room}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+test('read-only account readiness is available before enabling login and respects allowed origins',async()=>{
+ const env={ALLOWED_ORIGINS:'https://game.test'};
+ const response=await worker.fetch(new Request('https://worker/health/accounts',{headers:{Origin:'https://game.test'}}),env);assert.equal(response.status,200);assert.deepEqual(await response.json(),{databaseConfigured:false,database:'missing',authConfigured:false,enabled:false,ready:false});
+ const denied=await worker.fetch(new Request('https://worker/health/accounts',{headers:{Origin:'https://untrusted.test'}}),env);assert.equal(denied.status,403);
+});
 test('invalid authentication is rejected before a lobby receives a reservation',async()=>{
  let reserved=false;const env={ALLOWED_ORIGINS:'https://game.test',LOBBY:{idFromName(){},get(){return {fetch(){reserved=true;return Response.json({});}};}}};
  const request=()=>new Request('https://worker/session',{method:'POST',headers:{Origin:'https://game.test','Content-Type':'application/json',Authorization:'Bearer invalid'},body:JSON.stringify({action:'create',userId:'victim'})});

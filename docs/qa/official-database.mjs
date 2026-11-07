@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 const {PGlite}=await import(process.env.HARBOR_POSTGRES_MODULE??'@electric-sql/pglite');
+import {checkAccountHealth} from '../../server/account-health.js';
 import {createRecordStore} from '../../server/record-store.js';
 const pg=new PGlite();await pg.exec('CREATE SCHEMA neon_auth; CREATE TABLE neon_auth."user"(id text PRIMARY KEY,email text);');
+const healthEnv={DATABASE_URL:'postgresql://test@db/neondb',NEON_AUTH_URL:'https://auth.test/auth',ACCOUNTS_ENABLED:'true'};
+assert.equal((await checkAccountHealth(healthEnv,async q=>(await pg.query(q)).rows)).database,'schema_missing');
 await pg.exec(await readFile(new URL('../../server/migrations/001-official-records.sql',import.meta.url),'utf8'));
+assert.equal((await checkAccountHealth(healthEnv,async q=>(await pg.query(q)).rows)).ready,true);
 await pg.query('INSERT INTO neon_auth."user"(id,email) VALUES ($1,$2),($3,$4)',['a','private-a@example.com','b','private-b@example.com']);
 const sql=(strings,...params)=>{const text=strings.reduce((s,part,i)=>s+(i?'$'+i:'')+part,'');return {text,params,then(resolve,reject){return pg.query(text,params).then(r=>r.rows).then(resolve,reject);}};};
 sql.transaction=queries=>pg.transaction(async tx=>{const results=[];for(const q of queries)results.push((await tx.query(q.text,q.params)).rows);return results;});

@@ -1,1 +1,0 @@
-{"name":"harbor-online-server","private":true,"type":"module","scripts":{"dev":"wrangler dev --ip 127.0.0.1 --port 8787","deploy":"wrangler deploy","check":"wrangler deploy --dry-run"},"devDependencies":{"wrangler":"4.86.0","ws":"8.18.3"},"dependencies":{"@neondatabase/serverless":"1.2.0","jose":"6.2.15"}}

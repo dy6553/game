@@ -3,6 +3,7 @@ import { createNetworkGame } from '../src/network-game.ts';
 import {createIdentityVerifier} from './account-auth.js';
 import {captureOfficialResult,createResultOutbox} from './official-records.js';
 import {createRecordStore} from './record-store.js';
+import {accountHealth} from './account-health.js';
 const json=(body,status=200)=>Response.json(body,{status});
 const code=()=>crypto.randomUUID().replaceAll('-','').slice(0,8).toUpperCase();
 export class Room extends DurableObject {
@@ -93,7 +94,9 @@ export default {async fetch(request,env){
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
  const url=new URL(request.url);let response;
  try{
-  if(url.pathname==='/session'&&request.method==='POST'){
+  if(url.pathname==='/health/accounts'&&request.method==='GET'){
+   response=json(await accountHealth(env));
+  }else if(url.pathname==='/session'&&request.method==='POST'){
    const text=await request.text();if(text.length>1024)throw Error('Request too large');const body=JSON.parse(text);
    if(!['create','join','quick'].includes(body.action))return json({error:'잘못된 요청'},400);
    let subject;try{subject=await createIdentityVerifier(env)(request);}catch{response=json({error:'로그인이 만료되었거나 올바르지 않습니다. 다시 로그인하세요.'},401);}
