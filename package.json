@@ -1,0 +1,25 @@
+{
+  "name": "harbor-arena-prototype",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "node scripts/run-tests.mjs"
+  },
+  "dependencies": {
+    "@babylonjs/core": "9.34.0",
+    "@neon/auth": "0.8.2",
+    "@neondatabase/serverless": "1.2.0",
+    "jose": "6.2.15"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vite": "8.3.6"
+  }
+}

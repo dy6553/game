@@ -1,0 +1,14 @@
+node_modules/
+dist/
+standalone/
+.env
+.env.*
+!.env.example
+*.local
+*.log
+.neon
+
+.wrangler/
+.dev.vars
+.dev.vars.*
+!.dev.vars.example

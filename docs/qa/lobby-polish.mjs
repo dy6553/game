@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+const {parseHTML}=await import(process.env.HARBOR_DOM_MODULE??'linkedom');
+const {window,document}=parseHTML('<html><body><section id="home-screen"><div id="lobby-model-stage" tabindex="0"></div><button id="lobby-rotation-reset">회전 초기화</button></section><div id="lobby-deploy-transition" hidden></div></body></html>');
+Object.assign(globalThis,{window,document});
+const module=await import('../../src/lobby-polish.ts');assert.equal(typeof module.createLobbyPolish,'function','lobby drag and deployment controller must exist');
+let now=0,reduced=false,enabled=true;const turns=[];let resets=0;
+const c=module.createLobbyPolish({rotate:d=>turns.push(d),reset:()=>resets++,enabled:()=>enabled,reduced:()=>reduced,now:()=>now});
+const stage=document.querySelector('#lobby-model-stage');stage.setPointerCapture=()=>{};stage.releasePointerCapture=()=>{};
+const event=(target,type,props)=>target.dispatchEvent(Object.assign(new window.Event(type,{bubbles:true,cancelable:true}),props));
+event(stage,'pointerdown',{pointerId:1,button:0,clientX:100});event(stage,'pointermove',{pointerId:2,clientX:140});assert.equal(turns.length,0);event(stage,'pointermove',{pointerId:1,clientX:150});assert.equal(turns.length,1);assert.ok(turns[0]>0);event(stage,'pointerup',{pointerId:1});event(stage,'pointermove',{pointerId:1,clientX:200});assert.equal(turns.length,1);
+event(stage,'pointerdown',{pointerId:1,button:0,clientX:0});window.dispatchEvent(new window.Event('blur'));event(stage,'pointermove',{pointerId:1,clientX:100});assert.equal(turns.length,1);enabled=false;event(stage,'pointerdown',{pointerId:1,button:0,clientX:0});event(stage,'pointermove',{pointerId:1,clientX:100});assert.equal(turns.length,1);enabled=true;
+event(stage,'keydown',{key:'ArrowLeft'});assert.ok(turns.at(-1)<0);event(stage,'keydown',{key:'Home'});assert.equal(resets,1);
+c.deploy();assert.equal(c.deploying,true);assert.equal(document.querySelector('#lobby-deploy-transition').hidden,false);now=100;c.update();assert.equal(c.deploying,true);now=400;c.update();assert.equal(c.deploying,false);assert.equal(document.querySelector('#lobby-deploy-transition').hidden,true);c.deploy();c.cancelDeploy();assert.equal(c.deploying,false);reduced=true;c.deploy();assert.equal(c.deploying,false);
+console.log('PASS: drag capture, secondary pointer, blur/modal cancellation, keyboard reset, bounded deployment and reduced motion');
