@@ -17,6 +17,7 @@ import { createPerformanceHud } from './performance-hud.ts';
 import { createRenderBudget } from './render-budget.ts';
 import { sprintMultiplier } from './sprint.ts';
 import { createGameAudio,spatialSound } from './audio.ts';
+import {createOnlineAudio} from './online-audio.ts';
 import { Engine } from '@babylonjs/core/Engines/engine.js';
 import { createInput } from './input.ts';
 import { createHarborScene } from './scene.ts';
@@ -63,7 +64,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <p>시작 무기는 메뉴에서 선택하며 변경하면 경기를 새로 시작합니다. 기관총은 발사 버튼을 누르고 있거나 PC 마우스 고정 상태에서 왼쪽 버튼을 누르면 연사합니다. 산탄총은 탄알 6개가 퍼지며, 저격총은 확대 버튼 또는 PC Q키로 조준합니다.</p>
     <p>야경 개선: 젖은 노면의 빛, 수면 반짝임, 벽·지붕 표면과 금속 광택을 추가했습니다. 자동 화질은 지속적인 프레임 저하가 있을 때 렌더 해상도를 조절합니다. 높음은 수동 고화질, 균형은 낮은 부하 설정입니다.</p>
     <p>성능 표시는 최근 최대 10초의 플레이 구간을 측정합니다. 평균 FPS는 높을수록, P95 프레임 시간은 낮을수록 부드럽습니다. 끊김은 50ms를 넘은 프레임 수입니다. 메뉴·일시정지 구간은 제외하며, 화질을 비교할 때는 같은 장소에서 같은 시간 동안 움직여 보세요.</p>
-    <fieldset class="audio-settings"><legend>소리</legend><label><input id="audio-mute" type="checkbox"> 음소거</label><label>전체<input id="audio-master" type="range" min="0" max="100" aria-label="전체 음량"></label><label>효과음<input id="audio-effects" type="range" min="0" max="100" aria-label="효과음 음량"></label><label>환경음<input id="audio-environment" type="range" min="0" max="100" aria-label="환경음 음량"></label><small id="audio-status">시작 버튼을 누르면 소리를 켭니다.</small></fieldset>
+    <fieldset class="audio-settings"><legend>소리</legend><label><input id="audio-mute" type="checkbox"> 음소거</label><label>전체<input id="audio-master" type="range" min="0" max="100" aria-label="전체 음량"></label><label>효과음<input id="audio-effects" type="range" min="0" max="100" aria-label="효과음 음량"></label><label>환경음<input id="audio-environment" type="range" min="0" max="100" aria-label="환경음 음량"></label><button id="audio-test" type="button">좌우 소리 확인</button><small>이어폰으로 왼쪽 → 오른쪽 소리를 확인하세요.</small><small id="audio-status">시작 버튼을 누르면 소리를 켭니다.</small></fieldset>
     <label class="graphics-setting">화면 흔들림<select id="screen-shake"><option value="off">끄기</option><option value="low" selected>약하게</option><option value="normal">보통</option></select></label><p>총기 반동·로봇 피격·처치 연출을 추가했습니다. 화면 흔들림은 조절할 수 있으며, 조준 방향과 무기 피해량은 바꾸지 않습니다.</p>
     <label class="sensitivity-setting">모바일 조준 감도 <output id="look-sensitivity-value">1.00배</output><input id="look-sensitivity" type="range" min="25" max="200" step="5" value="100" aria-label="모바일 조준 감도"></label>
     <details class="developer-settings"><summary>개발용 도구</summary><button id="reference-open" aria-pressed="false">시안 비교</button><p>배경 시안과 현재 맵을 비교합니다.</p></details>
@@ -154,6 +155,7 @@ async function start() {
   document.addEventListener('keydown',()=>{void audio.unlock();});
   for(const key of ['master','effects','environment'] as const){const slider=document.querySelector<HTMLInputElement>(`#audio-${key}`)!;slider.value=String(audio.settings[key]*100);slider.addEventListener('input',()=>audio.configure({[key]:Number(slider.value)/100}));}
   const mute=document.querySelector<HTMLInputElement>('#audio-mute')!;mute.checked=audio.settings.muted;mute.addEventListener('change',()=>audio.configure({muted:mute.checked}));
+  document.querySelector('#audio-test')!.addEventListener('click',()=>{void audio.unlock().then(()=>{if(!document.hidden&&document.hasFocus())audio.preview();});});
   document.addEventListener('visibilitychange',()=>{if(document.hidden){audio.pause(true);audio.setInterfaceActive(false);}});
   window.addEventListener('blur',()=>{audio.pause(true);audio.setInterfaceActive(false);});
   let lastReload=0,lastGrounded=true,lastPlayerHealth=100,lastRespawn=0,footDistance=0,footAlternating=false,emptyAt=0;
@@ -166,11 +168,13 @@ async function start() {
   let onlineStatus='',onlineCode='';let resultOnlineTick:number|null=null,resultOnlineReady=false;const onlineMotion=createOnlineMotion(m=>playtest.correction(m)),remoteMotion=createRemoteMotion();
   const onlineLobby=document.querySelector<HTMLElement>('#online-lobby')!;
   const accountView=createAccountView(import.meta.env?.VITE_NEON_AUTH_URL??'',import.meta.env?.VITE_ONLINE_URL??'');
+  const onlineAudio=createOnlineAudio();
   const online=createOnlineClient(import.meta.env?.VITE_ONLINE_URL??(import.meta.env?.DEV?'http://127.0.0.1:8787':''),(state,id)=>{
     playtest.packet();onlineState=state;onlineId=id;onlineMotion.receive(state,id);remoteMotion.receive(state,id,performance.now());
     if(!onlineActive){lobbyPolish.deploy();lobbyCue('deploy');gameChoices.close();onlineActive=true;homeOpen=false;home.hidden=true;onlineLobby.hidden=true;document.body.classList.remove('at-home');picker.hidden=true;manualPaused=false;pausePanel.hidden=true;world.setPreview(false);const me=state.players.find(p=>p.id===id);if(me){world.selectCharacter(me.character);world.selectWeapon(me.weaponId);input.resetLook();input.setLook(me.yaw,me.pitch);}hasPlayed=true;canvas.focus();}
+    for(const cue of onlineAudio.update(state,id,input.look.yaw,canUseInventory()&&online.connected))audio.play(cue.kind,cue.pan,cue.volume);
     observeOnlineResult(state,id);
-  },status=>{if(status!=='대전 중'&&status!=='경기 종료')resultOnlineReady=false;onlineStatus=status;document.querySelector('#online-message')!.textContent=status;},session=>{pendingDash=false;onlineCode=session.code;resultTracker.start();shownResult='';resultOnlineTick=null;resultOnlineReady=false;resultView.hide();},()=>accountView.token());
+  },status=>{if(status!=='대전 중'&&status!=='경기 종료')resultOnlineReady=false;onlineStatus=status;document.querySelector('#online-message')!.textContent=status;},session=>{onlineAudio.reset();pendingDash=false;onlineCode=session.code;resultTracker.start();shownResult='';resultOnlineTick=null;resultOnlineReady=false;resultView.hide();},()=>accountView.token());
   let pendingSlot:number|undefined,pendingTake:{pickup:string;replace?:number}|undefined,choosePickupId:string|undefined;
   const inventoryUi=document.querySelector<HTMLElement>('#inventory-ui')!,slotButtons=[...document.querySelectorAll<HTMLButtonElement>('#weapon-slots button')];
   function inventoryData(){
@@ -182,9 +186,9 @@ async function start() {
     if(!canUseInventory())return;const data=inventoryData(),crate=nearbyPickup(data.position,data.pickups);if(data.blocked||!data.ready||!crate)return;
     if(data.inventory.slots.some(s=>s.id===crate.weaponId)){notice='이미 가진 무기입니다';noticeTime=1;return;}
     if(data.inventory.slots.length===3&&replace===undefined){choosePickupId=crate.id;return;}
-    if(onlineActive)pendingTake={pickup:crate.id,replace};else world.pickup(data.position,crate.id,replace);choosePickupId=undefined;
+    if(onlineActive)pendingTake={pickup:crate.id,replace};else if(world.pickup(data.position,crate.id,replace)==='added')audio.play('pickup');choosePickupId=undefined;
   }
-  function requestSlot(slot:number){if(!canUseInventory())return;const data=inventoryData();if(data.blocked||!data.ready)return;if(choosePickupId){requestPickup(slot);return;}if(onlineActive)pendingSlot=slot;else world.switchWeapon(slot);}
+  function requestSlot(slot:number){if(!canUseInventory())return;const data=inventoryData();if(data.blocked||!data.ready)return;if(choosePickupId){requestPickup(slot);return;}if(onlineActive)pendingSlot=slot;else if(world.switchWeapon(slot))audio.play('equip');}
   slotButtons.forEach((button,i)=>button.addEventListener('click',()=>requestSlot(i)));
   document.querySelector('#pickup-action')!.addEventListener('click',()=>requestPickup());
   document.querySelector('#pickup-cancel')!.addEventListener('click',()=>{choosePickupId=undefined;});
@@ -273,7 +277,7 @@ async function start() {
   const refreshCharacter = () => choices.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.character === world.characterType)));
   const openPicker = () => { setComparison(false);input.setEnabled(false);document.querySelector<HTMLSelectElement>('#start-mode')!.value=document.querySelector<HTMLSelectElement>('#game-mode')!.value;document.querySelector<HTMLSelectElement>('#start-difficulty')!.value=document.querySelector<HTMLSelectElement>('#bot-difficulty')!.value;document.querySelector<HTMLSelectElement>('#start-weapon')!.value=document.querySelector<HTMLSelectElement>('#weapon-select')!.value; input.reset(); if (document.pointerLockElement) document.exitPointerLock(); world.setPreview(true); refreshCharacter(); picker.hidden = false; choices[0]!.focus(); };
   const home=document.querySelector<HTMLElement>('#home-screen')!;
-  const openHome=()=>{pendingDash=false;localDash=cancelDash(localDash);lobbyPolish.cancelDeploy();lobbyPolish.cancelDrag();gameChoices.close();syncHomeSelection();resultTracker.cancel();resultView.hide();online.leave();onlineMotion.reset();remoteMotion.reset();pendingSlot=undefined;pendingTake=undefined;choosePickupId=undefined;onlineActive=false;onlineState=null;onlineId='';onlineEventId=-1;world.endOnline();onlineLobby.hidden=true;updateOnlineControls(false);homeOpen=true;home.hidden=false;document.body.classList.add('at-home');manualPaused=false;pausePanel.hidden=true;closeMenu();document.querySelector<HTMLElement>('#help')!.hidden=true;picker.hidden=true;setComparison(false);input.setEnabled(false);world.setPreview(true,true);document.querySelector<HTMLButtonElement>('#home-start')!.focus();};
+  const openHome=()=>{pendingDash=false;localDash=cancelDash(localDash);lobbyPolish.cancelDeploy();lobbyPolish.cancelDrag();gameChoices.close();syncHomeSelection();resultTracker.cancel();resultView.hide();online.leave();onlineMotion.reset();remoteMotion.reset();onlineAudio.reset();pendingSlot=undefined;pendingTake=undefined;choosePickupId=undefined;onlineActive=false;onlineState=null;onlineId='';onlineEventId=-1;world.endOnline();onlineLobby.hidden=true;updateOnlineControls(false);homeOpen=true;home.hidden=false;document.body.classList.add('at-home');manualPaused=false;pausePanel.hidden=true;closeMenu();document.querySelector<HTMLElement>('#help')!.hidden=true;picker.hidden=true;setComparison(false);input.setEnabled(false);world.setPreview(true,true);document.querySelector<HTMLButtonElement>('#home-start')!.focus();};
   document.querySelector('#online-back')!.addEventListener('click',openHome);
   document.querySelector('#home-open')!.addEventListener('click',openHome);
   document.querySelector('#setup-home')!.addEventListener('click',openHome);
@@ -509,7 +513,7 @@ async function start() {
     }
     const resultAudio=!document.querySelector<HTMLElement>('#match-results')!.hidden&&!document.hidden&&document.hasFocus();
     audio.pause(!canPlay&&!resultAudio);
-    document.querySelector('#audio-status')!.textContent=audio.available?'사운드 활성화':'화면을 눌러 소리 켜기';
+    document.querySelector('#audio-status')!.textContent=audio.settings.muted?'음소거 중':audio.available?'사운드 활성화 · 좌우 방향음':'화면을 눌러 소리 켜기';
     if(onlineActive&&onlineState){
       updateOnlineControls(true);
       const command:Omit<Command,'seq'>={x:canPlay?input.move.x:0,y:canPlay?input.move.y:0,yaw:input.look.yaw,pitch:input.look.pitch,fire:canPlay&&input.firing,shot:false,reload:false,jump:false,sprint:canPlay&&input.sprintingRequested,scope:world.practiceState().scoped};
@@ -518,7 +522,7 @@ async function start() {
       if(onlineSendTime>=.05||pendingDash){onlineSendTime%=.05;command.dash=canPlay&&pendingDash;command.shot=canPlay&&input.consumeShots()>0;command.reload=canPlay&&input.consumeReloads()>0;command.jump=canPlay&&input.consumeJumps()>0;if(canPlay){command.slot=pendingSlot;command.pickup=pendingTake?.pickup;command.replace=pendingTake?.replace;}const seq=online.send(command);if(seq!==null){onlineMotion.sent(seq,command);pendingSlot=undefined;pendingTake=undefined;pendingDash=false;}else command.dash=false;}
       const predictedPosition=onlineMotion.advance(elapsed,command,online.connected);
       world.renderOnline(onlineState,onlineId,input.look,Math.min(elapsed,.1),predictedPosition,remoteMotion.sample(performance.now(),online.network.rttMs));
-      for(const event of onlineState.events)if(event.id>onlineEventId){onlineEventId=event.id;audio.play(event.weapon);if(event.hit&&event.player===onlineId){audio.play(event.killed?'kill':'hit');impactTime=.2;feedbackTime=.35;shotFeedback.textContent=event.killed?'상대 처치':'명중';document.querySelector('#impact-marker')!.classList.toggle('kill',event.killed);}}
+      for(const event of onlineState.events)if(event.id>onlineEventId){onlineEventId=event.id;if(event.hit&&event.player===onlineId){impactTime=.2;feedbackTime=.35;shotFeedback.textContent=event.killed?'상대 처치':'명중';document.querySelector('#impact-marker')!.classList.toggle('kill',event.killed);}}
     } else if (canPlay) {
       for(const step of simulationSteps(elapsed)){
         const queued=input.consumeShots(),reloadRequested=input.consumeReloads();
@@ -529,7 +533,7 @@ async function start() {
         const oldPosition={...position};
         const dashRequested=input.consumeDashes()>0;
         if(!canAct)localDash=cancelDash(localDash);
-        if(dashRequested)localDash=beginDash(localDash,{x:input.move.x,y:input.move.y,yaw:input.look.yaw,grounded:before.grounded,canAct});
+        if(dashRequested){const wasReady=localDash.cooldown<=1e-8;localDash=beginDash(localDash,{x:input.move.x,y:input.move.y,yaw:input.look.yaw,grounded:before.grounded,canAct});if(wasReady&&localDash.remaining>0)audio.play('dash');}
         const wasDashing=localDash.remaining>0,dashStep=advanceDash(localDash,step);localDash=dashStep.state;
         if(canAct){position=moveWithCollisions(position,dashStep.delta);const walkTime=step-dashStep.activeSeconds;position=moveWithCollisions(position,{x:movement.x*PROTOTYPE.speed*runScale*walkTime,z:movement.z*PROTOTYPE.speed*runScale*walkTime});}
         if(input.consumeJumps()>0&&canAct&&!wasDashing&&world.jump())audio.play('jump');
@@ -540,7 +544,7 @@ async function start() {
         lastReload=current.reloadRemaining;
         if(!lastGrounded&&current.grounded)audio.play('land');lastGrounded=current.grounded;
         const walked=Math.hypot(position.x-oldPosition.x,position.z-oldPosition.z);
-        if(canAct&&current.grounded&&walked<2){footDistance+=walked;if(footDistance>2.2){footDistance=0;footAlternating=!footAlternating;audio.play(footAlternating?'step':'step2');}}
+        if(canAct&&current.grounded&&!wasDashing&&walked<2){footDistance+=walked;if(footDistance>2.2){footDistance=0;footAlternating=!footAlternating;audio.play(footAlternating?'step':'step2');}}
         const battle=world.duelState();
         if(battle.active&&battle.playerHealth<lastPlayerHealth)audio.play(battle.playerHealth===0?'death':'hurt');
         if(battle.respawnVersion>lastRespawn){localDash=createDash();audio.play('respawn');}if(battle.playerHealth===0)localDash=cancelDash(localDash);
