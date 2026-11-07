@@ -17,7 +17,7 @@ test('server verifies shots, ammo, walls, kill goal and respawn without trusting
  for(let i=0;i<61;i++)game.step();assert.equal(b.health,100);assert.equal(b.weapon.ammo,12);
  game.input('a',command(3,{yaw:Math.PI,shot:true}));game.step();assert.equal(b.health,100,'opposite direction misses');
  a.x=-40;a.z=-19;b.x=-25;b.z=-19;a.cooldown=0;game.input('a',command(4,{yaw:Math.PI/2,shot:true}));game.step();assert.equal(b.health,100,'building occludes shot');
- a.x=0;a.z=10;b.x=0;b.z=18;a.kills=9;a.cooldown=0;game.input('a',command(5,{shot:true}));game.step();assert.equal(game.state.winner,'a');
+ a.x=0;a.z=10;b.x=0;b.z=18;a.kills=9;a.cooldown=0;b.protection=0;game.input('a',command(5,{shot:true}));game.step();assert.equal(game.state.winner,'a');
  const ammo=a.weapon.ammo;game.input('a',command(6,{shot:true}));game.step();assert.equal(a.weapon.ammo,ammo,'finished match cannot continue firing');
 });
 test('rooms cap players and restore paused state for token-based reconnect',()=>{

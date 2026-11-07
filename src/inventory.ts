@@ -14,10 +14,10 @@ export function createPickups():Pickup[]{return [
 export function syncSlot(inv:Inventory,weapon:WeaponState,cooldown:number){const s=inv.slots[inv.active]!;s.weapon=weapon;s.cooldown=cooldown;}
 export function advanceStowed(inv:Inventory,dt:number,includeActive=false){for(const [i,s] of inv.slots.entries())if(includeActive||i!==inv.active){s.cooldown=Math.max(0,s.cooldown-dt);s.weapon=advanceWeapon(s.weapon,dt,WEAPONS[s.id]);}}
 export function switchSlot(inv:Inventory,slot:unknown){if(!Number.isInteger(slot)||Number(slot)<0||Number(slot)>=inv.slots.length)return false;inv.active=Number(slot);return true;}
-export function nearbyPickup(p:Point,pickups:Pickup[]){return pickups.filter(c=>c.remaining===0&&Math.hypot(c.x-p.x,c.z-p.z)<=2.5).sort((a,b)=>Math.hypot(a.x-p.x,a.z-p.z)-Math.hypot(b.x-p.x,b.z-p.z))[0];}
+export function nearbyPickup(p:Point,pickups:Pickup[]){return pickups.filter(c=>c.remaining===0&&Math.hypot(c.x-p.x,c.z-p.z,(c.y??0)-(p.y??0))<=2.5).sort((a,b)=>Math.hypot(a.x-p.x,a.z-p.z)-Math.hypot(b.x-p.x,b.z-p.z))[0];}
 export function tickPickups(pickups:Pickup[],dt:number){for(const c of pickups)c.remaining=Math.max(0,c.remaining-dt);}
 export function takePickup(inv:Inventory,p:Point,pickups:Pickup[],id:string,replace?:number){
- const crate=pickups.find(c=>c.id===id);if(!crate||crate.remaining>0||Math.hypot(crate.x-p.x,crate.z-p.z)>2.5)return 'unavailable';
+ const crate=pickups.find(c=>c.id===id);if(!crate||crate.remaining>0||Math.hypot(crate.x-p.x,crate.z-p.z,(crate.y??0)-(p.y??0))>2.5)return 'unavailable';
  if(inv.slots.some(s=>s.id===crate.weaponId))return 'duplicate';
  if(inv.slots.length===3&&(replace===undefined||!Number.isInteger(replace)||replace<0||replace>=3))return 'choose';
  const slot={id:crate.weaponId,weapon:createWeapon(WEAPONS[crate.weaponId]),cooldown:0};

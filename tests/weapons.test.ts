@@ -12,7 +12,7 @@ test('approved weapons have distinct magazines and shotgun spread',()=>{
 test('actual scene uses machinegun cadence, shotgun pellet damage, sniper scope and resets',()=>{
  const engine=new NullEngine({renderWidth:960,renderHeight:540,textureSize:512,deterministicLockstep:false,lockstepMaxSteps:4});
  try{
-  const world=createHarborScene(engine),p={x:0,z:27};
+  const world=createHarborScene(engine,{randomSpawns:false}),p={x:0,z:27};
   const frame=(dt=0)=>{world.update(p,dt,{yaw:0,pitch:0});world.scene.render();};
   world.selectWeapon('machinegun');frame();
   assert.equal(world.shoot().damage,10);assert.equal(world.shoot().fired,false);assert.equal(world.practiceState().ammo,29);

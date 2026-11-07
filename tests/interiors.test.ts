@@ -29,6 +29,7 @@ test('actual scene doorway rays pass through openings while adjacent walls block
    const front=b.z<0?1:-1;
    const start=new Vector3(b.x,1.95,b.z+front*(b.depth/2+1));
    const pick=(x:number)=>world.scene.pickWithRay(new Ray(new Vector3(x,start.y,start.z),new Vector3(0,0,-front),4),m=>m.isPickable&&m.isEnabled());
+   assert.equal(pick(b.x)?.hit,true,'closed door blocks bullets');assert.equal(world.toggleDoor({x:b.x,z:start.z},b.id),true);world.scene.render();
    assert.equal(pick(b.x)?.hit,false,`${b.id} doorway has no invisible visual wall`);
    assert.equal(pick(b.x+b.width*.35)?.hit,true,`${b.id} wall blocks bullets`);
   }

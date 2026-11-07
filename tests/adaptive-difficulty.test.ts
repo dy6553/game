@@ -19,7 +19,7 @@ test('automatic survival uses twenty waves and applies healthy streak changes on
  const m=rules.createSurvivalMatch('auto');assert.equal(m.state().automatic,true);assert.equal(m.state().difficulty,'normal');assert.equal(m.state().totalWaves,20);tick(m);clear(m);tick(m);m.hurtPlayer('bot-1',50);clear(m);assert.equal(m.state().adaptiveStage,6);assert.equal(m.state().wave,3);assert.equal(m.state().totalWaves,20);tick(m);assert.equal(m.state().adaptiveStage,6);
 });
 test('automatic survival lowers on retry, never on initial death or after final defeat',()=>{
- const m=rules.createSurvivalMatch('auto');tick(m);m.hurtPlayer('bot-1',100);assert.equal(m.state().difficulty,'normal');m.update(2,{x:0,z:-8},()=>false,()=>false);assert.equal(m.state().difficulty,'normal');m.update(1,{x:0,z:-8},()=>false,()=>false);assert.equal(m.state().adaptiveStage,4);assert.equal(m.state().wave,1);assert.equal(m.state().lives,2);m.hurtPlayer('bot-1',100);tick(m);m.hurtPlayer('bot-1',100);tick(m);assert.equal(m.state().phase,'lost');assert.equal(m.state().adaptiveStage,3);
+ const m=rules.createSurvivalMatch('auto');tick(m);m.hurtPlayer('bot-1',100);assert.equal(m.state().difficulty,'normal');m.update(2,{x:0,z:-8},()=>false,()=>false);assert.equal(m.state().difficulty,'normal');m.update(1,{x:0,z:-8},()=>false,()=>false);assert.equal(m.state().adaptiveStage,4);assert.equal(m.state().wave,1);assert.equal(m.state().lives,2);m.playerFired();m.hurtPlayer('bot-1',100);tick(m);m.playerFired();m.hurtPlayer('bot-1',100);tick(m);assert.equal(m.state().phase,'lost');assert.equal(m.state().adaptiveStage,3);
 });
 
 import {NullEngine} from '@babylonjs/core/Engines/nullEngine.js';

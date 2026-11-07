@@ -41,7 +41,7 @@ test('robot impact uses a fixed noncolliding pool, private materials and cleans 
 });
 test('real duel keeps a dying robot visible but unpickable, then restores it on respawn',()=>{
  const e=engine();try{
-  const world=createHarborScene(e),position={x:0,z:10};world.setMode('duel');world.selectWeapon('sniper');
+  const world=createHarborScene(e,{randomSpawns:false}),position={x:0,z:10};world.setMode('duel');world.selectWeapon('sniper');
   world.update(position,0);world.scene.render();
   const body=world.scene.getTransformNodeByName('opponent')!;
   const root=body.getChildren().find(node=>node.name==='character-robot-cat') as TransformNode;
@@ -62,7 +62,7 @@ test('real duel keeps a dying robot visible but unpickable, then restores it on 
 
 test('online snapshots render both character types and leave without growing effect pools',async()=>{
  const {createNetworkGame}=await import('../src/network-game.ts');const e=engine();try{
-  const world=createHarborScene(e),game=createNetworkGame();game.join('me');game.join('other','pistol','robot-cat');
+  const world=createHarborScene(e,{randomSpawns:false}),game=createNetworkGame();game.join('me');game.join('other','pistol','robot-cat');
   world.renderOnline(game.state,'me',{yaw:0,pitch:0},.05);world.scene.render();
   const count=world.scene.meshes.length;for(let i=0;i<20;i++)world.renderOnline(game.state,'me',{yaw:0,pitch:0},.05);assert.equal(world.scene.meshes.length,count);
   assert.equal(world.scene.getTransformNodeByName('online-opponent')!.isEnabled(),true);

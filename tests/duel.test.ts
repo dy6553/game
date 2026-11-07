@@ -39,7 +39,7 @@ test('ten eliminations end match and freeze scoring; dead bot cannot be damaged'
 test('scene switches modes, robot receives real ray hits, pause freezes duel, restart clears score',()=>{
   const engine=new NullEngine({renderWidth:960,renderHeight:540,textureSize:512,deterministicLockstep:false,lockstepMaxSteps:4});
   try{
-    const world=createHarborScene(engine),position={x:0,z:10};world.setMode('duel');
+    const world=createHarborScene(engine,{randomSpawns:false}),position={x:0,z:10};world.setMode('duel');
     world.update(position,0,{yaw:0,pitch:0});world.scene.render();
     assert.equal(world.scene.getTransformNodeByName('target-root-0')!.isEnabled(),false);
     for(let i=0;i<4;i++)assert.equal(world.shoot().hit,true);
@@ -57,7 +57,7 @@ test('scene switches modes, robot receives real ray hits, pause freezes duel, re
 test('actual scene blocks enemy fire through buildings and allows visible fire; respawn restores magazine',()=>{
   const engine=new NullEngine({renderWidth:960,renderHeight:540,textureSize:512,deterministicLockstep:false,lockstepMaxSteps:4});
   try{
-    const world=createHarborScene(engine);world.setMode('duel');
+    const world=createHarborScene(engine,{randomSpawns:false});world.setMode('duel');
     const hidden={x:27,z:19};world.update(hidden,0);world.scene.render();
     for(let i=0;i<25;i++){world.update(hidden,0.05);world.scene.render();}
     assert.equal(world.duelState().playerHealth,100,'building prevents enemy shot');
@@ -67,7 +67,7 @@ test('actual scene blocks enemy fire through buildings and allows visible fire; 
     assert.equal(world.duelState().playerHealth,0);assert.equal(world.duelState().botKills,1);
     assert.equal(world.shoot().fired,false);assert.equal(world.jump(),false);assert.equal(world.reload(),false);
     world.update(position,3);assert.equal(world.duelState().playerHealth,100);
-    assert.deepEqual(position,{x:0,z:-8});assert.equal(world.practiceState().ammo,12);
+    assert.deepEqual(position,world.duelState().playerPosition);assert.equal(world.duelState().protection,3);assert.equal(world.practiceState().ammo,12);
     world.scene.dispose();
   }finally{engine.dispose();}
 });
