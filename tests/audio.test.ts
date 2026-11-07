@@ -22,3 +22,10 @@ test('audio unlock, voice cap, mute and pause work without breaking gameplay',as
   audio.dispose();
  }finally{for(const [key,desc] of previous){if(desc)Object.defineProperty(globalThis,key,desc);else Reflect.deleteProperty(globalThis,key);}}
 });
+test('menu cues play while gameplay is paused, respect mute, stop on focus loss and cap voices',async()=>{
+ let starts=0,stops=0;
+ class N{gain={setTargetAtTime(){}};pan={value:0};threshold={value:0};ratio={value:0};playbackRate={value:1};onended;connect(){}disconnect(){}start(){starts++;}stop(){stops++;this.onended?.();}}
+ class C{sampleRate=8000;currentTime=0;state='running';destination=new N();createGain(){return new N();}createDynamicsCompressor(){return new N();}createBufferSource(){return new N();}createStereoPanner(){return new N();}createBuffer(n,length){return {getChannelData:()=>new Float32Array(length)};}async resume(){}async close(){}}
+ const previous=new Map();for(const [key,value] of Object.entries({AudioContext:C,localStorage:{getItem:()=>null,setItem(){}},location:{protocol:'file:'}})){previous.set(key,Object.getOwnPropertyDescriptor(globalThis,key));Object.defineProperty(globalThis,key,{value,configurable:true});}
+ try{const a=createGameAudio();assert.equal(typeof a.playInterface,'function','menu audio must work independently of paused gameplay');await a.unlock();a.playInterface('ui');assert.equal(starts,2);a.pause(true);assert.equal(stops,0);a.setInterfaceActive(false);assert.equal(stops,1);a.playInterface('ui');assert.equal(starts,2);a.setInterfaceActive(true);a.configure({muted:true});a.playInterface('ui');assert.equal(starts,2);a.configure({muted:false});for(let i=0;i<12;i++)a.playInterface('deploy');assert.equal(starts,6,'at most four simultaneous interface cues');a.dispose();}finally{for(const [key,desc] of previous){if(desc)Object.defineProperty(globalThis,key,desc);else Reflect.deleteProperty(globalThis,key);}}
+});

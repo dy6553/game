@@ -1,3 +1,4 @@
+import {createLobbyPolish} from './lobby-polish.ts';
 import {createGameChoices} from './game-choices.ts';
 import {HOME_MARKUP,createHomeScreen} from './home-screen.ts';
 import {createResultJournal,createResultTracker,type ResultSnapshot} from './results.ts';
@@ -27,6 +28,7 @@ const readMode=(value:string):'practice'|'duel'|'ffa'|'survival'=>value==='survi
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   ${HOME_MARKUP}
   <section id="online-lobby" class="online-lobby" hidden aria-labelledby="online-title"><div><button id="online-back">홈으로</button><h2 id="online-title">온라인 1대1</h2><p>먼저 10킬 · 두 사람이 연결되면 시작합니다.</p><label>캐릭터<select id="online-character"><option value="robot">소형 로봇</option><option value="robot-cat">고양이형 로봇</option></select></label><label>시작 무기<select id="online-weapon"><option value="pistol">권총</option><option value="machinegun">기관총</option><option value="shotgun">산탄총</option><option value="sniper">저격총</option></select></label><div class="online-actions"><button id="online-create">방 만들기</button><button id="online-quick">자동 매칭</button></div><label>방 코드<input id="online-code" maxlength="8" autocomplete="off" placeholder="8자리 코드"></label><button id="online-join">코드로 입장</button><p id="online-message" role="status"></p><p>온라인 대전에서는 메뉴를 열어도 상대의 경기는 계속됩니다.</p></div></section>
+  <div id="lobby-deploy-transition" class="lobby-deploy-transition" role="status" hidden><div><span>HARBOR / DEPLOYMENT</span><strong>출격 중</strong><i></i></div></div>
   ${RESULTS_MARKUP}
   <canvas id="game" tabindex="0" aria-label="항구 도시 1인칭 탐색. WASD로 이동하고 화면을 드래그해 시점을 돌립니다."></canvas>
   <header class="topbar">
@@ -142,13 +144,14 @@ async function start() {
   sensitivity.addEventListener('input',()=>{const next=setSensitivity(Number(sensitivity.value)/100);try{localStorage.setItem('harbor-touch-sensitivity',String(next));}catch{}});
   const journal=createResultJournal({getItem:key=>localStorage.getItem(key),setItem:(key,value)=>localStorage.setItem(key,value)}),resultTracker=createResultTracker();
   let shownResult='';
-  const audio=createGameAudio();
+  const audio=createGameAudio();const reducedLobbyMotion=matchMedia('(prefers-reduced-motion: reduce)');
+  const lobbyCue=(kind:'ui'|'deploy')=>{void audio.unlock().then(()=>{if(!document.hidden&&document.hasFocus())audio.playInterface(kind);});};
   document.addEventListener('pointerdown',()=>{void audio.unlock();});
   document.addEventListener('keydown',()=>{void audio.unlock();});
   for(const key of ['master','effects','environment'] as const){const slider=document.querySelector<HTMLInputElement>(`#audio-${key}`)!;slider.value=String(audio.settings[key]*100);slider.addEventListener('input',()=>audio.configure({[key]:Number(slider.value)/100}));}
   const mute=document.querySelector<HTMLInputElement>('#audio-mute')!;mute.checked=audio.settings.muted;mute.addEventListener('change',()=>audio.configure({muted:mute.checked}));
-  document.addEventListener('visibilitychange',()=>{if(document.hidden)audio.pause(true);});
-  window.addEventListener('blur',()=>audio.pause(true));
+  document.addEventListener('visibilitychange',()=>{if(document.hidden){audio.pause(true);audio.setInterfaceActive(false);}});
+  window.addEventListener('blur',()=>{audio.pause(true);audio.setInterfaceActive(false);});
   let lastReload=0,lastGrounded=true,lastPlayerHealth=100,lastRespawn=0,footDistance=0,footAlternating=false,emptyAt=0;
 
   document.querySelector<HTMLSelectElement>('#jump-key')!.addEventListener('change',event=>{
@@ -160,7 +163,7 @@ async function start() {
   const onlineLobby=document.querySelector<HTMLElement>('#online-lobby')!;
   const online=createOnlineClient(import.meta.env?.VITE_ONLINE_URL??(import.meta.env?.DEV?'http://127.0.0.1:8787':''),(state,id)=>{
     playtest.packet();onlineState=state;onlineId=id;onlineMotion.receive(state,id);remoteMotion.receive(state,id,performance.now());
-    if(!onlineActive){gameChoices.close();onlineActive=true;homeOpen=false;home.hidden=true;onlineLobby.hidden=true;document.body.classList.remove('at-home');picker.hidden=true;manualPaused=false;pausePanel.hidden=true;world.setPreview(false);const me=state.players.find(p=>p.id===id);if(me){world.selectCharacter(me.character);world.selectWeapon(me.weaponId);input.resetLook();input.setLook(me.yaw,me.pitch);}hasPlayed=true;canvas.focus();}
+    if(!onlineActive){lobbyPolish.deploy();lobbyCue('deploy');gameChoices.close();onlineActive=true;homeOpen=false;home.hidden=true;onlineLobby.hidden=true;document.body.classList.remove('at-home');picker.hidden=true;manualPaused=false;pausePanel.hidden=true;world.setPreview(false);const me=state.players.find(p=>p.id===id);if(me){world.selectCharacter(me.character);world.selectWeapon(me.weaponId);input.resetLook();input.setLook(me.yaw,me.pitch);}hasPlayed=true;canvas.focus();}
     observeOnlineResult(state,id);
   },status=>{if(status!=='대전 중'&&status!=='경기 종료')resultOnlineReady=false;onlineStatus=status;document.querySelector('#online-message')!.textContent=status;},session=>{onlineCode=session.code;resultTracker.start();shownResult='';resultOnlineTick=null;resultOnlineReady=false;resultView.hide();});
   let pendingSlot:number|undefined,pendingTake:{pickup:string;replace?:number}|undefined,choosePickupId:string|undefined;
@@ -169,7 +172,7 @@ async function start() {
     if(onlineActive&&onlineState){const me=onlineState.players.find(p=>p.id===onlineId)!;return {inventory:me.inventory??createInventory(me.weaponId),pickups:onlineState.pickups??[],position:me,ready:!!me.inventory&&!!onlineState.pickups,blocked:me.health===0||!!onlineState.winner||onlineState.players.length<2||onlineState.players.some(p=>!p.connected)||!online.connected};}
     const battle=world.duelState();return {...world.inventoryState(),position,ready:true,blocked:battle.active&&(battle.playerHealth===0||!!battle.winner)};
   }
-  function canUseInventory(){return !gameChoices.isOpen&&!resultView.isOpen&&!homeOpen&&!manualPaused&&picker.hidden&&!menuOpen&&help.hidden&&!comparing&&!document.hidden&&document.hasFocus()&&!matchMedia('(pointer: coarse) and (orientation: portrait)').matches;}
+  function canUseInventory(){return !lobbyPolish.deploying&&!gameChoices.isOpen&&!resultView.isOpen&&!homeOpen&&!manualPaused&&picker.hidden&&!menuOpen&&help.hidden&&!comparing&&!document.hidden&&document.hasFocus()&&!matchMedia('(pointer: coarse) and (orientation: portrait)').matches;}
   function requestPickup(replace?:number){
     if(!canUseInventory())return;const data=inventoryData(),crate=nearbyPickup(data.position,data.pickups);if(data.blocked||!data.ready||!crate)return;
     if(data.inventory.slots.some(s=>s.id===crate.weaponId)){notice='이미 가진 무기입니다';noticeTime=1;return;}
@@ -265,7 +268,7 @@ async function start() {
   const refreshCharacter = () => choices.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.character === world.characterType)));
   const openPicker = () => { setComparison(false);input.setEnabled(false);document.querySelector<HTMLSelectElement>('#start-mode')!.value=document.querySelector<HTMLSelectElement>('#game-mode')!.value;document.querySelector<HTMLSelectElement>('#start-difficulty')!.value=document.querySelector<HTMLSelectElement>('#bot-difficulty')!.value;document.querySelector<HTMLSelectElement>('#start-weapon')!.value=document.querySelector<HTMLSelectElement>('#weapon-select')!.value; input.reset(); if (document.pointerLockElement) document.exitPointerLock(); world.setPreview(true); refreshCharacter(); picker.hidden = false; choices[0]!.focus(); };
   const home=document.querySelector<HTMLElement>('#home-screen')!;
-  const openHome=()=>{gameChoices.close();syncHomeSelection();resultTracker.cancel();resultView.hide();online.leave();onlineMotion.reset();remoteMotion.reset();pendingSlot=undefined;pendingTake=undefined;choosePickupId=undefined;onlineActive=false;onlineState=null;onlineId='';onlineEventId=-1;world.endOnline();onlineLobby.hidden=true;updateOnlineControls(false);homeOpen=true;home.hidden=false;document.body.classList.add('at-home');manualPaused=false;pausePanel.hidden=true;closeMenu();document.querySelector<HTMLElement>('#help')!.hidden=true;picker.hidden=true;setComparison(false);input.setEnabled(false);world.setPreview(true,true);document.querySelector<HTMLButtonElement>('#home-start')!.focus();};
+  const openHome=()=>{lobbyPolish.cancelDeploy();lobbyPolish.cancelDrag();gameChoices.close();syncHomeSelection();resultTracker.cancel();resultView.hide();online.leave();onlineMotion.reset();remoteMotion.reset();pendingSlot=undefined;pendingTake=undefined;choosePickupId=undefined;onlineActive=false;onlineState=null;onlineId='';onlineEventId=-1;world.endOnline();onlineLobby.hidden=true;updateOnlineControls(false);homeOpen=true;home.hidden=false;document.body.classList.add('at-home');manualPaused=false;pausePanel.hidden=true;closeMenu();document.querySelector<HTMLElement>('#help')!.hidden=true;picker.hidden=true;setComparison(false);input.setEnabled(false);world.setPreview(true,true);document.querySelector<HTMLButtonElement>('#home-start')!.focus();};
   document.querySelector('#online-back')!.addEventListener('click',openHome);
   document.querySelector('#home-open')!.addEventListener('click',openHome);
   document.querySelector('#setup-home')!.addEventListener('click',openHome);
@@ -301,17 +304,19 @@ async function start() {
   startButton.addEventListener('click',()=>beginGame(false));
   startLocked.addEventListener('click',()=>beginGame(true));
   const homeView=createHomeScreen({
-    selectCharacter(type){world.selectCharacter(type);refreshCharacter();},
+    selectCharacter(type){world.selectCharacter(type);refreshCharacter();lobbyCue('ui');if(!reducedLobbyMotion.matches)document.querySelector('#home-character-name')?.animate?.([{opacity:.3},{opacity:1}],{duration:180});},
+    selectWeapon(id){world.setLobbyWeapon(id);lobbyCue('ui');if(!reducedLobbyMotion.matches)document.querySelector('#home-equipped-art')?.animate?.([{opacity:.3,transform:'translateX(-6px)'},{opacity:1,transform:'translateX(0)'}],{duration:180});},
     start(selection,locked){
       if(selection.mode==='online'){
         document.querySelector<HTMLSelectElement>('#online-character')!.value=selection.character;document.querySelector<HTMLSelectElement>('#online-weapon')!.value=selection.weapon;openOnlineLobby();return;
       }
       document.querySelector<HTMLSelectElement>('#start-mode')!.value=selection.mode;document.querySelector<HTMLSelectElement>('#start-difficulty')!.value=selection.difficulty;document.querySelector<HTMLSelectElement>('#start-weapon')!.value=selection.weapon;
-      homeMatchPending=true;beginGame(locked);
+      lobbyPolish.deploy();lobbyCue('deploy');homeMatchPending=true;beginGame(locked);
     },
   });
   function syncHomeSelection(){
     const weapon=document.querySelector<HTMLSelectElement>(onlineActive?'#online-weapon':'#weapon-select')!.value,character=onlineActive?document.querySelector<HTMLSelectElement>('#online-character')!.value:world.characterType,difficulty=document.querySelector<HTMLSelectElement>('#bot-difficulty')!.value;
+    world.setLobbyWeapon(isWeaponId(weapon)?weapon:'pistol');
     homeView.sync({mode:onlineActive?'online':readMode(document.querySelector<HTMLSelectElement>('#game-mode')!.value),weapon:isWeaponId(weapon)?weapon:'pistol',character:isCharacterType(character)?character:'robot',difficulty:isSurvivalDifficulty(difficulty)?difficulty:'easy'});
   }
 
@@ -432,16 +437,16 @@ async function start() {
     resultTracker.observe({mode:'online',active:true,difficulty:null,winner:state.winner?(state.winner===id?'win':'loss'):'',kills:me.kills,deaths:foe.kills,wave:null,totalWaves:null,stage:null},seconds);showFinishedResult();
   }
   const resultView=createResultsView(journal,{
-    opened(){gameChoices.close();input.setEnabled(false);input.reset();pausePanel.hidden=true;manualPaused=false;closeMenu();help.hidden=true;if(document.pointerLockElement)document.exitPointerLock();audio.pause(true);},
+    opened(){lobbyPolish.cancelDeploy();gameChoices.close();input.setEnabled(false);input.reset();pausePanel.hidden=true;manualPaused=false;closeMenu();help.hidden=true;if(document.pointerLockElement)document.exitPointerLock();audio.pause(true);},
     home:openHome,
     retry(isOnline){if(isOnline){openHome();openOnlineLobby();}else{restart();resumeGame();}},
   });
   document.querySelector('#home-records')!.addEventListener('click',()=>resultView.history());
   window.addEventListener('keydown',event=>{
     const tag=(event.target as HTMLElement|null)?.tagName;
-    if(event.code==='KeyQ'&&!gameChoices.isOpen&&!resultView.isOpen&&!homeOpen&&!event.repeat&&!manualPaused&&!menuOpen&&picker.hidden&&!comparing&&document.querySelector<HTMLElement>('#help')!.hidden&&!['INPUT','SELECT','TEXTAREA'].includes(tag??'')){event.preventDefault();world.toggleScope();audio.play('scope');}
+    if(event.code==='KeyQ'&&!lobbyPolish.deploying&&!gameChoices.isOpen&&!resultView.isOpen&&!homeOpen&&!event.repeat&&!manualPaused&&!menuOpen&&picker.hidden&&!comparing&&document.querySelector<HTMLElement>('#help')!.hidden&&!['INPUT','SELECT','TEXTAREA'].includes(tag??'')){event.preventDefault();world.toggleScope();audio.play('scope');}
   });
-  document.querySelector('#scope')!.addEventListener('click',()=>{if(gameChoices.isOpen||resultView.isOpen||homeOpen||manualPaused||menuOpen||!picker.hidden||comparing||!document.querySelector<HTMLElement>('#help')!.hidden)return;world.toggleScope();audio.play('scope');canvas.focus();});
+  document.querySelector('#scope')!.addEventListener('click',()=>{if(lobbyPolish.deploying||gameChoices.isOpen||resultView.isOpen||homeOpen||manualPaused||menuOpen||!picker.hidden||comparing||!document.querySelector<HTMLElement>('#help')!.hidden)return;world.toggleScope();audio.play('scope');canvas.focus();});
   const help = document.querySelector<HTMLElement>('#help')!;
   const closeHelp=()=>{help.hidden=true;document.querySelector('#help-toggle')!.setAttribute('aria-expanded','false');input.reset();};
   document.querySelector('#pause-continue')!.addEventListener('click',()=>{closeHelp();closeMenu();resumeGame();});
@@ -460,7 +465,8 @@ async function start() {
   pausePanel.addEventListener('keydown',event=>{if(event.key!=='Tab')return;event.preventDefault();const buttons=[...pausePanel.querySelectorAll<HTMLButtonElement>('button')].filter(button=>button.getClientRects().length>0);const index=buttons.indexOf(document.activeElement as HTMLButtonElement);buttons[(index+(event.shiftKey?buttons.length-1:1))%buttons.length]!.focus();});
   window.addEventListener('resize', () => { closeMenu(); engine.resize(); world.resize(); });
   canvas.addEventListener('contextmenu', event => event.preventDefault());
-  const gameChoices=createGameChoices({opened(){input.setEnabled(false);input.reset();if(document.pointerLockElement)document.exitPointerLock();}});
+  const lobbyPolish=createLobbyPolish({rotate:delta=>world.rotateLobby(delta),reset:()=>world.resetLobbyRotation(),enabled:()=>homeOpen&&!gameChoices.isOpen&&!resultView.isOpen,reduced:()=>reducedLobbyMotion.matches});
+  const gameChoices=createGameChoices({opened(){lobbyPolish.cancelDrag();input.setEnabled(false);input.reset();if(document.pointerLockElement)document.exitPointerLock();}});
   world.update(position, 1);
   await world.scene.whenReadyAsync();
   loading.hidden = true;
@@ -473,7 +479,8 @@ async function start() {
     const elapsed=resetClock?0:Math.max(0,engine.getDeltaTime()/1000);resetClock=false;
     const dt = Math.min(elapsed, 0.05);
     const portraitTouch = matchMedia('(pointer: coarse) and (orientation: portrait)').matches;
-    const canPlay=!gameChoices.isOpen&&!resultView.isOpen&&!homeOpen&&!manualPaused&&!document.hidden&&!portraitTouch&&picker.hidden&&!comparing&&!menuOpen&&help.hidden&&document.hasFocus();
+    lobbyPolish.update();world.setLobbyMotion(!reducedLobbyMotion.matches&&!document.hidden&&document.hasFocus()&&!gameChoices.isOpen&&!resultView.isOpen);audio.setInterfaceActive(!document.hidden&&document.hasFocus());
+    const canPlay=!lobbyPolish.deploying&&!gameChoices.isOpen&&!resultView.isOpen&&!homeOpen&&!manualPaused&&!document.hidden&&!portraitTouch&&picker.hidden&&!comparing&&!menuOpen&&help.hidden&&document.hasFocus();
     input.setEnabled(canPlay);
     document.querySelector('#pause-description')!.textContent=onlineActive?'내 조작만 멈춥니다. 상대의 경기는 계속됩니다.':'전투와 이동이 멈췄습니다.';
     document.querySelector<HTMLElement>('#pause-indicator')!.hidden=manualPaused||!picker.hidden||comparing||portraitTouch||(!menuOpen&&help.hidden);

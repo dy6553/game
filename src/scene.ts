@@ -1,3 +1,4 @@
+import {createLobbyWeapons} from './lobby-weapons.ts';
 import {createSupplyCrates} from './supply-crates.ts';
 import {createInventory,createPickups,syncSlot,advanceStowed,switchSlot,takePickup,tickPickups} from './inventory.ts';
 import type { MatchState } from './network-game.ts';
@@ -364,8 +365,8 @@ export function createHarborScene(engine: Engine) {
   function selectCharacter(type: CharacterType) {
     if (character.type === type) return;
     for (const mesh of character.meshes) shadows.removeShadowCaster(mesh);
-    character.root.dispose();
-    character = createCharacter(scene, player, type);
+    lobbyWeapons.attach(null);character.root.dispose();
+    character = createCharacter(scene, player, type);lobbyWeapons.attach(character.weaponSocket);
     for (const mesh of character.meshes) shadows.addShadowCaster(mesh);
   }
   const viewModel = new TransformNode('first-person-hands', scene);
@@ -392,6 +393,7 @@ export function createHarborScene(engine: Engine) {
   const scopeBody=MeshBuilder.CreateCylinder('weapon-scope',{diameter:.1,height:.32,tessellation:16},scene);
   scopeBody.parent=viewModel;scopeBody.position.set(.27,-.06,.68);scopeBody.rotation.x=Math.PI/2;scopeBody.material=metal;scopeBody.isPickable=false;
   const secondBarrel=box('shotgun-second-barrel',.36,-.2,.9,.07,.07,.42,metal);secondBarrel.parent=viewModel;secondBarrel.isPickable=false;
+  const lobbyWeapons=createLobbyWeapons(scene);lobbyWeapons.attach(character.weaponSocket);for(const mesh of lobbyWeapons.meshes)shadows.addShadowCaster(mesh);
   addStreetDetails(scene);
   const buildingParts = new Set(occluders.flatMap(building => building.meshes));
   const staticMeshes=batch(scene.meshes.filter((mesh): mesh is Mesh => mesh instanceof Mesh
@@ -469,7 +471,7 @@ export function createHarborScene(engine: Engine) {
   let jumpState=createJump();
   let hits=0,destroyed=0,shots=0;
   const effects=createShotEffects(scene,camera);
-  let preview = false, reference = false, lobbyPreview=false;
+  let preview = false, reference = false, lobbyPreview=false,lobbyMotion=true,lobbyTime=0,lobbyYaw=0,lobbyWeaponId:WeaponId='pistol';
   const recoil=createRecoil();
   function equip(){const slot=inventory.slots[inventory.active]!;weaponId=slot.id;spec=WEAPONS[weaponId];weapon=slot.weapon;cooldown=slot.cooldown;scoped=false;recoil.clear();}
   const supplies=createSupplyCrates(scene,createPickups());
@@ -478,10 +480,11 @@ export function createHarborScene(engine: Engine) {
   function resize() { camera.getProjectionMatrix(true); }
   function setReference(value: boolean) {
     effects.clear();botEffects.clear();robotImpact.clearParticles();for(const rig of botRigs.slice(1))rig.fx.clearParticles();recoil.clear();reference=value;player.setEnabled(value);plinth.setEnabled(false);viewModel.setEnabled(!value);
+    lobbyWeapons.show(lobbyWeaponId,false);character.poseLobby(false);
     camera.fov=value?0.95:1.25;camera.getProjectionMatrix(true);
   }
   function setPreview(value: boolean,lobby=false) {
-    lobbyPreview=value&&lobby;
+    lobbyPreview=value&&lobby;lobbyYaw=0;lobbyTime=0;character.poseLobby(lobbyPreview,0,lobbyWeaponId!=='pistol');lobbyWeapons.show(lobbyWeaponId,lobbyPreview);
     effects.clear();botEffects.clear();robotImpact.clearParticles();for(const rig of botRigs.slice(1))rig.fx.clearParticles();recoil.clear();reference=false;preview = value;plinth.setEnabled(value); player.setEnabled(value); viewModel.setEnabled(!value);
     camera.fov=value?(lobbyPreview?.65:.85):1.25;camera.getProjectionMatrix(true);
     previewLight.setEnabled(value);
@@ -537,7 +540,9 @@ export function createHarborScene(engine: Engine) {
       camera.position.set(42,50,-60);camera.setTarget(new Vector3(0,0,7));
     } else if (preview) {
       camera.position.set(displayPoint.x+(lobbyPreview?.7:1.7),lobbyPreview?1.7:2,displayPoint.z+(lobbyPreview?6.5:4.3));
-      player.rotation.y = Math.sin(animationTime*0.5)*0.12-0.1;
+      if(lobbyPreview&&lobbyMotion)lobbyTime+=Math.max(0,Math.min(.05,dt));
+      character.poseLobby(lobbyPreview,lobbyMotion?lobbyTime:0,lobbyWeaponId!=='pistol');lobbyWeapons.show(lobbyWeaponId,lobbyPreview);
+      player.rotation.y=lobbyPreview?lobbyYaw-.1+(lobbyMotion?Math.sin(lobbyTime*.8)*.018:0):Math.sin(animationTime*0.5)*0.12-.1;
       previewLight.position.set(displayPoint.x+1,3.8,displayPoint.z+3);
       camera.setTarget(new Vector3(displayPoint.x+(lobbyPreview?0:1.25),lobbyPreview?1.4:1.35,displayPoint.z));
     } else {
@@ -621,7 +626,7 @@ export function createHarborScene(engine: Engine) {
   function renderOnline(state:MatchState,id:string,look:Look,dt:number,predictedPosition?:Point,remotePosition?:(Point&{id:string})){
     const me=state.players.find(p=>p.id===id);if(!me)return;
     const other=state.players.find(p=>p.id!==id);
-    duelMode=false;ffaMode=false;survivalMode=false;preview=false;reference=false;if(weaponId!==me.weaponId||me.health===0)scoped=false;weaponId=me.weaponId;spec=WEAPONS[weaponId];weapon={...me.weapon};cooldown=me.cooldown;if(networkJumpTick!==state.tick){networkJumpTick=state.tick;networkJumpAge=0;}else networkJumpAge=Math.min(.15,networkJumpAge+dt);jumpState=advanceJump(me.jump,networkJumpAge);inventory=me.inventory??createInventory(me.weaponId);pickups=state.pickups??[];
+    duelMode=false;ffaMode=false;survivalMode=false;preview=false;reference=false;lobbyWeapons.show(lobbyWeaponId,false);character.poseLobby(false);if(weaponId!==me.weaponId||me.health===0)scoped=false;weaponId=me.weaponId;spec=WEAPONS[weaponId];weapon={...me.weapon};cooldown=me.cooldown;if(networkJumpTick!==state.tick){networkJumpTick=state.tick;networkJumpAge=0;}else networkJumpAge=Math.min(.15,networkJumpAge+dt);jumpState=advanceJump(me.jump,networkJumpAge);inventory=me.inventory??createInventory(me.weaponId);pickups=state.pickups??[];
     recoil.update(dt);effects.update(dt);botEffects.update(dt);
     update(predictedPosition??me,0,look,true);for(const target of targets)target.root.setEnabled(false);
     if(other){
@@ -663,6 +668,7 @@ export function createHarborScene(engine: Engine) {
       for(const texture of scene.textures)texture.anisotropicFilteringLevel=high?8:4;
     },
     scene, camera, player, update, resize, selectCharacter, setPreview, setReference, shoot,
+    setLobbyWeapon(id:WeaponId){lobbyWeaponId=id;lobbyWeapons.show(id,preview&&lobbyPreview);},setLobbyMotion(enabled:boolean){lobbyMotion=enabled;},rotateLobby(delta:number){if(preview&&lobbyPreview&&Number.isFinite(delta))lobbyYaw=Math.atan2(Math.sin(lobbyYaw+delta),Math.cos(lobbyYaw+delta));},resetLobbyRotation(){lobbyYaw=0;},
     get characterType() { return character.type; },
   };
 }

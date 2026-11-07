@@ -40,6 +40,7 @@ export function createCharacter(scene: Scene, parent: TransformNode, type: Chara
   };
   const ball=(name:string,x:number,y:number,z:number,d:number,m:StandardMaterial)=>add(MeshBuilder.CreateSphere(name,{diameter:d,segments:20},scene),x,y,z,m);
   const cylinder=(name:string,x:number,y:number,z:number,d:number,h:number,m:StandardMaterial)=>add(MeshBuilder.CreateCylinder(name,{diameter:d,height:h,tessellation:24},scene),x,y,z,m);
+  const arms:Array<{upper:TransformNode;lower:TransformNode}>=[];let weaponSocket:Mesh;
   for(const side of [-1,1]) {
     round('robot-boot',side*0.24,0.15,0.1,0.38,0.29,0.6,ivory);
     round('boot-sole',side*0.24,0.045,0.12,0.4,0.08,0.61,dark);
@@ -51,9 +52,11 @@ export function createCharacter(scene: Scene, parent: TransformNode, type: Chara
     const knee=cylinder('knee-hub',side*0.24,0.73,0.15,0.2,0.055,copper);knee.rotation.x=Math.PI/2;
     round('thigh',side*0.22,0.94,0,0.28,0.3,0.32,ivory);
     ball('hip-joint',side*0.22,1.08,0,0.22,dark);
+    const armStart=meshes.length;
     ball('shoulder-joint',side*0.46,1.48,0,0.31,dark);
     round('shoulder-shell',side*0.48,1.49,0.03,0.31,0.28,0.38,ivory);
     round('upper-arm',side*0.5,1.27,0,0.2,0.29,0.23,ivory);
+    const upperEnd=meshes.length;
     ball('elbow',side*0.51,1.09,0.02,0.2,dark);
     round('forearm-shell',side*0.52,0.94,0.055,0.23,0.28,0.25,ivory);
     round('forearm-trim',side*0.52,0.94,0.19,0.075,0.17,0.025,glow);
@@ -64,6 +67,11 @@ export function createCharacter(scene: Scene, parent: TransformNode, type: Chara
       ball('knuckle',side*0.52+(finger-1)*0.055,0.6,0.18,0.042,copper);
     }
     round('thumb',side*0.66,0.65,0.14,0.07,0.13,0.075,silver);
+    const upper=new TransformNode(`arm-upper-${side}`,scene);upper.parent=root;upper.position.set(side*.46,1.48,0);
+    const elbowPosition=new Vector3(side*.51,1.09,.02),lower=new TransformNode(`arm-lower-${side}`,scene);lower.parent=upper;lower.position.copyFrom(elbowPosition.subtract(upper.position));
+    for(const mesh of meshes.slice(armStart,upperEnd)){mesh.parent=upper;mesh.position.subtractInPlace(upper.position);}
+    const forearmMeshes=meshes.slice(upperEnd);for(const mesh of forearmMeshes){mesh.parent=lower;mesh.position.subtractInPlace(elbowPosition);}
+    if(side===1)weaponSocket=forearmMeshes.find(m=>m.name==='palm')!;arms.push({upper,lower});
     for(let screw=0;screw<2;screw++) ball('armor-fastener',side*0.33,1.23+screw*0.25,0.235,0.045,silver);
   }
   round('waist',0,1.1,0,0.55,0.17,0.35,dark);
@@ -111,5 +119,8 @@ export function createCharacter(scene: Scene, parent: TransformNode, type: Chara
     for(let i=2;i<25;i+=3) ball('tail-segment',path[i]!.x,path[i]!.y,path[i]!.z,0.17,i%2?copper:ivory);
     const tip=path[path.length-1]!;ball('cat-tail-tip',tip.x,tip.y,tip.z,0.18,cyan);
   }
-  return {root,meshes,type};
+  return {root,meshes,type,weaponSocket:weaponSocket!,poseLobby(active:boolean,phase=0,twoHanded=true){
+    root.scaling.y=active?1+Math.sin(phase*1.7)*.003:1;root.rotation.z=active?Math.sin(phase*.9)*.003:0;
+    arms.forEach(({upper,lower},i)=>{const raised=active&&(i===1||twoHanded);upper.rotation.set(raised?(i===1?-.55:-.65)+Math.sin(phase*1.7)*.008:0,0,raised?(i===1?-.15:.2):0);lower.rotation.set(raised?-.8:0,0,0);});
+  }};
 }

@@ -27,3 +27,5 @@
 실제 headless Chromium/SwiftShader로1366×900과844×390 터치 에뮬레이션을 확인했다. 메인에서 평면 캐릭터 SVG0개, 실제3D 모델 표시, 모바일 시작 버튼 화면 내 표시와 가로 넘침/스크롤 없음, 상단 캐릭터 메뉴→고양이 로봇, 장비 메뉴→저격총, 생존→자동→실제HUD5발/자동5/9를 확인했다. 런타임 예외0개. 초기 확인 로그는 `/tmp/harbor-shooter-lobby-browser.log`, 최종 구도 확인은 `/tmp/harbor-shooter-lobby-final-browser.log`다. 스크린샷 `/tmp/harbor-shooter-lobby-{desktop,mobile,mobile-cat}.png`를 사용한다.
 
 물리 휴대폰 터치·iOS Safari·실제GPU 성능/발열은 이 검증에 포함되지 않는다.
+
+후속 변경: 선택한 총 들기·팔 자세·대기 동작·드래그 회전·인터페이스 소리·출격 전환을 추가했다. 최신 범위와 검증은 [로비 효과](lobby-polish.md)를 따른다.
