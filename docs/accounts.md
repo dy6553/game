@@ -41,3 +41,5 @@ DB 장애가 렌더링/이동 루프를 기다리게 하지는 않는다. 결과
 - `docs/qa/ui-flow.mjs`: 로비 계정 진입 연결 부재 assertion 실패 후 main 연결. 설정 없는 게스트 부팅·PC/모바일 기존 동작을 회귀 검사한다. `account-ui.mjs`는 계정 화면 상태·비밀번호 비움·삭제 확인·포커스/inert 복구를 검사한다. DOM 검사는 실제 인증/실기기 검사가 아니다.
 - `docs/qa/official-database.mjs`: 별도 임시 PGlite(PostgreSQL WASM)에서 실제 마이그레이션/SQL을 실행해 25경기·오래된 결과 재전송·최근20개·삭제 트리거·삭제 후 재생성 차단을 확인했다. 운영 Neon DB 검사를 대신하지 않는다. 선택 실행: `HARBOR_POSTGRES_MODULE=<임시 설치 pglite의 dist/index.js 절대경로> node docs/qa/official-database.mjs`.
 - 실제 로컬 Wrangler Worker와 두 WebSocket으로 게스트 대시/탄약/재접속/종료 회귀를 확인했다. 공개 배포 결과와 최종 전체 검사 수는 최신 인계 기록에 남긴다.
+
+배포 환경 회귀: Cloudflare는 루트에서 패키지를 설치하므로 서버 전용 package.json에만 추가한 DB 라이브러리를 찾지 못했다. 별도 깨끗한 설치에서 `Could not resolve @neondatabase/serverless`를 재현한 뒤 루트에도 서버 런타임 의존성을 명시했다. 서버 node_modules가 없는 동일 환경에서 Worker dry-run을 다시 통과시켰다. 실제 배포 환경변수를 넣은 깨끗한 웹 빌드도 공개 assets와 일치했다.
