@@ -11,6 +11,7 @@ export function createInput(canvas: HTMLCanvasElement) {
   const reload = document.querySelector<HTMLButtonElement>('#reload');
   const jump = document.querySelector<HTMLButtonElement>('#jump');
   const sprint=document.querySelector<HTMLButtonElement>('#sprint');
+  const dash=document.querySelector<HTMLButtonElement>('#dash');
   let sprintToggle=false;
   let jumpKey:'Space'|'KeyJ'='Space';
   let stickPointer: number | null = null;
@@ -21,7 +22,7 @@ export function createInput(canvas: HTMLCanvasElement) {
   let firePointer:number|null=null,mouseHeld=false;
   let shots = 0;
   let reloads = 0;
-  let jumps = 0;
+  let jumps = 0;let dashes=0;
 
   let pressedAt = { x: 0, y: 0 };
   let mouseDragged = false;
@@ -33,12 +34,13 @@ export function createInput(canvas: HTMLCanvasElement) {
     lookPointer = null;
     shots = 0;
     reloads = 0;
-    jumps = 0;
+    jumps = 0;dashes=0;
   };
   window.addEventListener('keydown', event => {
     if (!enabled) return;
     const tag=(event.target as HTMLElement|null)?.tagName;
     if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'||(tag==='BUTTON'&&event.code==='Space'))return;
+    if(event.code==='KeyF'&&!event.ctrlKey&&!event.metaKey&&!event.altKey){event.preventDefault();if(!event.repeat)dashes++;return;}
     if(event.code==='ShiftLeft'||event.code==='ShiftRight'){event.preventDefault();keys.add(event.code);return;}
     if(jumpKey&&event.code===jumpKey){event.preventDefault();if(!event.repeat)jumps++;return;}
     if(event.code==='KeyR') { event.preventDefault();if(!event.repeat)reloads++;return; }
@@ -91,6 +93,8 @@ export function createInput(canvas: HTMLCanvasElement) {
   sprint?.addEventListener('click',event=>{if(enabled&&event.detail===0)sprintToggle=!sprintToggle;});
   jump?.addEventListener('pointerdown',event=>{if(!enabled)return;event.preventDefault();jumps++;});
   jump?.addEventListener('click',event=>{if(enabled&&event.detail===0)jumps++;});
+  dash?.addEventListener('pointerdown',event=>{if(!enabled)return;event.preventDefault();dashes++;});
+  dash?.addEventListener('click',event=>{if(enabled&&event.detail===0)dashes++;});
   const updateStick = (event: PointerEvent) => {
     const rect = joystick.getBoundingClientRect();
     const radius = rect.width * 0.33;
@@ -133,6 +137,7 @@ export function createInput(canvas: HTMLCanvasElement) {
     get firing(){return firePointer!==null||mouseHeld;},
     consumeShots() { const count = shots; shots = 0; return count; },
     consumeReloads() { const count=reloads;reloads=0;return count; },
+    consumeDashes(){const count=dashes;dashes=0;return count;},
     consumeJumps() { const count=jumps;jumps=0;return count; },
     setJumpKey(code:'Space'|'KeyJ') {jumpKey=code;},
   };

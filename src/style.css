@@ -249,3 +249,4 @@ body.comparing .ammo-hud,body.comparing .practice-complete { display:none; }
  .shooter-lobby .lobby-side{max-height:100%;overflow-y:auto;overscroll-behavior:contain}
  .shooter-lobby .lobby-match-dock .home-start-actions{position:sticky;bottom:0;z-index:1;padding-top:6px;background:linear-gradient(transparent,#0b202d 12%)}
 }
+.dash-button{position:absolute;left:calc(max(40px,env(safe-area-inset-left)) + 72px);bottom:calc(max(14px,env(safe-area-inset-bottom)) + 124px);width:66px;height:48px;padding:3px;border-radius:14px;border:1px solid #b9d8c6;background:#244452e8;color:#e4f0e0;font-size:10px;pointer-events:auto;touch-action:none;user-select:none}.dash-button:disabled{opacity:.52}.dash-button:not(:disabled){border-color:#d3e1ad}.dash-button:active{background:#638977}@media(max-height:330px){.dash-button{left:max(138px,env(safe-area-inset-left));bottom:calc(max(14px,env(safe-area-inset-bottom)) + 116px)}}

@@ -73,7 +73,7 @@ export class Lobby extends DurableObject {
 export default {async fetch(request,env){
  const origin=request.headers.get('Origin'),allowed=env.ALLOWED_ORIGINS.split(',');
  if(!origin||!allowed.includes(origin))return json({error:'허용되지 않은 접속 주소'},403);
- const headers={'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Methods':'POST,GET,OPTIONS','Access-Control-Allow-Headers':'Content-Type','Vary':'Origin','X-Harbor-Version':'supply-jump-v1'};
+ const headers={'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Methods':'POST,GET,OPTIONS','Access-Control-Allow-Headers':'Content-Type','Vary':'Origin','X-Harbor-Version':'dash-v1'};
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
  const url=new URL(request.url);let response;
  try{
