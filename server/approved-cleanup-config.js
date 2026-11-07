@@ -1,0 +1,2 @@
+export const config={"publicKey":{"kty":"OKP","crv":"Ed25519","x":"pkYZ_mv5n9pCn8Mbe9w6QCQFUQswt_esFjEMvWk6RPQ"},"deadline":1794035811091,"job":"b1ff0ad4-d4ff-49c9-a821-72517ee9ceee","sqlHash":"a593f7faeb58fe3fadb9306f708cc7cb069c823f56f789c1a920a4be1a5993a7"};
+export const approvedSQL="DELETE FROM neon_auth.\"user\" AS u\nUSING harbor.profiles AS p\nWHERE u.id::text = p.subject\n  AND u.email = 'harbor-qa-c21b0682-27ae-4e5b-9d8c-9d8aebe5388c@example.invalid'\n  AND p.id = 'd4020234-1b75-4835-8a36-b0916847c61f'::uuid\n  AND p.played = 1 AND p.wins = 1\nRETURNING u.email;";
