@@ -28,3 +28,5 @@ Chromium을 실제로 실행해 로컬 프로덕션 번들을 확인했다.1366�
 브라우저는 헤드리스 Chromium/SwiftShader 소프트웨어 WebGL이다. 실제 GPU 성능·휴대폰 발열/FPS·물리 터치 검증으로 주장하지 않는다. 브라우저 검증 스크립트/스크린샷은 `/tmp/harbor-home-browser.mjs`, `/tmp/harbor-home-{desktop,mobile,mobile-start,mobile-final}.png`에 둔다.
 
 모바일 고정 버튼 확인 결과: `/tmp/harbor-home-mobile-green.log`에서 화면높이390에 버튼하단374로 표시됨을 확인했고 `/tmp/harbor-home-mobile-final.png`를 검토했다. 스크롤 전에도 ‘게임 시작’을 누를 수 있다.
+
+후속 수정: 모바일 기본 선택창을 게임 안의 카드 대화상자로 대체하고 로비 UI를 다듬었다. 최신 기준은 [로비 선택창](lobby-choices.md)을 따른다.

@@ -1,3 +1,4 @@
+import {createGameChoices} from './game-choices.ts';
 import {HOME_MARKUP,createHomeScreen} from './home-screen.ts';
 import {createResultJournal,createResultTracker,type ResultSnapshot} from './results.ts';
 import {RESULTS_MARKUP,createResultsView} from './results-view.ts';
@@ -159,7 +160,7 @@ async function start() {
   const onlineLobby=document.querySelector<HTMLElement>('#online-lobby')!;
   const online=createOnlineClient(import.meta.env?.VITE_ONLINE_URL??(import.meta.env?.DEV?'http://127.0.0.1:8787':''),(state,id)=>{
     playtest.packet();onlineState=state;onlineId=id;onlineMotion.receive(state,id);remoteMotion.receive(state,id,performance.now());
-    if(!onlineActive){onlineActive=true;homeOpen=false;home.hidden=true;onlineLobby.hidden=true;document.body.classList.remove('at-home');picker.hidden=true;manualPaused=false;pausePanel.hidden=true;world.setPreview(false);const me=state.players.find(p=>p.id===id);if(me){world.selectCharacter(me.character);world.selectWeapon(me.weaponId);input.resetLook();input.setLook(me.yaw,me.pitch);}hasPlayed=true;canvas.focus();}
+    if(!onlineActive){gameChoices.close();onlineActive=true;homeOpen=false;home.hidden=true;onlineLobby.hidden=true;document.body.classList.remove('at-home');picker.hidden=true;manualPaused=false;pausePanel.hidden=true;world.setPreview(false);const me=state.players.find(p=>p.id===id);if(me){world.selectCharacter(me.character);world.selectWeapon(me.weaponId);input.resetLook();input.setLook(me.yaw,me.pitch);}hasPlayed=true;canvas.focus();}
     observeOnlineResult(state,id);
   },status=>{if(status!=='대전 중'&&status!=='경기 종료')resultOnlineReady=false;onlineStatus=status;document.querySelector('#online-message')!.textContent=status;},session=>{onlineCode=session.code;resultTracker.start();shownResult='';resultOnlineTick=null;resultOnlineReady=false;resultView.hide();});
   let pendingSlot:number|undefined,pendingTake:{pickup:string;replace?:number}|undefined,choosePickupId:string|undefined;
@@ -168,7 +169,7 @@ async function start() {
     if(onlineActive&&onlineState){const me=onlineState.players.find(p=>p.id===onlineId)!;return {inventory:me.inventory??createInventory(me.weaponId),pickups:onlineState.pickups??[],position:me,ready:!!me.inventory&&!!onlineState.pickups,blocked:me.health===0||!!onlineState.winner||onlineState.players.length<2||onlineState.players.some(p=>!p.connected)||!online.connected};}
     const battle=world.duelState();return {...world.inventoryState(),position,ready:true,blocked:battle.active&&(battle.playerHealth===0||!!battle.winner)};
   }
-  function canUseInventory(){return !resultView.isOpen&&!homeOpen&&!manualPaused&&picker.hidden&&!menuOpen&&help.hidden&&!comparing&&!document.hidden&&document.hasFocus()&&!matchMedia('(pointer: coarse) and (orientation: portrait)').matches;}
+  function canUseInventory(){return !gameChoices.isOpen&&!resultView.isOpen&&!homeOpen&&!manualPaused&&picker.hidden&&!menuOpen&&help.hidden&&!comparing&&!document.hidden&&document.hasFocus()&&!matchMedia('(pointer: coarse) and (orientation: portrait)').matches;}
   function requestPickup(replace?:number){
     if(!canUseInventory())return;const data=inventoryData(),crate=nearbyPickup(data.position,data.pickups);if(data.blocked||!data.ready||!crate)return;
     if(data.inventory.slots.some(s=>s.id===crate.weaponId)){notice='이미 가진 무기입니다';noticeTime=1;return;}
@@ -189,7 +190,7 @@ async function start() {
   }
   let onlineControlsActive=false;const updateOnlineControls=(active:boolean)=>{if(active===onlineControlsActive)return;onlineControlsActive=active;document.querySelector<HTMLElement>('#online-copy')!.hidden=!active;for(const id of ['character-open','game-mode','bot-difficulty','weapon-select','practice-reset','reset'])document.querySelector<HTMLButtonElement>('#'+id)!.disabled=active;};
   document.querySelector('#online-copy')!.addEventListener('click',async()=>{const url=new URL(location.href);url.searchParams.set('room',onlineCode);try{await navigator.clipboard.writeText(url.href);document.querySelector('#online-copy')!.textContent='초대 링크 복사됨';}catch{document.querySelector('#online-copy')!.textContent=`방 코드 ${onlineCode}`;}});
-  const openOnlineLobby=()=>{home.hidden=true;onlineLobby.hidden=false;document.querySelector('#online-message')!.textContent=online.available?'방을 만들거나 친구의 코드를 입력하세요.':'온라인 서버 연결 준비 중입니다. 봇 대전과 표적 연습은 바로 이용할 수 있습니다.';for(const id of ['online-create','online-join','online-quick'])document.querySelector<HTMLButtonElement>('#'+id)!.disabled=!online.available;};
+  const openOnlineLobby=()=>{gameChoices.close();home.hidden=true;onlineLobby.hidden=false;document.querySelector('#online-message')!.textContent=online.available?'방을 만들거나 친구의 코드를 입력하세요.':'온라인 서버 연결 준비 중입니다. 봇 대전과 표적 연습은 바로 이용할 수 있습니다.';for(const id of ['online-create','online-join','online-quick'])document.querySelector<HTMLButtonElement>('#'+id)!.disabled=!online.available;};
   for(const [id,action] of [['online-create','create'],['online-join','join'],['online-quick','quick']] as const)document.querySelector('#'+id)!.addEventListener('click',async()=>{
     const buttons=['online-create','online-join','online-quick'].map(id=>document.querySelector<HTMLButtonElement>('#'+id)!);buttons.forEach(button=>button.disabled=true);
     try{await online.enter(action,document.querySelector<HTMLInputElement>('#online-code')!.value.trim().toUpperCase(),document.querySelector<HTMLSelectElement>('#online-weapon')!.value,document.querySelector<HTMLSelectElement>('#online-character')!.value);}catch(error){document.querySelector('#online-message')!.textContent=error instanceof Error?error.message:'방에 입장하지 못했습니다.';}finally{buttons.forEach(button=>button.disabled=!online.available);}
@@ -198,7 +199,7 @@ async function start() {
   let manualPaused=false,hasPlayed=false,wasLocked=false;
   const pausePanel=document.querySelector<HTMLElement>('#pause-panel')!;
   const pauseGame=()=>{
-    if(!hasPlayed||homeOpen||!picker.hidden||resultView.isOpen)return;
+    if(!hasPlayed||homeOpen||!picker.hidden||resultView.isOpen||gameChoices.isOpen)return;
     manualPaused=true;input.setEnabled(false);audio.pause(true);
     if(document.pointerLockElement)document.exitPointerLock();
     pausePanel.hidden=false;document.querySelector<HTMLButtonElement>('#resume')!.focus();
@@ -264,7 +265,7 @@ async function start() {
   const refreshCharacter = () => choices.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.character === world.characterType)));
   const openPicker = () => { setComparison(false);input.setEnabled(false);document.querySelector<HTMLSelectElement>('#start-mode')!.value=document.querySelector<HTMLSelectElement>('#game-mode')!.value;document.querySelector<HTMLSelectElement>('#start-difficulty')!.value=document.querySelector<HTMLSelectElement>('#bot-difficulty')!.value;document.querySelector<HTMLSelectElement>('#start-weapon')!.value=document.querySelector<HTMLSelectElement>('#weapon-select')!.value; input.reset(); if (document.pointerLockElement) document.exitPointerLock(); world.setPreview(true); refreshCharacter(); picker.hidden = false; choices[0]!.focus(); };
   const home=document.querySelector<HTMLElement>('#home-screen')!;
-  const openHome=()=>{syncHomeSelection();resultTracker.cancel();resultView.hide();online.leave();onlineMotion.reset();remoteMotion.reset();pendingSlot=undefined;pendingTake=undefined;choosePickupId=undefined;onlineActive=false;onlineState=null;onlineId='';onlineEventId=-1;world.endOnline();onlineLobby.hidden=true;updateOnlineControls(false);homeOpen=true;home.hidden=false;document.body.classList.add('at-home');manualPaused=false;pausePanel.hidden=true;closeMenu();document.querySelector<HTMLElement>('#help')!.hidden=true;picker.hidden=true;setComparison(false);input.setEnabled(false);world.setPreview(true);document.querySelector<HTMLButtonElement>('#home-start')!.focus();};
+  const openHome=()=>{gameChoices.close();syncHomeSelection();resultTracker.cancel();resultView.hide();online.leave();onlineMotion.reset();remoteMotion.reset();pendingSlot=undefined;pendingTake=undefined;choosePickupId=undefined;onlineActive=false;onlineState=null;onlineId='';onlineEventId=-1;world.endOnline();onlineLobby.hidden=true;updateOnlineControls(false);homeOpen=true;home.hidden=false;document.body.classList.add('at-home');manualPaused=false;pausePanel.hidden=true;closeMenu();document.querySelector<HTMLElement>('#help')!.hidden=true;picker.hidden=true;setComparison(false);input.setEnabled(false);world.setPreview(true);document.querySelector<HTMLButtonElement>('#home-start')!.focus();};
   document.querySelector('#online-back')!.addEventListener('click',openHome);
   document.querySelector('#home-open')!.addEventListener('click',openHome);
   document.querySelector('#setup-home')!.addEventListener('click',openHome);
@@ -317,7 +318,7 @@ async function start() {
   picker.addEventListener('keydown', event => {
     if (event.key === 'Tab') {
       event.preventDefault();
-      const buttons=[...picker.querySelectorAll<HTMLButtonElement|HTMLSelectElement>('button,select')].filter(element=>element.getClientRects().length>0);
+      const buttons=[...picker.querySelectorAll<HTMLButtonElement|HTMLSelectElement>('button,select')].filter(element=>!element.hidden&&element.getClientRects().length>0);
       const index = buttons.indexOf(document.activeElement as HTMLButtonElement|HTMLSelectElement);
       buttons[(index + (event.shiftKey ? buttons.length - 1 : 1)) % buttons.length]!.focus();
     }
@@ -431,16 +432,16 @@ async function start() {
     resultTracker.observe({mode:'online',active:true,difficulty:null,winner:state.winner?(state.winner===id?'win':'loss'):'',kills:me.kills,deaths:foe.kills,wave:null,totalWaves:null,stage:null},seconds);showFinishedResult();
   }
   const resultView=createResultsView(journal,{
-    opened(){input.setEnabled(false);input.reset();pausePanel.hidden=true;manualPaused=false;closeMenu();help.hidden=true;if(document.pointerLockElement)document.exitPointerLock();audio.pause(true);},
+    opened(){gameChoices.close();input.setEnabled(false);input.reset();pausePanel.hidden=true;manualPaused=false;closeMenu();help.hidden=true;if(document.pointerLockElement)document.exitPointerLock();audio.pause(true);},
     home:openHome,
     retry(isOnline){if(isOnline){openHome();openOnlineLobby();}else{restart();resumeGame();}},
   });
   document.querySelector('#home-records')!.addEventListener('click',()=>resultView.history());
   window.addEventListener('keydown',event=>{
     const tag=(event.target as HTMLElement|null)?.tagName;
-    if(event.code==='KeyQ'&&!resultView.isOpen&&!homeOpen&&!event.repeat&&!manualPaused&&!menuOpen&&picker.hidden&&!comparing&&document.querySelector<HTMLElement>('#help')!.hidden&&!['INPUT','SELECT','TEXTAREA'].includes(tag??'')){event.preventDefault();world.toggleScope();audio.play('scope');}
+    if(event.code==='KeyQ'&&!gameChoices.isOpen&&!resultView.isOpen&&!homeOpen&&!event.repeat&&!manualPaused&&!menuOpen&&picker.hidden&&!comparing&&document.querySelector<HTMLElement>('#help')!.hidden&&!['INPUT','SELECT','TEXTAREA'].includes(tag??'')){event.preventDefault();world.toggleScope();audio.play('scope');}
   });
-  document.querySelector('#scope')!.addEventListener('click',()=>{if(resultView.isOpen||homeOpen||manualPaused||menuOpen||!picker.hidden||comparing||!document.querySelector<HTMLElement>('#help')!.hidden)return;world.toggleScope();audio.play('scope');canvas.focus();});
+  document.querySelector('#scope')!.addEventListener('click',()=>{if(gameChoices.isOpen||resultView.isOpen||homeOpen||manualPaused||menuOpen||!picker.hidden||comparing||!document.querySelector<HTMLElement>('#help')!.hidden)return;world.toggleScope();audio.play('scope');canvas.focus();});
   const help = document.querySelector<HTMLElement>('#help')!;
   const closeHelp=()=>{help.hidden=true;document.querySelector('#help-toggle')!.setAttribute('aria-expanded','false');input.reset();};
   document.querySelector('#pause-continue')!.addEventListener('click',()=>{closeHelp();closeMenu();resumeGame();});
@@ -459,6 +460,7 @@ async function start() {
   pausePanel.addEventListener('keydown',event=>{if(event.key!=='Tab')return;event.preventDefault();const buttons=[...pausePanel.querySelectorAll<HTMLButtonElement>('button')].filter(button=>button.getClientRects().length>0);const index=buttons.indexOf(document.activeElement as HTMLButtonElement);buttons[(index+(event.shiftKey?buttons.length-1:1))%buttons.length]!.focus();});
   window.addEventListener('resize', () => { closeMenu(); engine.resize(); world.resize(); });
   canvas.addEventListener('contextmenu', event => event.preventDefault());
+  const gameChoices=createGameChoices({opened(){input.setEnabled(false);input.reset();if(document.pointerLockElement)document.exitPointerLock();}});
   world.update(position, 1);
   await world.scene.whenReadyAsync();
   loading.hidden = true;
@@ -471,7 +473,7 @@ async function start() {
     const elapsed=resetClock?0:Math.max(0,engine.getDeltaTime()/1000);resetClock=false;
     const dt = Math.min(elapsed, 0.05);
     const portraitTouch = matchMedia('(pointer: coarse) and (orientation: portrait)').matches;
-    const canPlay=!resultView.isOpen&&!homeOpen&&!manualPaused&&!document.hidden&&!portraitTouch&&picker.hidden&&!comparing&&!menuOpen&&help.hidden&&document.hasFocus();
+    const canPlay=!gameChoices.isOpen&&!resultView.isOpen&&!homeOpen&&!manualPaused&&!document.hidden&&!portraitTouch&&picker.hidden&&!comparing&&!menuOpen&&help.hidden&&document.hasFocus();
     input.setEnabled(canPlay);
     document.querySelector('#pause-description')!.textContent=onlineActive?'내 조작만 멈춥니다. 상대의 경기는 계속됩니다.':'전투와 이동이 멈췄습니다.';
     document.querySelector<HTMLElement>('#pause-indicator')!.hidden=manualPaused||!picker.hidden||comparing||portraitTouch||(!menuOpen&&help.hidden);
@@ -540,6 +542,7 @@ async function start() {
     syncDifficultyOptions();
     document.querySelector<HTMLElement>('#bot-difficulty-setting')!.hidden=onlineActive||document.querySelector<HTMLSelectElement>('#game-mode')!.value==='practice';document.querySelector<HTMLElement>('#start-difficulty-setting')!.hidden=document.querySelector<HTMLSelectElement>('#start-mode')!.value==='practice';
     document.querySelector<HTMLElement>('#ffa-mode-note')!.hidden=document.querySelector<HTMLSelectElement>('#start-mode')!.value!=='ffa';document.querySelector<HTMLElement>('#survival-mode-note')!.hidden=document.querySelector<HTMLSelectElement>('#start-mode')!.value!=='survival';
+    gameChoices.refresh();
     noticeTime=Math.max(0,noticeTime-elapsed);refreshHud();refreshInventory();
     hitTime = Math.max(0, hitTime - elapsed);
     shotTime=Math.max(0,shotTime-elapsed);feedbackTime=Math.max(0,feedbackTime-elapsed);
