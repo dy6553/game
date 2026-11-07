@@ -5,8 +5,11 @@ export function createPlaytest(){
  let metricsWindow=createPlaytestWindow(),mode:PlaytestMode='practice',active=false,lastPacket:number|null=null,age=0,sampleAge=0,index=0,uploaded=0;
  const history:unknown[]=[];const expires=performance.now()+600000;
  const panel=document.createElement('aside');panel.className='playtest-panel';panel.hidden=!enabled;
- const label=document.createElement('span'),stop=document.createElement('button'),save=document.createElement('button');stop.textContent='수집 끄기';save.textContent='기록 저장';panel.append(label,stop,save);document.querySelector('#app')!.append(panel);
- function status(text:string){label.textContent=`진단 ${report} · ${text}`;}
+ const label=document.createElement('span'),stop=document.createElement('button'),save=document.createElement('button'),toggle=document.createElement('button'),actions=document.createElement('div');
+ stop.textContent='수집 끄기';stop.className='playtest-stop';save.textContent='기록 저장';toggle.className='playtest-toggle';toggle.type=stop.type=save.type='button';actions.className='playtest-actions';actions.id=`playtest-actions-${report}`;actions.hidden=true;toggle.setAttribute('aria-expanded','false');toggle.setAttribute('aria-controls',actions.id);toggle.setAttribute('aria-label',`진단 ${report} 도구 열기`);label.setAttribute('role','status');actions.append(label,stop,save);panel.append(toggle,actions);document.querySelector('#app')!.append(panel);
+ const summary=()=>{toggle.textContent=`진단 ${report} · ${uploaded}회 전송 ${actions.hidden?'▾':'▴'}`;};
+ toggle.addEventListener('click',()=>{actions.hidden=!actions.hidden;toggle.setAttribute('aria-expanded',String(!actions.hidden));toggle.setAttribute('aria-label',`진단 ${report} 도구 ${actions.hidden?'열기':'닫기'}`);summary();});
+ function status(text:string){label.textContent=`진단 ${report} · ${text}`;summary();}
  async function flush(){
   const stats=metricsWindow.read();if(stats.frames===0)return;
   const payload={v:1,source:'play',report,window:++index,mode,...stats};history.push(payload);metricsWindow=createPlaytestWindow();age=sampleAge=0;
