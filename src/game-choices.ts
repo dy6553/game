@@ -34,6 +34,7 @@ export function createGameChoices(actions:{opened():void}){
    const mark=document.createElement('span'),copy=document.createElement('span'),name=document.createElement('strong'),description=document.createElement('small'),check=document.createElement('span');
    mark.className='choice-option-mark';mark.textContent=marks[option.value]??String(options.children.length+1).padStart(2,'0');mark.setAttribute('aria-hidden','true');
    copy.className='choice-option-copy';name.textContent=option.textContent;description.textContent=select.id==='online-mode'?({duel:'상대 한 명과 대결 · 먼저10킬',ffa:'같은 맵 최대20명 · 먼저10킬 경쟁',team:'최대10대10 · 팀 합계30킬'}[option.value]??'대전 방식을 선택하세요.'):descriptions[option.value]??'선택한 설정을 적용합니다.';
+   if(select.id==='frame-target')description.textContent=option.value==='0'?'브라우저 주사율까지 렌더링합니다.':option.value==='30'?'렌더링 횟수를 줄여 전력 사용을 낮춥니다.':option.value==='60'?'부드러움과 전력 사용의 균형을 맞춥니다.':'기기·브라우저가 지원하는 고주사율에서 동작합니다.';
    if(!select.id.includes('difficulty')&&['easy','normal','hard','auto'].includes(option.value))description.textContent=select.id==='graphics-quality'?(option.value==='auto'?'기기 성능에 맞춰 해상도를 조절합니다.':'화질 설정을 적용합니다.'):'효과의 강도를 선택합니다.';
    check.className='choice-option-check';check.textContent=option.value===select.value?'선택됨 ✓':'선택 →';copy.append(name,description);button.append(mark,copy,check);
    button.addEventListener('click',()=>{if(select.disabled||option.disabled||option.hidden)return;select.value=option.value;close();select.dispatchEvent(new window.Event('change',{bubbles:true}));refresh();});options.append(button);

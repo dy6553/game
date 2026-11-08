@@ -752,6 +752,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     impactState:()=>({...robotImpact.stats(),recoil:recoil.read()}),
     setReducedShots(value:boolean){reducedShots=value;effects.setReduced(value);botEffects.setReduced(value);},
     setShake(level:ShakeLevel){recoil.setShake(level);},
+    setShadows(enabled:boolean){scene.shadowsEnabled=enabled;},
     setQuality(high:boolean){
       onlineQualityHigh=high;for(const r of remotes.values())r.fx.setQuality(high);atmosphere.setQuality(high);robotImpact.setQuality(high);for(const rig of botRigs.slice(1))rig.fx.setQuality(high);
       const mapSize=high?2048:1024;if(shadows.mapSize!==mapSize)shadows.mapSize=mapSize;

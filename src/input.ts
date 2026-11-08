@@ -3,7 +3,7 @@ import { turnView } from './view.ts';
 
 export function createInput(canvas: HTMLCanvasElement, options: {requestMouseLock?:()=>boolean} = {}) {
   let enabled = true;
-  let touchSensitivity = 1;
+  let touchSensitivity = 1,mouseSensitivity=1;
   const keys = new Set<string>();
   const joystick = document.querySelector<HTMLElement>('#joystick')!;
   const thumb = document.querySelector<HTMLElement>('#joystick-thumb')!;
@@ -66,7 +66,7 @@ export function createInput(canvas: HTMLCanvasElement, options: {requestMouseLoc
     canvas.setPointerCapture(event.pointerId);
   });
   document.addEventListener('mousemove',event=>{
-    if(enabled&&document.pointerLockElement===canvas)look=turnView(look,event.movementX,event.movementY,.0025);
+    if(enabled&&document.pointerLockElement===canvas)look=turnView(look,event.movementX,event.movementY,.0025*mouseSensitivity);
   });
   canvas.addEventListener('pointerenter',()=>{hoverPoint=null;});
   canvas.addEventListener('pointerleave',()=>{hoverPoint=null;});
@@ -75,11 +75,11 @@ export function createInput(canvas: HTMLCanvasElement, options: {requestMouseLoc
     if (document.pointerLockElement === canvas && event.pointerType === 'mouse') {
       return; // Pointer Lock uses document mousemove; never apply a second delta.
     } else if(event.pointerType==='mouse'&&lookPointer===null&&event.target===canvas){
-      if(hoverPoint)look=turnView(look,event.clientX-hoverPoint.x,event.clientY-hoverPoint.y,.004);
+      if(hoverPoint)look=turnView(look,event.clientX-hoverPoint.x,event.clientY-hoverPoint.y,.004*mouseSensitivity);
       hoverPoint={x:event.clientX,y:event.clientY};
     } else if (event.pointerId === lookPointer) {
       if (Math.hypot(event.clientX - pressedAt.x, event.clientY - pressedAt.y) > 6) mouseDragged = true;
-      look = turnView(look, event.clientX - last.x, event.clientY - last.y, event.pointerType === 'touch' ? .007*touchSensitivity : .004);
+      look = turnView(look, event.clientX - last.x, event.clientY - last.y, event.pointerType === 'touch' ? .007*touchSensitivity : .004*mouseSensitivity);
       last = { x: event.clientX, y: event.clientY };
     }
   };
@@ -139,6 +139,7 @@ export function createInput(canvas: HTMLCanvasElement, options: {requestMouseLoc
 
   return {
     setEnabled(value: boolean) { if (enabled !== value) { enabled = value; reset(); } },
+    setMouseSensitivity(value:number){if(Number.isFinite(value))mouseSensitivity=Math.max(.25,Math.min(2,value));},
     setTouchSensitivity(value: number) { if (Number.isFinite(value)) touchSensitivity = Math.max(.25, Math.min(2, value)); },
     reset,
     get move() {
