@@ -26,3 +26,7 @@ test('shot visuals move toward the actual impact, stay bounded and never become 
     scene.dispose();
   }finally{engine.dispose();}
 });
+
+test('camera-origin and near-wall shots cannot put a muzzle billboard inside the camera',()=>{const e=new NullEngine(),s=new Scene(e),c=new FreeCamera('c',new Vector3(0,2,0),s);try{const fx=createShotEffects(s,c);fx.emit(c.position.clone(),new Vector3(0,2,20),Vector3.Backward(),false,false);assert.equal(fx.meshes.find(m=>m.name==='fx-muzzle-flash')!.isEnabled(),false);assert.equal(fx.stats().traces,1);}finally{s.dispose();e.dispose();}});
+
+test('reduced shot effects retain tracers and impact feedback without flashes or shells',()=>{const e=new NullEngine(),s=new Scene(e),c=new FreeCamera('c',new Vector3(0,2,0),s);try{const fx=createShotEffects(s,c);fx.setReduced(true);fx.emit(new Vector3(.3,1.8,1),new Vector3(0,2,20),Vector3.Backward(),true,true);assert.equal(fx.meshes.find(m=>m.name==='fx-muzzle-flash')!.isEnabled(),false);assert.equal(fx.stats().shells,0);assert.equal(fx.stats().traces,1);assert.equal(fx.stats().sparks,2);}finally{s.dispose();e.dispose();}});

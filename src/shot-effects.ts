@@ -39,7 +39,7 @@ export function createShotEffects(scene:Scene,camera:Camera) {
   const flashMat=mat('flash','#ffffff',true);flashMat.diffuseTexture=texture('flash');
   flashMat.useAlphaFromDiffuseTexture=true;flashMat.disableDepthWrite=true;flashMat.backFaceCulling=false;
   const flash=add(MeshBuilder.CreatePlane('fx-muzzle-flash',{size:0.37},scene),flashMat);flash.billboardMode=Mesh.BILLBOARDMODE_ALL;
-  let flashLife=0;
+  let flashLife=0,reduced=false;
   const markMat=mat('mark','#ffffff',true);markMat.diffuseTexture=texture('mark');
   markMat.useAlphaFromDiffuseTexture=true;markMat.disableDepthWrite=true;markMat.backFaceCulling=false;
   const traces=Array.from({length:8},()=>({mesh:add(MeshBuilder.CreateCylinder('fx-tracer',{height:1,diameter:0.018,tessellation:6},scene),light),start:Vector3.Zero(),end:Vector3.Zero(),direction:Vector3.Forward(),distance:0,travel:0,active:false}));
@@ -49,13 +49,13 @@ export function createShotEffects(scene:Scene,camera:Camera) {
   const clouds=Array.from({length:6},()=>({mesh:add(MeshBuilder.CreateSphere('fx-impact-dust',{diameter:0.12,segments:6},scene),dust),life:0}));
   let traceIndex=0,sparkIndex=0,markIndex=0,shellIndex=0,cloudIndex=0,emitted=0;
   function emit(start:Vector3,end:Vector3,normal:Vector3,impact:boolean,target:boolean,primary=true) {
-    emitted++;if(primary){flash.position.copyFrom(start);flash.setEnabled(true);flashLife=0.045;}
+    emitted++;if(primary){flashLife=!reduced&&Vector3.DistanceSquared(start,camera.position)>.25?.045:0;flash.position.copyFrom(start);flash.setEnabled(flashLife>0);}
     const trace=traces[traceIndex++%traces.length]!;
     trace.start.copyFrom(start);trace.end.copyFrom(end);trace.direction=end.subtract(start).normalize();
     trace.distance=Vector3.Distance(start,end);trace.travel=0;trace.active=true;
     trace.mesh.rotationQuaternion=new Quaternion();Quaternion.FromUnitVectorsToRef(Vector3.Up(),trace.direction,trace.mesh.rotationQuaternion);
     trace.mesh.position.copyFrom(start);trace.mesh.scaling.y=0.01;trace.mesh.setEnabled(true);
-    if(primary){const shell=shells[shellIndex++%shells.length]!;
+    if(primary&&!reduced){const shell=shells[shellIndex++%shells.length]!;
     shell.mesh.position.copyFrom(start);shell.mesh.position.y-=0.1;shell.mesh.setEnabled(true);shell.life=1.1;shell.bounced=false;
     shell.velocity=camera.getDirection(Vector3.Right()).scale(1.3).add(new Vector3(0,1.05,0));
     }
@@ -63,13 +63,13 @@ export function createShotEffects(scene:Scene,camera:Camera) {
     const n=normal.lengthSquared()>0.1?normal.normalizeToNew():trace.direction.scale(-1);
     const right=Vector3.Cross(n,Math.abs(n.y)>0.9?Vector3.Right():Vector3.Up()).normalize();
     const up=Vector3.Cross(n,right).normalize();
-    for(let i=0;i<6;i++) {
+    for(let i=0;i<(reduced?2:6);i++) {
       const p=particles[sparkIndex++%particles.length]!,angle=i*2.4+emitted;
       p.mesh.position.copyFrom(end.add(n.scale(0.025)));p.mesh.material=target?targetSpark:spark;
       p.velocity=n.scale(0.6+i*0.1).add(right.scale(Math.cos(angle)*0.8)).add(up.scale(Math.sin(angle)*0.8));
       p.life=0.15+(i%3)*0.035;p.mesh.setEnabled(true);
     }
-    if(!target) {
+    if(!target&&!reduced) {
       const mark=marks[markIndex++%marks.length]!;mark.life=9;mark.mesh.position.copyFrom(end.add(n.scale(0.012)));
       mark.mesh.rotationQuaternion=new Quaternion();Quaternion.FromUnitVectorsToRef(Vector3.Forward(),n,mark.mesh.rotationQuaternion);mark.mesh.setEnabled(true);
       const cloud=clouds[cloudIndex++%clouds.length]!;cloud.life=0.28;cloud.mesh.position.copyFrom(end.add(n.scale(0.06)));
@@ -99,5 +99,5 @@ export function createShotEffects(scene:Scene,camera:Camera) {
     for(const item of [...particles,...marks,...shells,...clouds])item.life=0;
     flashLife=0;emitted=0;
   }
-  return {emit,update,clear,meshes,stats:()=>({emitted,traces:traces.filter(t=>t.active).length,marks:marks.filter(m=>m.life>0).length,sparks:particles.filter(p=>p.life>0).length,shells:shells.filter(s=>s.life>0).length})};
+  return {emit,update,clear,meshes,setReduced(value:boolean){reduced=value;if(value){flashLife=0;flash.setEnabled(false);}},stats:()=>({emitted,traces:traces.filter(t=>t.active).length,marks:marks.filter(m=>m.life>0).length,sparks:particles.filter(p=>p.life>0).length,shells:shells.filter(s=>s.life>0).length})};
 }

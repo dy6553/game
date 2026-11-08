@@ -1,4 +1,4 @@
-export type Sound='grenade'|'flash'|'heal'|'smg'|'burst'|'dmr'|'pistol'|'machinegun'|'shotgun'|'sniper'|'hit'|'wall'|'step'|'step2'|'land'|'reload'|'ready'|'empty'|'jump'|'hurt'|'death'|'respawn'|'win'|'lose'|'ui'|'scope'|'kill'|'deploy'|'dash'|'pickup'|'equip';
+export type Sound='quad'|'bazooka'|'rocket'|'grenade'|'flash'|'heal'|'smg'|'burst'|'dmr'|'pistol'|'machinegun'|'shotgun'|'sniper'|'hit'|'wall'|'step'|'step2'|'land'|'reload'|'ready'|'empty'|'jump'|'hurt'|'death'|'respawn'|'win'|'lose'|'ui'|'scope'|'kill'|'deploy'|'dash'|'pickup'|'equip';
 export type AudioSettings={master:number;effects:number;environment:number;muted:boolean};
 const samples=['pistol','machinegun','shotgun','sniper','hit','wall','step','step2','land','reload'];
 export function spatialSound(x:number,z:number,yaw:number){const distance=Math.hypot(x,z);return {pan:Math.sin(Math.atan2(x,z)-yaw),gain:1/(1+distance*.13)};}
@@ -14,14 +14,14 @@ export function createGameAudio(){
  function synthetic(kind:Sound){
   if(!ctx)throw new Error('Audio not initialized');
   const key='synth-'+kind,old=buffers.get(key);if(old)return old;
-  const gun=['pistol','machinegun','shotgun','sniper','smg','burst','dmr'].includes(kind),duration=kind==='grenade'?.7:kind==='flash'?.3:kind==='heal'?.45:kind==='win'||kind==='lose'?.65:kind==='deploy'?.32:kind==='dash'?.24:kind==='pickup'?.28:gun?.3:.16;
+  const gun=['pistol','machinegun','shotgun','sniper','smg','burst','dmr','quad','bazooka'].includes(kind),duration=(kind==='grenade'||kind==='rocket')?.7:kind==='flash'?.3:kind==='heal'?.45:kind==='win'||kind==='lose'?.65:kind==='deploy'?.32:kind==='dash'?.24:kind==='pickup'?.28:gun?.3:.16;
   const b=ctx.createBuffer(1,Math.ceil(ctx.sampleRate*duration),ctx.sampleRate),data=b.getChannelData(0);
   let seed=813,low=0;
   for(let i=0;i<data.length;i++){
    const t=i/ctx.sampleRate;seed=(Math.imul(seed,1664525)+1013904223)>>>0;const noise=seed/4294967296*2-1;low=low*.9+noise*.1;
-   const f=kind==='grenade'?65:kind==='flash'?1900:kind==='heal'?480+Math.floor(t*8)*120:kind==='deploy'?420*2**(Math.floor(t*10)/5):kind==='win'?440*2**(Math.floor(t*6)/4):kind==='lose'?220-t*160:kind==='pickup'?660*2**(Math.floor(t*14)/4):kind==='equip'?240+900*t:kind==='ready'?880:kind==='respawn'?330+t*1600:kind==='death'?100:kind==='reload'?200:kind==='jump'?260+t*1200:kind==='kill'?950:kind==='hit'?1200:kind==='hurt'?130:kind==='empty'?170:kind==='scope'?1600:620;
-   const wave=kind==='grenade'?low*2+Math.sin(2*Math.PI*f*t)*.35:kind==='flash'?noise*.6:kind==='dash'?(noise-low)*.65:kind==='reload'||kind==='equip'?noise*.3+Math.sin(2*Math.PI*f*t)*.2:gun?(noise*.5+Math.sin(2*Math.PI*((kind==='smg'?150:kind==='dmr'?75:kind==='burst'?115:100)*t-65*t*t))*.4):kind.startsWith('step')||kind==='land'?low*2:Math.sin(2*Math.PI*f*t)*.5+noise*.08;
-   data[i]=wave*Math.min(1,t/.003)*Math.exp(-t*(kind==='grenade'?6:kind==='heal'?9:gun?22:kind==='win'||kind==='lose'?4:kind==='dash'||kind==='pickup'?12:30))*.55;
+   const f=(kind==='grenade'||kind==='rocket')?65:kind==='flash'?1900:kind==='heal'?480+Math.floor(t*8)*120:kind==='deploy'?420*2**(Math.floor(t*10)/5):kind==='win'?440*2**(Math.floor(t*6)/4):kind==='lose'?220-t*160:kind==='pickup'?660*2**(Math.floor(t*14)/4):kind==='equip'?240+900*t:kind==='ready'?880:kind==='respawn'?330+t*1600:kind==='death'?100:kind==='reload'?200:kind==='jump'?260+t*1200:kind==='kill'?950:kind==='hit'?1200:kind==='hurt'?130:kind==='empty'?170:kind==='scope'?1600:620;
+   const wave=(kind==='grenade'||kind==='rocket')?low*2+Math.sin(2*Math.PI*f*t)*.35:kind==='flash'?noise*.6:kind==='dash'?(noise-low)*.65:kind==='reload'||kind==='equip'?noise*.3+Math.sin(2*Math.PI*f*t)*.2:gun?(noise*.5+Math.sin(2*Math.PI*((kind==='smg'?150:kind==='dmr'?75:kind==='burst'?115:100)*t-65*t*t))*.4):kind.startsWith('step')||kind==='land'?low*2:Math.sin(2*Math.PI*f*t)*.5+noise*.08;
+   data[i]=wave*Math.min(1,t/.003)*Math.exp(-t*((kind==='grenade'||kind==='rocket')?6:kind==='heal'?9:gun?22:kind==='win'||kind==='lose'?4:kind==='dash'||kind==='pickup'?12:30))*.55;
   }
   buffers.set(key,b);return b;
  }

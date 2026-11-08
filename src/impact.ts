@@ -7,6 +7,8 @@ export const RECOIL = Object.freeze({
   shotgun: { kick: 1.15, recovery: 10, tilt: .16, push: .12 },
   smg:{kick:.18,recovery:25,tilt:.045,push:.035},
   burst:{kick:.34,recovery:19,tilt:.065,push:.055},
+  quad:{kick:.3,recovery:20,tilt:.06,push:.05},
+  bazooka:{kick:1.1,recovery:9,tilt:.13,push:.12},
   dmr:{kick:.95,recovery:12,tilt:.12,push:.1},
   sniper: { kick: 1.3, recovery: 8, tilt: .14, push: .14 },
 });

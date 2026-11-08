@@ -5,7 +5,7 @@ import {createWeapon} from '../src/combat.ts';
 import {createNetworkGame} from '../src/network-game.ts';
 import {createDuel,createSurvivalMatch} from '../src/duel.ts';
 test('approved seven weapons expose different roles and exact capacities',()=>{
- assert.equal(weapons.WEAPON_IDS.length,7);const w:any=weapons.WEAPONS;
+ assert.equal(weapons.WEAPON_IDS.length,9);const w:any=weapons.WEAPONS;
  assert.deepEqual([w.smg.damage,w.smg.magazineSize,w.smg.reloadSeconds,w.smg.interval],[7,40,1.8,1/12]);assert.ok(w.smg.spread>0);
  assert.deepEqual([w.burst.damage,w.burst.magazineSize,w.burst.reloadSeconds,w.burst.burstCount,w.burst.burstInterval],[18,24,2,3,.08]);
  assert.deepEqual([w.dmr.damage,w.dmr.magazineSize,w.dmr.interval,w.dmr.reloadSeconds],[50,10,.5,2.2]);

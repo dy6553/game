@@ -13,6 +13,8 @@ export function createPickups():Pickup[]{return [
  {id:'crate-smg',weaponId:'smg',x:-5,z:-23,remaining:0},
  {id:'crate-burst',weaponId:'burst',x:5,z:20,remaining:0},
  {id:'crate-dmr',weaponId:'dmr',x:0,z:-34,remaining:0},
+ {id:'crate-quad',weaponId:'quad',x:9,z:-28,remaining:0},
+ {id:'crate-bazooka',weaponId:'bazooka',x:-9,z:22,remaining:0},
  {id:'crate-pistol',weaponId:'pistol',x:0,z:12,remaining:0},
 ];}
 export function syncSlot(inv:Inventory,weapon:WeaponState,cooldown:number){const s=inv.slots[inv.active]!;s.weapon=weapon;s.cooldown=cooldown;}

@@ -1,6 +1,6 @@
 import type {Sound} from './audio.ts';
 import {createMatchPickups} from './match-pickups.ts';
-import {createGear,useEquipment,advanceEquipment,type GearActor,type EquipmentId,type Projectile} from './equipment.ts';
+import {createGear,launchRocket,useEquipment,advanceEquipment,type GearActor,type EquipmentId,type Projectile} from './equipment.ts';
 import {createEquipmentVisuals} from './equipment-visuals.ts';
 import {createLobbyWeapons} from './lobby-weapons.ts';
 import {createSupplyCrates} from './supply-crates.ts';
@@ -440,6 +440,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
   const scopeBody=MeshBuilder.CreateCylinder('weapon-scope',{diameter:.1,height:.32,tessellation:16},scene);
   scopeBody.parent=viewModel;scopeBody.position.set(.27,-.06,.68);scopeBody.rotation.x=Math.PI/2;scopeBody.material=metal;scopeBody.isPickable=false;
   const secondBarrel=box('shotgun-second-barrel',.36,-.2,.9,.07,.07,.42,metal);secondBarrel.parent=viewModel;secondBarrel.isPickable=false;
+  const launcher=MeshBuilder.CreateCylinder('view-launcher',{diameter:.26,height:1.04,tessellation:16},scene);launcher.rotation.x=Math.PI/2;launcher.position.set(.27,-.18,.73);launcher.parent=viewModel;launcher.material=metal;launcher.isPickable=false;const launcherRim=MeshBuilder.CreateCylinder('view-launcher-rim',{diameter:.31,height:.07,tessellation:16},scene);launcherRim.rotation.x=Math.PI/2;launcherRim.position.set(.27,-.18,1.26);launcherRim.parent=viewModel;launcherRim.material=gunCopper;launcherRim.isPickable=false;
   // Camera-held hands/gun must keep their own depth without being sliced by nearby walls.
   // Lobby and opponent weapons remain in the world rendering group.
   scene.setRenderingAutoClearDepthStencil(1,true,true,true);
@@ -472,7 +473,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     const healthBar=box(`target-health-fill-${index}`,p.x,2.88,p.z-0.04,1.5,0.08,0.03,accent);
     for(const mesh of [target,post,center,healthBack,healthBar])mesh.parent=root;
     healthBack.isPickable=false;healthBar.isPickable=false;
-    return { mat: targetMat, flash: 0,root,healthBar,x:p.x,health:PRACTICE_RULES.maxHealth };
+    return { mat: targetMat, flash: 0,root,healthBar,x:p.x,z:p.z,health:PRACTICE_RULES.maxHealth };
 
   });
   const atmosphere=createAtmosphere(scene);
@@ -533,7 +534,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
   let hits=0,destroyed=0,shots=0;
   const effects=createShotEffects(scene,camera);
   let preview = false, reference = false, lobbyPreview=false,lobbyMotion=true,lobbyTime=0,lobbyYaw=0,lobbyWeaponId:WeaponId='pistol';
-  const recoil=createRecoil();
+  const recoil=createRecoil();let reducedShots=false;
   function equip(){const slot=inventory.slots[inventory.active]!;weaponId=slot.id;spec=localSpec(weaponId);weapon=slot.weapon;cooldown=slot.cooldown;scoped=false;recoil.clear();}
   const supplies=createSupplyCrates(scene,matchPickups());
   function syncSupplies(){supplies.update(pickups,!preview&&!reference);}
@@ -601,7 +602,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
       if(battle.damageVersion!==toolDamageVersion){localActor.healing=0;toolDamageVersion=battle.damageVersion;}
       if(lastToolHealth>0&&battle.playerHealth<=0){localActor.gear=createGear();localActor.healing=0;}
       Object.assign(localActor,{jump:jumpState,x:p.x,y:p.y??0,z:p.z,yaw:look.yaw,pitch:look.pitch,health:battle.playerHealth,protection:battle.protection});
-      const bots:GearActor[]=duelMode?(battle.mode==='duel'?[{id:'bot-1',...battle.position,health:battle.botHealth}]:battle.bots.map(b=>({id:b.id,...b.position,health:b.health}))).map(b=>({...b,yaw:Math.atan2(p.x-b.x,p.z-b.z),pitch:0,gear:createGear(),healing:0,flash:botFlashes.get(b.id)??0,gearCooldown:0})):targets.map((t,i)=>({id:'target-'+i,x:t.root.position.x,y:0,z:t.root.position.z,yaw:0,pitch:0,health:t.health,gear:createGear(),healing:0,flash:0,gearCooldown:0}));
+      const bots:GearActor[]=duelMode?(battle.mode==='duel'?[{id:'bot-1',...battle.position,health:battle.botHealth}]:battle.bots.map(b=>({id:b.id,...b.position,health:b.health}))).map(b=>({...b,yaw:Math.atan2(p.x-b.x,p.z-b.z),pitch:0,gear:createGear(),healing:0,flash:botFlashes.get(b.id)??0,gearCooldown:0})):targets.map((t,i)=>({id:'target-'+i,x:t.x,y:0,z:t.z,yaw:0,pitch:0,health:t.health,gear:createGear(),healing:0,flash:0,gearCooldown:0}));
       const events=advanceEquipment([localActor,...bots],localProjectiles,dt,geometry,doors,(target,amount)=>{
        if(target.id==='player'){group.hurtSelf(amount);localActor.health=group.state().playerHealth;if(localActor.health<=0)localActor.gear=createGear();}
        else if(target.id.startsWith('target-')){const t=targets[Number(target.id.slice(7))]!;const before=t.health;t.health=Math.max(0,t.health-amount);target.health=t.health;if(before>t.health){hits++;t.flash=.16;}if(before>0&&t.health===0){destroyed++;t.root.setEnabled(false);}t.healthBar.scaling.x=Math.max(.001,t.health/100);}
@@ -624,9 +625,10 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
       camera.setTarget(new Vector3(displayPoint.x+(lobbyPreview?0:1.25),lobbyPreview?1.4:1.35,displayPoint.z));
     } else {
       camera.position.set(p.x,(character.type==='robot-cat'?1.9:1.95)+(p.y??0)+jumpState.height,p.z);
-      camera.fov=(scoped?.38:1.25)+kick.fov;viewModel.setEnabled(!scoped);
-      camera.rotation.set(look.pitch, look.yaw, kick.roll);
+      camera.fov=(scoped?.38:1.25)+(reducedShots?0:kick.fov);viewModel.setEnabled(!scoped);
+      camera.rotation.set(look.pitch, look.yaw, reducedShots?0:kick.roll);
     }
+    launcher.setEnabled(weaponId==='bazooka');launcherRim.setEnabled(weaponId==='bazooka');muzzle.setEnabled(weaponId!=='bazooka');muzzleInset.setEnabled(weaponId!=='bazooka');
     scopeBody.setEnabled(weaponId==='sniper');secondBarrel.setEnabled(weaponId==='shotgun');
     gun.scaling.z=weaponId==='pistol'?1:weaponId==='smg'?1.2:weaponId==='dmr'?1.9:1.6;barrel.scaling.z=weaponId==='sniper'?2:weaponId==='dmr'?1.8:weaponId==='pistol'?1:weaponId==='smg'?1.2:1.5;
     const inside=indoorAt(p);for(const item of interiorLights)item.light.setEnabled(!preview&&!reference&&item.id===inside?.id);
@@ -641,6 +643,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     const attempt=tryFire(weapon);weapon=attempt.state;
     if(!attempt.fired)return {fired:false,hit:false,reason:attempt.reason};
     (survivalMode?survival:ffaMode?ffa:duel).playerFired();localActor.healing=0;shots++;recoil.fire(weaponId);if(!continued){cooldown=Math.max(0,spec.interval-(weaponId==='smg'?(weapon.cadenceCarry??0):0));weapon=startBurst(weapon,spec);}
+    if(weaponId==='bazooka'){launchRocket({...localActor,x:camera.position.x,y:camera.position.y-1.95,z:camera.position.z,jump:{height:0},yaw:camera.rotation.y,pitch:camera.rotation.x},localProjectiles,++toolSequence,spec.damage);return {fired:true,hit:false,eliminated:false,damage:0,impact:false,point:camera.position.clone()};}
     let anyHit=false,anyEliminated=false,impact=false,totalDamage=0;
     let lastPoint=camera.position.clone();
     const offsets=pelletOffsets(spec);
@@ -722,6 +725,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
   }
   return {
     geometry,
+    targetContacts:()=>targets.map((t,i)=>({id:'target-'+i,name:'표적 '+(i+1),x:t.x,z:t.z,y:0,health:t.health})),
     gearState:()=>({gear:{...localActor.gear},health:localActor.health,flash:localActor.flash,healing:localActor.healing,cooldown:localActor.gearCooldown}),
     useEquipment(kind:EquipmentId,p:Point,look:Look){if(preview||reference||battleState().winner)return false;Object.assign(localActor,{jump:jumpState,x:p.x,y:p.y??0,z:p.z,yaw:look.yaw,pitch:look.pitch,health:battleState().playerHealth});const ok=useEquipment(localActor,kind,localProjectiles,++toolSequence);if(ok&&kind!=='medkit')(survivalMode?survival:ffaMode?ffa:duel).playerFired();return ok;},
     setUpgradeTier(tier:number){upgradeTier=Number.isInteger(tier)?Math.max(0,Math.min(3,tier)):0;spec=localSpec(weaponId);},
@@ -743,6 +747,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     renderOnline,endOnline,
     effectsState:effects.stats,
     impactState:()=>({...robotImpact.stats(),recoil:recoil.read()}),
+    setReducedShots(value:boolean){reducedShots=value;effects.setReduced(value);botEffects.setReduced(value);},
     setShake(level:ShakeLevel){recoil.setShake(level);},
     setQuality(high:boolean){
       onlineQualityHigh=high;for(const r of remotes.values())r.fx.setQuality(high);atmosphere.setQuality(high);robotImpact.setQuality(high);for(const rig of botRigs.slice(1))rig.fx.setQuality(high);

@@ -5,7 +5,7 @@ import { createHarborScene } from '../src/scene.ts';
 import { WEAPONS,pelletOffsets } from '../src/weapons.ts';
 
 test('approved weapons have distinct magazines and shotgun spread',()=>{
- assert.deepEqual(Object.values(WEAPONS).map(w=>w.magazineSize),[12,30,6,5,40,24,10]);
+ assert.deepEqual((['pistol','machinegun','shotgun','sniper','smg','burst','dmr'] as const).map(id=>WEAPONS[id].magazineSize),[12,30,6,5,40,24,10]);
  const offsets=pelletOffsets(WEAPONS.shotgun);assert.equal(offsets.length,6);assert.equal(new Set(offsets.map(p=>`${p.x},${p.y}`)).size,6);
 });
 

@@ -15,7 +15,7 @@ export function createSupplyCrates(scene:Scene,initial:Pickup[]){
  const body=material('graphite','#263546',96),panel=material('armor','#40556a',64),metal=material('alloy','#b5bfcb',128),rubber=material('rubber','#101a25',16),brass=material('latch','#bc9763',96);
  const grain=new Uint8Array(64*64*3);let seed=1729;for(let i=0;i<grain.length;i+=3){seed=(Math.imul(seed,1664525)+1013904223)>>>0;const v=236+(seed%20);grain[i]=grain[i+1]=grain[i+2]=v;}
  const texture=RawTexture.CreateRGBTexture(grain,64,64,scene,true,false,Texture.TRILINEAR_SAMPLINGMODE);texture.name='supply-brushed-grain';texture.anisotropicFilteringLevel=4;body.diffuseTexture=texture;panel.diffuseTexture=texture;
- const colors={smg:'#f9dc77',burst:'#ff9b8d',dmr:'#8fbfff',pistol:'#6be5f1',machinegun:'#77edbd',shotgun:'#ffc56b',sniper:'#c5a6ff',grenade:'#ff9c72',flash:'#dbefff',medkit:'#8df0b5'};
+ const colors={quad:'#e6b9ff',bazooka:'#ff784d',smg:'#f9dc77',burst:'#ff9b8d',dmr:'#8fbfff',pistol:'#6be5f1',machinegun:'#77edbd',shotgun:'#ffc56b',sniper:'#c5a6ff',grenade:'#ff9c72',flash:'#dbefff',medkit:'#8df0b5'};
  const chamfer=(name:string,w:number,h:number,d:number,cut:number,mat:StandardMaterial)=>{
   const ring=[[-w/2+cut,-d/2],[w/2-cut,-d/2],[w/2,-d/2+cut],[w/2,d/2-cut],[w/2-cut,d/2],[-w/2+cut,d/2],[-w/2,d/2-cut],[-w/2,-d/2+cut]];
   const positions:number[]=[],indices:number[]=[],normals:number[]=[],uvs:number[]=[];

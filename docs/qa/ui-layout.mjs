@@ -1,7 +1,8 @@
+import {COMBAT_HUD_MARKUP} from '../../src/combat-hud.ts';
 import {createRequire} from 'node:module';import {readFile,writeFile} from 'node:fs/promises';import assert from 'node:assert/strict';
 const require=createRequire(import.meta.url),{chromium}=require(process.env.HARBOR_BROWSER_MODULE??'playwright');
 const root=new URL('../../',import.meta.url),main=await readFile(new URL('src/main.ts',root),'utf8');
-const touch=main.slice(main.indexOf('  <div class="touch-controls">'),main.indexOf('  <div id="spawn-protection"'));
+const touch=main.slice(main.indexOf('  <div class="touch-controls">'),main.indexOf('  ${COMBAT_HUD_MARKUP}'))+COMBAT_HUD_MARKUP;
 const base=process.env.HARBOR_UI_URL??'http://127.0.0.1:5179',browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH??'/usr/bin/chromium',headless:true,args:['--no-sandbox']});
 const report={cases:[],errors:[]};
 try{
@@ -15,6 +16,7 @@ try{
     else {assert.equal(boxes.joystick.width,104);assert.equal(boxes.fire.width,74);assert.equal(boxes.jump.width,54);}
     for(let i=0;i<keys.length;i++)for(let j=i+1;j<keys.length;j++){const a=boxes[keys[i]],b=boxes[keys[j]],overlap=a.x<b.x+b.width&&a.x+a.width>b.x&&a.y<b.y+b.height&&a.y+a.height>b.y;assert.equal(overlap,false,keys[i]+' and '+keys[j]+' do not overlap');}
    }
+   const hudBoxes=[];for(const id of ['combat-map','combat-vitals']){const b=await p.locator('#'+id).boundingBox();assert(b&&b.x>=0&&b.y>=0&&b.x+b.width<=spec.w&&b.y+b.height<=spec.h,id+' on screen');hudBoxes.push(b);}const [m,h]=hudBoxes;assert(!(m.x<h.x+h.width&&m.x+m.width>h.x&&m.y<h.y+h.height&&m.y+m.height>h.y),'minimap and HP do not overlap');
    assert.equal(mapVisible,true,'map choice visible without opening growth details');report.cases.push({name:spec.name,pass:true});
   }catch(e){report.cases.push({name:spec.name,pass:false,failure:e.message});}await ctx.close();
  }
