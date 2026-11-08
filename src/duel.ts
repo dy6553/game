@@ -10,11 +10,20 @@ export const BOT_DIFFICULTIES=Object.freeze({
 export function isBotDifficulty(value:unknown):value is BotDifficulty{return value==='easy'||value==='normal'||value==='hard';}
 export const BOT_SPAWN:Point={x:0,z:18};
 // Grid routing uses the same collision geometry and radius as player movement.
+let navigationSamples=0;
+export function navigationStats(){return {collisionSamples:navigationSamples};}
 const step=2;
+// The map is fixed; plan with open doors and validate live door collisions during movement.
+const standCache=new Map<string,boolean>(),segmentCache=new Map<string,boolean>();
+const gridPoint=(p:Point)=>!(p.y??0)&&Number.isInteger(p.x/step)&&Number.isInteger(p.z/step);
+function gridStand(p:Point){const key=`${p.x},${p.z}`;const found=standCache.get(key);if(found!==undefined)return found;const clear=canStand(p,PROTOTYPE.radius,worldSolids());standCache.set(key,clear);return clear;}
+
 function clearSegment(a:Point,b:Point){
-  const n=Math.ceil(Math.hypot(b.x-a.x,b.z-a.z)/0.2);
-  for(let i=0;i<=n;i++){const t=n?i/n:0;if(!canStand({x:a.x+(b.x-a.x)*t,z:a.z+(b.z-a.z)*t},PROTOTYPE.radius,worldSolids()))return false;}
-  return true;
+ const key=gridPoint(a)&&gridPoint(b)?`${a.x},${a.z}>${b.x},${b.z}`:null;
+ if(key){const found=segmentCache.get(key);if(found!==undefined)return found;}
+ const n=Math.ceil(Math.hypot(b.x-a.x,b.z-a.z)/0.2);let clear=true;
+ for(let i=0;i<=n;i++){navigationSamples++;const t=n?i/n:0;if(!canStand({x:a.x+(b.x-a.x)*t,z:a.z+(b.z-a.z)*t},PROTOTYPE.radius,worldSolids())){clear=false;break;}}
+ if(key){if(segmentCache.size>=16384)segmentCache.delete(segmentCache.keys().next().value!);segmentCache.set(key,clear);}return clear;
 }
 export function findRoute(start:Point,goal:Point):Point[]{
   if(!canStand(start,PROTOTYPE.radius,worldSolids())||!canStand(goal,PROTOTYPE.radius,worldSolids()))return [];
@@ -24,7 +33,7 @@ export function findRoute(start:Point,goal:Point):Point[]{
     const candidates:Point[]=[];
     const x=Math.round(p.x/step)*step,z=Math.round(p.z/step)*step;
     for(let dx=-step;dx<=step;dx+=step)for(let dz=-step;dz<=step;dz+=step)candidates.push({x:x+dx,z:z+dz});
-    return candidates.filter(c=>canStand(c,PROTOTYPE.radius,worldSolids())&&clearSegment(p,c)).sort((a,b)=>Math.hypot(a.x-p.x,a.z-p.z)-Math.hypot(b.x-p.x,b.z-p.z))[0];
+    return candidates.filter(c=>gridStand(c)&&clearSegment(p,c)).sort((a,b)=>Math.hypot(a.x-p.x,a.z-p.z)-Math.hypot(b.x-p.x,b.z-p.z))[0];
   };
   const first=nearest(start),last=nearest(goal);if(!first||!last)return [];
   const queue=[first],parents=new Map<string,Point|null>([[key(first),null]]),costs=new Map<string,number>([[key(first),0]]);
@@ -37,20 +46,30 @@ export function findRoute(start:Point,goal:Point):Point[]{
     }
     for(const [dx,dz] of [[step,0],[-step,0],[0,step],[0,-step],[step,step],[step,-step],[-step,step],[-step,-step]]){
       const next={x:p.x+dx!,z:p.z+dz!};
-      if(!parents.has(key(next))&&canStand(next,PROTOTYPE.radius,worldSolids())&&clearSegment(p,next)){parents.set(key(next),p);costs.set(key(next),costs.get(key(p))!+Math.hypot(dx!,dz!));queue.push(next);}
+      if(!parents.has(key(next))&&gridStand(next)&&clearSegment(p,next)){parents.set(key(next),p);costs.set(key(next),costs.get(key(p))!+Math.hypot(dx!,dz!));queue.push(next);}
     }
   }
   return [];
 }
 
+const staticStairEdges=new Map<string,Point[]|null>();
 export function verticalRoute(start:Point,goal:Point):Point[]{
  if(Math.abs((start.y??0)-(goal.y??0))<.1&&!(start.y??0))return findRoute(start,goal);
  const relevant=BUILDINGS.filter(b=>b.enterable&&[start,goal].some(p=>Math.abs(p.x-b.x)<b.width/2&&Math.abs(p.z-b.z)<b.depth/2));const solids=worldSolids();
  const nodes:Point[]=[start,goal,...relevant.flatMap(b=>stairways(b).flatMap(s=>[s.start,s.end]))];
- const edges=(a:Point,b:Point)=>{if(!(a.y??0)&&!(b.y??0))return findRoute(a,b).length>0;let p={...a};const dx=b.x-a.x,dz=b.z-a.z,n=Math.ceil(Math.hypot(dx,dz)/.15);for(let i=0;i<n;i++)p=moveWithCollisions(p,{x:dx/n,z:dz/n},solids);return Math.hypot(p.x-b.x,p.z-b.z)<.2&&Math.abs((p.y??0)-(b.y??0))<.2;};
+ const edgePaths=new Map<string,Point[]|null>();
+ const edge=(i:number,j:number):Point[]|null=>{
+  const a=nodes[i]!,b=nodes[j]!,key=`${a.x},${a.z},${a.y??0}>${b.x},${b.z},${b.y??0}`;
+  const local=edgePaths.get(key);if(local!==undefined)return local;
+  if(i>=2&&j>=2&&staticStairEdges.has(key)){const path=staticStairEdges.get(key)!;edgePaths.set(key,path);return path;}
+  let path:Point[]|null=null;
+  if(!(a.y??0)&&!(b.y??0)){const route=findRoute(a,b);if(route.length)path=route;}
+  else{let p={...a};const dx=b.x-a.x,dz=b.z-a.z,n=Math.ceil(Math.hypot(dx,dz)/.15);for(let k=0;k<n;k++)p=moveWithCollisions(p,{x:dx/n,z:dz/n},solids);if(Math.hypot(p.x-b.x,p.z-b.z)<.2&&Math.abs((p.y??0)-(b.y??0))<.2)path=[b];}
+  edgePaths.set(key,path);if(i>=2&&j>=2){if(staticStairEdges.size>=1024)staticStairEdges.delete(staticStairEdges.keys().next().value!);staticStairEdges.set(key,path);}return path;
+ };
  const dist=new Map<number,number>([[0,0]]),parents=new Map<number,number>(),open=new Set([0]);
- while(open.size){const i=[...open].reduce((a,b)=>dist.get(a)!<dist.get(b)!?a:b);open.delete(i);if(i===1){const route:Point[]=[];let k=1;while(k!==0){const prior=parents.get(k)!,a=nodes[prior]!,b=nodes[k]!;if(!(a.y??0)&&!(b.y??0))route.push(...findRoute(a,b).reverse());else route.push(b);k=prior;}return route.reverse();}
-  for(let j=1;j<nodes.length;j++){if(j===i||!edges(nodes[i]!,nodes[j]!))continue;const a=nodes[i]!,b=nodes[j]!,d=dist.get(i)!+Math.hypot(a.x-b.x,a.z-b.z,(a.y??0)-(b.y??0));if(d<(dist.get(j)??Infinity)){dist.set(j,d);parents.set(j,i);open.add(j);}}
+ while(open.size){const i=[...open].reduce((a,b)=>dist.get(a)!<dist.get(b)!?a:b);open.delete(i);if(i===1){const route:Point[]=[];let k=1;while(k!==0){const prior=parents.get(k)!;route.push(...edge(prior,k)!.slice().reverse());k=prior;}return route.reverse().map(p=>({...p}));}
+  for(let j=1;j<nodes.length;j++){if(j===i||!edge(i,j))continue;const a=nodes[i]!,b=nodes[j]!,d=dist.get(i)!+Math.hypot(a.x-b.x,a.z-b.z,(a.y??0)-(b.y??0));if(d<(dist.get(j)??Infinity)){dist.set(j,d);parents.set(j,i);open.add(j);}}
  }
  return [];
 }

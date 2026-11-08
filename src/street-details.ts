@@ -116,7 +116,7 @@ export function addStreetDetails(scene:Scene) {
     const points=Array.from({length:13},(_,i)=>{const t=i/12;return new Vector3(x-3+t*6,7.2-Math.sin(t*Math.PI)*0.55+strand*0.1,z+strand*0.2);});
     tube('overhead-wire',points,0.018,iron);
   }
-  for(const c of COVERS.filter(c=>c.id!=='van')) {
+  for(const c of COVERS.filter(c=>c.id.startsWith('planter-'))) {
     // Seat slats, legs and bolts add definition to the existing planter-side bench.
     for(let slat=0;slat<4;slat++)box('bench-slat',c.x,0.63,c.z-1.2+slat*0.085,2.5,0.035,0.065,wood);
     for(const side of [-1,1]) {

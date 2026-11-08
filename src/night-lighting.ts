@@ -8,6 +8,7 @@ const pools = [
   ...[-43,-10.7,10.7,43].flatMap(x=>[-52,-32,-29,-10,10,29].map(z=>({x,z,radius:6.1,strength:Math.abs(z)<20?0.9:0.55}))),
   ...BUILDINGS.map(b=>({x:b.x,z:b.z+(b.z<0?1:-1)*(b.depth/2+1),radius:4.6,strength:0.6+b.palette*0.13})),
 ];
+const coverShadows=COVERS.filter(c=>c.id!=='van');
 export function sampleNightGround(x:number,z:number) {
   let warmth=0;
   for(const p of pools) warmth+=Math.exp(-((x-p.x)**2+(z-p.z)**2)/(2*p.radius**2))*p.strength;
@@ -18,7 +19,7 @@ export function sampleNightGround(x:number,z:number) {
     const dz=Math.max(0,Math.abs(z-(b.z+1.6))-b.depth/2);
     shade*=1-0.22*Math.exp(-(dx*dx+dz*dz)/0.9);
   }
-  for(const p of COVERS.filter(c=>c.id!=='van')) {
+  for(const p of coverShadows) {
     const distance=((x-p.x-1.5)/2.1)**2+((z-p.z+2)/3.2)**2;
     if(distance<2) shade*=1-0.28*Math.exp(-distance)*(0.65+0.35*Math.sin(x*7+Math.sin(z*5))**2);
   }
@@ -35,7 +36,7 @@ export function createNightGround(scene:Scene,source:StandardMaterial,name:strin
     mat.diffuseColor=Color3.White();mat.emissiveColor=Color3.White();mat.disableLighting=true;
     mat.specularColor=Color3.Black();
   }
-  const mesh=MeshBuilder.CreateGround(name,{width,height:depth,subdivisions:Math.ceil(Math.max(width,depth)/2)},scene);
+  const mesh=MeshBuilder.CreateGround(name,{width,height:depth,subdivisionsX:Math.ceil(width/2),subdivisionsY:Math.ceil(depth/2)},scene);
   mesh.position.set(x,y,z);mesh.material=mat;mesh.isPickable=false;
   const positions=mesh.getVerticesData('position')!,uvs=mesh.getVerticesData('uv')!;
   const colors:number[]=[];

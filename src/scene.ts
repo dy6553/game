@@ -298,7 +298,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean}
       }
     }
   }
-  for(const [treeIndex,cover] of COVERS.filter(c=>c.id!=='van').entries()) {
+  for(const [treeIndex,cover] of COVERS.filter(c=>c.id.startsWith('planter-')).entries()) {
     const trunk=MeshBuilder.CreateCylinder('tree-trunk',{diameterTop:0.16,diameterBottom:0.32,height:3.4,tessellation:12},scene);
     trunk.position.set(cover.x,2.7,cover.z);trunk.material=wood;trunk.isPickable=false;
     for(let branch=0;branch<4;branch++) {
