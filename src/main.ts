@@ -1,3 +1,4 @@
+import {installMobileBrowser} from './mobile-browser.ts';
 import {ENVIRONMENT_MARKUP,createEnvironmentPanel} from './environment-panel.ts';
 import {createEnvironmentPreferences,type EnvironmentPreferences} from './environment-preferences.ts';
 import {createFrameLimit} from './frame-limit.ts';
@@ -122,6 +123,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <footer class="phase-note">표적 연습 · 봇 1대1 · 봇 3명 개인전</footer>
 `;
 
+const mobileBrowser=installMobileBrowser();
 const canvas = document.querySelector<HTMLCanvasElement>('#game')!;
 for(const select of document.querySelectorAll<HTMLSelectElement>('select'))if([...select.options].some(o=>o.value==='robot'))select.insertAdjacentHTML('beforeend','<option value="welder" disabled>용접 로봇 · Lv3</option>');
 for(const select of document.querySelectorAll<HTMLSelectElement>('select'))if([...select.options].some(o=>o.value==='pistol'))for(const id of WEAPON_IDS)if(![...select.options].some(o=>o.value===id))select.insertAdjacentHTML('beforeend',`<option value="${id}">${WEAPONS[id].name}</option>`);
@@ -566,7 +568,15 @@ async function start() {
     else if(!manualPaused&&!document.pointerLockElement){event.preventDefault();pauseGame();}
   });
   pausePanel.addEventListener('keydown',event=>{if(event.key!=='Tab')return;event.preventDefault();const buttons=[...pausePanel.querySelectorAll<HTMLButtonElement>('button')].filter(button=>button.getClientRects().length>0);const index=buttons.indexOf(document.activeElement as HTMLButtonElement);buttons[(index+(event.shiftKey?buttons.length-1:1))%buttons.length]!.focus();});
-  window.addEventListener('resize', () => { closeMenu(); engine.resize(); world.resize(); });
+  let resizeFrame=0,lastWidth=window.innerWidth;
+  const resizeViewport=()=>{
+    if(window.innerWidth!==lastWidth){lastWidth=window.innerWidth;closeMenu();}
+    if(resizeFrame)return;
+    resizeFrame=requestAnimationFrame(()=>{resizeFrame=0;engine.resize();world.resize();});
+  };
+  window.addEventListener('resize',resizeViewport);
+  window.visualViewport?.addEventListener('resize',resizeViewport);
+  mobileBrowser.refresh();
   canvas.addEventListener('contextmenu', event => event.preventDefault());
   const lobbyPolish=createLobbyPolish({rotate:delta=>world.rotateLobby(delta),reset:()=>world.resetLobbyRotation(),enabled:()=>homeOpen&&!settingsView.isOpen&&!gameChoices.isOpen&&!resultView.isOpen,reduced:()=>reducedLobbyMotion.matches});
   const settingsView=createEnvironmentPanel({opened(){lobbyPolish.cancelDrag();input.reset();input.setEnabled(false);closeMenu();closeHelp();if(document.pointerLockElement)document.exitPointerLock();},beforeClose(){gameChoices.close();},closed(){input.reset();frameLimit.reset();if(!homeOpen&&!roomWaiting)canvas.focus();},reset(){resetEnvironment();}});

@@ -4,7 +4,7 @@ import {createInput} from '../src/input.ts';
 function fixture(){
  class Element extends EventTarget{style={transform:''};focus(){}setPointerCapture(_id:number){}getBoundingClientRect(){return {left:0,top:0,width:100,height:100};}}
  const elements=new Map(['game','joystick','joystick-thumb','fire','reload','jump','sprint','dash'].map(id=>[id,new Element()]));
- const doc=Object.assign(new EventTarget(),{hidden:false,pointerLockElement:null,querySelector:(s:string)=>elements.get(s.slice(1))??null}),win=new EventTarget();
+ const doc=Object.assign(new EventTarget(),{hidden:false,pointerLockElement:null,querySelector:(s:string)=>elements.get(s.slice(1))??null}),win=Object.assign(new EventTarget(),{innerWidth:844,innerHeight:390});
  const previous=new Map(['document','window'].map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)]));Object.defineProperty(globalThis,'document',{value:doc,configurable:true});Object.defineProperty(globalThis,'window',{value:win,configurable:true});
  const send=(id:string,type:string,props:Record<string,unknown>)=>(id==='window'?win:elements.get(id)!).dispatchEvent(Object.assign(new Event(type,{cancelable:true}),{pointerType:'touch',button:0,...props}));
  const input=createInput(elements.get('game') as unknown as HTMLCanvasElement);
@@ -24,3 +24,5 @@ test('default mobile swipe is faster while PC mouse calibration remains unchange
 });
 
 test('mouse sensitivity changes desktop aim while touch sensitivity stays independent',()=>{const {input,send,cleanup}=fixture();try{input.setMouseSensitivity(1);send('game','pointermove',{pointerType:'mouse',clientX:0,clientY:0});send('game','pointermove',{pointerType:'mouse',clientX:10,clientY:0});const normal=input.look.yaw;input.resetLook();input.setMouseSensitivity(2);send('game','pointermove',{pointerType:'mouse',clientX:0,clientY:0});send('game','pointermove',{pointerType:'mouse',clientX:10,clientY:0});assert.ok(Math.abs(input.look.yaw-normal*2)<1e-9);input.resetLook();send('game','pointerdown',{pointerId:9,clientX:0,clientY:0});send('game','pointermove',{pointerId:9,clientX:10,clientY:0});const touch=input.look.yaw;input.resetLook();input.setMouseSensitivity(.5);send('game','pointerdown',{pointerId:10,clientX:0,clientY:0});send('game','pointermove',{pointerId:10,clientX:10,clientY:0});assert.equal(input.look.yaw,touch);}finally{cleanup();}});
+
+test('browser toolbar height changes keep held movement, while real width changes release input',()=>{const {input,send,cleanup}=fixture();try{Object.assign(window,{innerWidth:844,innerHeight:390});send('joystick','pointerdown',{pointerId:1,clientX:50,clientY:17});assert.ok(input.move.y>0);Object.assign(window,{innerHeight:340});window.dispatchEvent(new Event('resize'));assert.ok(input.move.y>0,'height-only browser chrome resize must keep held movement');Object.assign(window,{innerWidth:740});window.dispatchEvent(new Event('resize'));assert.equal(input.move.y,0);}finally{cleanup();}});

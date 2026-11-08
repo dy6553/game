@@ -53,7 +53,10 @@ export function createInput(canvas: HTMLCanvasElement, options: {requestMouseLoc
   window.addEventListener('blur', reset);
   document.addEventListener('visibilitychange', () => { if (document.hidden) reset(); });
   window.addEventListener('orientationchange', reset);
-  window.addEventListener('resize', reset);
+  let viewportWidth=window.innerWidth;
+  window.addEventListener('resize', () => {
+    if(window.innerWidth!==viewportWidth){viewportWidth=window.innerWidth;reset();}
+  });
   canvas.addEventListener('pointerdown', event => {
     if (!enabled) return;
     if (lookPointer !== null || (event.pointerType === 'mouse' && event.button !== 0)) return;
