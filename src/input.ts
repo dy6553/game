@@ -26,9 +26,10 @@ export function createInput(canvas: HTMLCanvasElement, options: {requestMouseLoc
 
   let pressedAt = { x: 0, y: 0 };
   let mouseDragged = false;
+  let hoverPoint:{x:number;y:number}|null=null;
 
   const reset = () => {
-    sprintToggle=false;firePointer=null;mouseHeld=false;
+    hoverPoint=null;sprintToggle=false;firePointer=null;mouseHeld=false;
     keys.clear(); stickPointer = null; stick = { x: 0, y: 0 };
     thumb.style.transform = 'translate(0, 0)';
     lookPointer = null;
@@ -59,17 +60,23 @@ export function createInput(canvas: HTMLCanvasElement, options: {requestMouseLoc
     event.preventDefault(); canvas.focus();
     if (event.pointerType === 'mouse' && document.pointerLockElement === canvas) { mouseHeld=true;shots++; return; }
     if(event.pointerType==='mouse'&&options.requestMouseLock?.())return;
-    lookPointer = event.pointerId; last = { x: event.clientX, y: event.clientY };
+    if(event.pointerType==='mouse'){mouseHeld=true;shots++;hoverPoint={x:event.clientX,y:event.clientY};return;}
+    hoverPoint=null;lookPointer = event.pointerId; last = { x: event.clientX, y: event.clientY };
     pressedAt = { ...last }; mouseDragged = false;
     canvas.setPointerCapture(event.pointerId);
   });
   document.addEventListener('mousemove',event=>{
     if(enabled&&document.pointerLockElement===canvas)look=turnView(look,event.movementX,event.movementY,.0025);
   });
+  canvas.addEventListener('pointerenter',()=>{hoverPoint=null;});
+  canvas.addEventListener('pointerleave',()=>{hoverPoint=null;});
   const moveLook = (event:PointerEvent) => {
     if (!enabled) return;
     if (document.pointerLockElement === canvas && event.pointerType === 'mouse') {
       return; // Pointer Lock uses document mousemove; never apply a second delta.
+    } else if(event.pointerType==='mouse'&&lookPointer===null&&event.target===canvas){
+      if(hoverPoint)look=turnView(look,event.clientX-hoverPoint.x,event.clientY-hoverPoint.y,.004);
+      hoverPoint={x:event.clientX,y:event.clientY};
     } else if (event.pointerId === lookPointer) {
       if (Math.hypot(event.clientX - pressedAt.x, event.clientY - pressedAt.y) > 6) mouseDragged = true;
       look = turnView(look, event.clientX - last.x, event.clientY - last.y, event.pointerType === 'touch' ? .007*touchSensitivity : .004);
@@ -82,7 +89,7 @@ export function createInput(canvas: HTMLCanvasElement, options: {requestMouseLoc
     if(event.pointerType==='mouse')mouseHeld=false;
     if (event.pointerId === lookPointer) {
       if (event.type === 'pointerup' && event.pointerType === 'mouse' && !mouseDragged) shots++;
-      lookPointer = null;
+      lookPointer = null;hoverPoint=event.pointerType==='mouse'?{x:event.clientX,y:event.clientY}:null;
     }
   };
   ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(type =>

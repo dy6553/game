@@ -74,10 +74,9 @@ change('screen-shake','off');assert.equal(calls.shake,'off');assert.equal(storag
 el('game').requestPointerLock=()=>{calls.lock++;document.pointerLockElement=el('game');document.dispatchEvent(new window.Event('pointerlockchange'));return Promise.resolve();};
 if(!coarse){
  click('home-open');click('home-start');frame();
- const aim=(type)=>el('game').dispatchEvent(Object.assign(new window.Event(type,{bubbles:true,cancelable:true}),{pointerType:'mouse',pointerId:99,button:0,clientX:300,clientY:200}));
- frame();assert.equal(el('mouse-aim-hint').hidden,false,'desktop explains click-to-aim');aim('pointerdown');aim('pointerup');frame();assert.equal(calls.lock,1,'game canvas click locks aim');assert.equal(calls.shot,0,'activation click does not fire');
- const beforeLook=calls.updates.at(-1).look.yaw;document.dispatchEvent(Object.assign(new window.Event('mousemove'),{movementX:80,movementY:0}));frame();assert.ok(calls.updates.at(-1).look.yaw>beforeLook,'native document mousemove reaches the world camera');assert.equal(el('mouse-aim-hint').hidden,true);
- document.exitPointerLock();assert.equal(el('pause-panel').hidden,false);click('resume');frame();assert.equal(el('mouse-aim-hint').hidden,true,'plain continue keeps drag fallback');calls.lock=0;
+ const move=(x,y)=>el('game').dispatchEvent(Object.assign(new window.Event('pointermove',{bubbles:true}),{pointerType:'mouse',pointerId:99,clientX:x,clientY:y}));
+ const beforeLook=calls.updates.at(-1).look.yaw;move(300,200);move(380,200);frame();assert.ok(calls.updates.at(-1).look.yaw>beforeLook,'unlocked hover reaches the world camera without any click');assert.equal(calls.lock,0);assert.equal(calls.shot,0);
+ click('pause-open');frame();const pausedLook=calls.updates.at(-1).look.yaw;move(600,200);frame();assert.equal(calls.updates.at(-1).look.yaw,pausedLook);click('resume');frame();move(600,200);frame();assert.equal(calls.updates.at(-1).look.yaw,pausedLook,'first resumed motion cannot snap');move(620,200);frame();assert.ok(calls.updates.at(-1).look.yaw>pausedLook);
 }
 click('pointer-lock');frame();assert.equal(calls.lock,1);assert.equal(calls.shot,0);
 document.exitPointerLock();assert.equal(el('pause-panel').hidden,false,'Esc/unlock pauses');click('resume');frame();
