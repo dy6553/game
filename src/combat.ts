@@ -6,7 +6,7 @@ export type CombatRules = {
   magazineSize:number;
   reloadSeconds:number;
 };
-export type WeaponState = { ammo:number; reloadRemaining:number };
+export type WeaponState = { ammo:number; reloadRemaining:number;burstRemaining?:number;burstWait?:number;cadenceCarry?:number };
 export function validateCombatRules(rules:CombatRules) {
   if(!Number.isFinite(rules.maxHealth)||rules.maxHealth<=0
     ||!Number.isFinite(rules.damage)||rules.damage<=0

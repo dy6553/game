@@ -1,5 +1,5 @@
 export type Point = { x: number; z: number; y?:number };
-export type Rect = { id: string; x: number; z: number; width: number; depth: number; yMin?:number;yMax?:number;slope?:{start:Point&{y:number};end:Point&{y:number}} };
+export type Rect = { id: string; x: number; z: number; width: number; depth: number; height?:number; yMin?:number;yMax?:number;slope?:{start:Point&{y:number};end:Point&{y:number}} };
 export type Building = Rect & { height: number; palette: number; enterable?:boolean };
 
 // Exploration values only; these are not final combat balance or map dimensions.
@@ -34,6 +34,12 @@ export function indoorAt(p:Point){return BUILDINGS.find(b=>b.enterable&&Math.abs
 
 
 export const COVERS: Rect[] = [
+ {id:'combat-container-west',x:-38,z:3,width:4,depth:2.6,height:2.6},
+ {id:'combat-container-east',x:38,z:-3,width:4,depth:2.6,height:2.6},
+ {id:'combat-utility-south',x:-5,z:-29,width:3,depth:1.6,height:2.2},
+ {id:'combat-utility-north',x:5,z:26,width:3,depth:1.6,height:2.2},
+ {id:'combat-monument',x:0,z:-40,width:2.8,depth:2.8,height:2.5},
+ {id:'combat-cargo-southwest',x:-34,z:-29,width:3,depth:2,height:2.3},
   { id: 'planter-west', x: -7.8, z: -5, width: 3.8, depth: 1.8 },
   { id: 'planter-east', x: 7.8, z: 5, width: 3.8, depth: 1.8 },
   { id: 'planter-north', x: -7.8, z: 7.5, width: 3.8, depth: 1.8 },
@@ -88,7 +94,7 @@ export function createDoors():Doors{return Object.fromEntries(BUILDINGS.filter(b
 const solidCache=new Map<string,Rect[]>();
 export function worldSolids(doors?:Doors):Rect[]{
  const key=doors?BUILDINGS.filter(b=>b.enterable).map(b=>doors[b.id]?'1':'0').join(''):'open';const cached=solidCache.get(key);if(cached)return cached;
- const result=[...SOLIDS.map(r=>{const b=BUILDINGS.find(b=>r.id===b.id||r.id.startsWith(b.id+'-'));return {...r,yMin:0,yMax:r.id.endsWith('-counter')?1.4:r.id.endsWith('-table')?1:b?.height??(r.id==='van'?2.15:1.05)};}),
+ const result=[...SOLIDS.map(r=>{const b=BUILDINGS.find(b=>r.id===b.id||r.id.startsWith(b.id+'-'));return {...r,yMin:0,yMax:r.id.endsWith('-counter')?1.4:r.id.endsWith('-table')?1:b?.height??r.height??(r.id==='van'?2.15:1.05)};}),
  ...BUILDINGS.filter(b=>b.enterable&&doors&&doors[b.id]!==true).map(doorRect),
  ...BUILDINGS.filter(b=>b.enterable).flatMap(b=>stairways(b).map(s=>({id:b.id+'-stair-volume',x:s.start.x,z:(s.start.z+s.end.z)/2,width:s.width,depth:Math.abs(s.end.z-s.start.z),yMin:s.start.y,yMax:s.end.y,slope:s}))),
  ...BUILDINGS.filter(b=>b.enterable).flatMap(b=>[-1,1].flatMap(side=>[

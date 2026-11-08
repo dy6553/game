@@ -1,6 +1,6 @@
 import { canStand, moveWithCollisions, PROTOTYPE,randomOutdoorSpawn,worldSolids,nearbyDoor,toggleDoor,BUILDINGS,stairways,type Doors, type Point } from './world.ts';
 import { createWeapon, advanceWeapon, beginReload, tryFire, PRACTICE_RULES } from './combat.ts';
-export const DUEL_RULES = Object.freeze({health:100,damage:25,aimSeconds:1,fireSeconds:0.8,respawnSeconds:3,goal:10,warningSeconds:0.4});
+export const DUEL_RULES = Object.freeze({health:100,damage:25,aimSeconds:1,fireSeconds:0.8,respawnSeconds:3,botRespawnSeconds:1.5,goal:10,warningSeconds:0.4});
 export type BotDifficulty='easy'|'normal'|'hard';
 export const BOT_DIFFICULTIES=Object.freeze({
  easy:{name:'쉬움',aimSeconds:1,warningSeconds:.4,speed:3,strafe:false},
@@ -71,7 +71,7 @@ export function createDuel(difficulty:BotDifficulty='easy',spawnPoint:Point=BOT_
     if(winner||playerHealth===0||botHealth===0||(who==='player'&&protection>0))return false;
     if(who==='bot'){
       botHealth=Math.max(0,botHealth-damage);
-      if(botHealth===0){playerKills++;botDead=3;aim=0;locked=null;warning=0;if(playerKills===10)winner='player';return true;}
+      if(botHealth===0){playerKills++;botDead=DUEL_RULES.botRespawnSeconds;aim=0;locked=null;warning=0;if(playerKills===10)winner='player';return true;}
     }else{
       damageVersion++;playerHealth=Math.max(0,playerHealth-damage);
       if(playerHealth===0){botKills++;playerDead=3;aim=0;locked=null;warning=0;if(botKills===10)winner='bot';return true;}
@@ -82,7 +82,7 @@ export function createDuel(difficulty:BotDifficulty='easy',spawnPoint:Point=BOT_
     if(!Number.isFinite(dt)||dt<0)throw new Error('Invalid elapsed time');
     if(winner)return;protection=Math.max(0,protection-dt);playerPosition={...player};
     if(playerHealth===0){playerDead=Math.max(0,playerDead-dt);if(playerDead===0){playerHealth=100;protection=3;playerPosition=distantSpawn([position]);respawnVersion++;aim=0;cooldown=1;locked=null;warning=0;}return;}
-    if(botHealth===0){botDead=Math.max(0,botDead-dt);if(botDead===0){botHealth=100;position=environment?.randomSpawns&&!spawnScheduled?randomOutdoorSpawn([player]):{...respawnPoint};spawnScheduled=false;botWeapon=createWeapon(PRACTICE_RULES);aim=0;cooldown=0;repath=0;}return;}
+    if(botHealth===0){botDead=Math.max(0,botDead-dt);if(botDead<1e-8){botDead=0;botHealth=100;position=environment?.randomSpawns&&!spawnScheduled?randomOutdoorSpawn([player]):{...respawnPoint};spawnScheduled=false;botWeapon=createWeapon(PRACTICE_RULES);aim=0;cooldown=0;repath=0;}return;}
     botWeapon=advanceWeapon(botWeapon,dt,PRACTICE_RULES);cooldown=Math.max(0,cooldown-dt);
     if(!hasTarget){aim=0;locked=null;warning=0;route=[];repath=0;return;}
     if(environment){const door=nearbyDoor(position,environment.doors);if(door&&!environment.doors[door.id])toggleDoor(environment.doors,door.id,position,[]);}
@@ -166,7 +166,7 @@ export function createBotMatch(difficulty:BotDifficulty='easy',environment?:BotE
 
 // User-approved survival tuning; tests may inject explicit boundary fixtures.
 export type SurvivalOptions={prepareSeconds:number;initialEnemies:number;increaseEvery:number;maxEnemies:number;restoreBetweenWaves:boolean};
-export const SURVIVAL_RULES:Readonly<SurvivalOptions>=Object.freeze({prepareSeconds:5,initialEnemies:3,increaseEvery:2,maxEnemies:12,restoreBetweenWaves:true});
+export const SURVIVAL_RULES:Readonly<SurvivalOptions>=Object.freeze({prepareSeconds:5,initialEnemies:4,increaseEvery:2,maxEnemies:12,restoreBetweenWaves:true});
 export type SurvivalDifficulty=BotDifficulty|'auto';
 export function isSurvivalDifficulty(value:unknown):value is SurvivalDifficulty{return value==='auto'||isBotDifficulty(value);}
 export function createSurvivalMatch(difficulty:SurvivalDifficulty='easy',options:SurvivalOptions=SURVIVAL_RULES,environment?:BotEnvironment){
@@ -186,7 +186,7 @@ export function createSurvivalMatch(difficulty:SurvivalDifficulty='easy',options
  function hurt(id:string,damage=25){
   if(!Number.isFinite(damage)||damage<0)throw new Error('Invalid damage');
   const slot=slots.find(b=>b.id===id);if(phase!=='combat'||playerHealth===0||!slot)return false;
-  const killed=slot.agent.hurt('bot',damage);if(killed){playerKills++;defeated++;slot.delay=3;
+  const killed=slot.agent.hurt('bot',damage);if(killed){playerKills++;defeated++;slot.delay=1.5;
    if(defeated===total()){if(wave===totalWaves){phase='won';}else{if(adaptive){adaptive.completeWave(playerHealth);selected=adaptive.state().difficulty;}wave++;spawned=0;defeated=0;phase='preparing';prepareRemaining=options.prepareSeconds;if(options.restoreBetweenWaves){playerHealth=100;ammoRefreshVersion++;}}}
   }return killed;
  }

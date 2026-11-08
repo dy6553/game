@@ -5,6 +5,9 @@ export const RECOIL = Object.freeze({
   pistol: { kick: .72, recovery: 17, tilt: .11, push: .075 },
   machinegun: { kick: .27, recovery: 22, tilt: .055, push: .045 },
   shotgun: { kick: 1.15, recovery: 10, tilt: .16, push: .12 },
+  smg:{kick:.18,recovery:25,tilt:.045,push:.035},
+  burst:{kick:.34,recovery:19,tilt:.065,push:.055},
+  dmr:{kick:.95,recovery:12,tilt:.12,push:.1},
   sniper: { kick: 1.3, recovery: 8, tilt: .14, push: .14 },
 });
 export type ShakeLevel = 'off' | 'low' | 'normal';

@@ -15,7 +15,7 @@ export function createSupplyCrates(scene:Scene,initial:Pickup[]){
  const body=material('graphite','#263546',96),panel=material('armor','#40556a',64),metal=material('alloy','#b5bfcb',128),rubber=material('rubber','#101a25',16),brass=material('latch','#bc9763',96);
  const grain=new Uint8Array(64*64*3);let seed=1729;for(let i=0;i<grain.length;i+=3){seed=(Math.imul(seed,1664525)+1013904223)>>>0;const v=236+(seed%20);grain[i]=grain[i+1]=grain[i+2]=v;}
  const texture=RawTexture.CreateRGBTexture(grain,64,64,scene,true,false,Texture.TRILINEAR_SAMPLINGMODE);texture.name='supply-brushed-grain';texture.anisotropicFilteringLevel=4;body.diffuseTexture=texture;panel.diffuseTexture=texture;
- const colors={pistol:'#6be5f1',machinegun:'#77edbd',shotgun:'#ffc56b',sniper:'#c5a6ff'};
+ const colors={smg:'#f9dc77',burst:'#ff9b8d',dmr:'#8fbfff',pistol:'#6be5f1',machinegun:'#77edbd',shotgun:'#ffc56b',sniper:'#c5a6ff'};
  const chamfer=(name:string,w:number,h:number,d:number,cut:number,mat:StandardMaterial)=>{
   const ring=[[-w/2+cut,-d/2],[w/2-cut,-d/2],[w/2,-d/2+cut],[w/2,d/2-cut],[w/2-cut,d/2],[-w/2+cut,d/2],[-w/2,d/2-cut],[-w/2,-d/2+cut]];
   const positions:number[]=[],indices:number[]=[],normals:number[]=[],uvs:number[]=[];
@@ -39,7 +39,7 @@ export function createSupplyCrates(scene:Scene,initial:Pickup[]){
   box('display',0,.49,-.495,.74,.29,.04,rubber);
   // Raised weapon silhouettes are geometry: readable without fonts, texture downloads or new assets.
   box('receiver',0,.54,-.527,.25,.075,.03,metal);
-  const length=crate.weaponId==='pistol'?.15:crate.weaponId==='sniper'?.36:.29;
+  const length=crate.weaponId==='pistol'?.15:crate.weaponId==='sniper'||crate.weaponId==='dmr'?.36:crate.weaponId==='smg'?.2:.29;
   box('barrel',.12+length/2,.55,-.527,length,.032,.03,metal);const grip=box('grip',-.05,.46,-.527,.055,.12,.03,metal);grip.rotation.z=-.2;
   if(crate.weaponId!=='pistol')box('stock',-.2,.54,-.527,.14,.04,.03,metal);
   if(crate.weaponId==='shotgun')box('second-barrel',.25,.51,-.527,.29,.025,.03,metal);

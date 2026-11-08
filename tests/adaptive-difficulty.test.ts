@@ -45,5 +45,5 @@ test('actual automatic enemies use the intermediate aim and warning times',()=>{
  m.update(.05,{x:0,z:10},()=>true,()=>false);assert.ok(m.state().bots[0].locked);assert.ok(Math.abs(m.state().bots[0].warning-.3375)<1e-8,'newly spawned agents use the interpolated warning, not a coarse profile');
 });
 test('automatic stays at twenty waves as stages rise, preserving quotas and the final victory',()=>{
- const m=rules.createSurvivalMatch('auto');for(let wave=1;wave<=20;wave++){tick(m);assert.equal(m.state().wave,wave);assert.equal(m.state().totalWaves,20);assert.equal(m.state().total,Math.min(12,3+Math.floor((wave-1)/2)));clear(m);assert.equal(m.state().winner,wave===20?'player':'');}assert.equal(m.state().adaptiveStage,9);
+ const m=rules.createSurvivalMatch('auto');for(let wave=1;wave<=20;wave++){tick(m);assert.equal(m.state().wave,wave);assert.equal(m.state().totalWaves,20);assert.equal(m.state().total,Math.min(12,4+Math.floor((wave-1)/2)));clear(m);assert.equal(m.state().winner,wave===20?'player':'');}assert.equal(m.state().adaptiveStage,9);
 });

@@ -62,16 +62,18 @@ export function createInput(canvas: HTMLCanvasElement) {
     pressedAt = { ...last }; mouseDragged = false;
     canvas.setPointerCapture(event.pointerId);
   });
-  canvas.addEventListener('pointermove', event => {
+  const moveLook = (event:PointerEvent) => {
     if (!enabled) return;
     if (document.pointerLockElement === canvas && event.pointerType === 'mouse') {
       look = turnView(look, event.movementX, event.movementY, 0.0025);
     } else if (event.pointerId === lookPointer) {
       if (Math.hypot(event.clientX - pressedAt.x, event.clientY - pressedAt.y) > 6) mouseDragged = true;
-      look = turnView(look, event.clientX - last.x, event.clientY - last.y, .004 * (event.pointerType === 'touch' ? touchSensitivity : 1));
+      look = turnView(look, event.clientX - last.x, event.clientY - last.y, event.pointerType === 'touch' ? .007*touchSensitivity : .004);
       last = { x: event.clientX, y: event.clientY };
     }
-  });
+  };
+  canvas.addEventListener('pointermove',moveLook);
+  window.addEventListener('pointermove',event=>{if(event.target!==canvas)moveLook(event);});
   const releaseLook = (event: PointerEvent) => {
     if(event.pointerType==='mouse')mouseHeld=false;
     if (event.pointerId === lookPointer) {
@@ -84,8 +86,7 @@ export function createInput(canvas: HTMLCanvasElement) {
   document.addEventListener('pointerlockchange', reset);
   fire.addEventListener('pointerdown', event => {if(!enabled)return;event.preventDefault();if(firePointer!==null)return;firePointer=event.pointerId;fire.setPointerCapture(event.pointerId);shots++;});
   ['pointerup','pointercancel','lostpointercapture'].forEach(type=>fire.addEventListener(type,event=>{if((event as PointerEvent).pointerId===firePointer)firePointer=null;}));
-  window.addEventListener('pointerup',()=>{mouseHeld=false;});
-  window.addEventListener('pointercancel',()=>{mouseHeld=false;});
+
   fire.addEventListener('click', event => { if (enabled && event.detail === 0) shots++; });
   reload?.addEventListener('pointerdown',event=>{if(!enabled)return;event.preventDefault();reloads++;});
   reload?.addEventListener('click',event=>{if(enabled&&event.detail===0)reloads++;});
@@ -121,6 +122,9 @@ export function createInput(canvas: HTMLCanvasElement) {
   };
   ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(type =>
     joystick.addEventListener(type, event => releaseStick(event as PointerEvent)));
+
+  // Capture may be interrupted by overlays or OS gestures; end the matching finger globally.
+  for(const type of ['pointerup','pointercancel'] as const)window.addEventListener(type,event=>{releaseLook(event);releaseStick(event);if(event.pointerId===firePointer)firePointer=null;});
 
   return {
     setEnabled(value: boolean) { if (enabled !== value) { enabled = value; reset(); } },

@@ -44,7 +44,7 @@ test('scene switches modes, robot receives real ray hits, pause freezes duel, re
     assert.equal(world.scene.getTransformNodeByName('target-root-0')!.isEnabled(),false);
     for(let i=0;i<4;i++)assert.equal(world.shoot().hit,true);
     assert.equal(world.duelState().playerKills,1);assert.equal(world.duelState().botHealth,0);
-    world.update(position,10,{yaw:0,pitch:0},true);assert.equal(world.duelState().botDead,3);
+    world.update(position,10,{yaw:0,pitch:0},true);assert.equal(world.duelState().botDead,1.5);
     world.update(position,3,{yaw:0,pitch:0});assert.equal(world.duelState().botHealth,100);
     world.resetPractice();assert.equal(world.duelState().playerKills,0);
     world.setMode('practice');assert.equal(world.duelState().active,false);

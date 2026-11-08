@@ -4,7 +4,7 @@ import {createInventory,createPickups,syncSlot,advanceStowed,switchSlot,takePick
 import type { MatchState } from './network-game.ts';
 import { createRecoil,type ShakeLevel } from './impact.ts';
 import { createRobotImpact } from './robot-impact.ts';
-import { WEAPONS,pelletOffsets,type WeaponId } from './weapons.ts';
+import { WEAPONS,pelletOffsets,startBurst,advanceBurst,cancelBurst,cadenceCarry,type WeaponId } from './weapons.ts';
 import { createDuel,createBotMatch,createSurvivalMatch,isSurvivalDifficulty,type SurvivalDifficulty } from './duel.ts';
 import type { Engine } from '@babylonjs/core/Engines/engine.js';
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js';
@@ -264,7 +264,16 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean}
   }
 
   for (const cover of COVERS) {
-    if (cover.id === 'van') {
+    if(cover.height){
+      const h=cover.height,container=cover.id.includes('container'),mat=container?bodyMaterials[cover.x<0?1:2]!:cover.id.includes('monument')?stone:wood;
+      const body=box(cover.id,cover.x,h/2,cover.z,cover.width,h,cover.depth,mat);shadows.addShadowCaster(body);
+      box(cover.id+'-cap',cover.x,h+.04,cover.z,cover.width+.05,.08,cover.depth+.05,metal);
+      for(const side of [-1,1]){
+        box(cover.id+'-corner',cover.x+side*(cover.width/2-.08),h/2,cover.z-cover.depth/2-.025,.1,h,.05,metal);
+        box(cover.id+'-stripe',cover.x,h*.65,cover.z+side*(cover.depth/2+.015),cover.width*.8,.12,.02,line);
+      }
+      if(container)for(let n=-cover.width/2+.35;n<cover.width/2;n+=.4)box(cover.id+'-rib',cover.x+n,h/2,cover.z-cover.depth/2-.035,.035,h*.88,.05,metal);
+    } else if (cover.id === 'van') {
       const van = box('van-body', cover.x, 1, cover.z, cover.width, 1.8, cover.depth, bodyMaterials[1]!);
       shadows.addShadowCaster(van);
       box('van-roof', cover.x, 2, cover.z + 0.3, 2.5, 0.3, 4.1, stone);
@@ -514,8 +523,9 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean}
     previewLight.setEnabled(value);
     for(const light of streetLights) light.setEnabled(!value);
   }
+  const autoShotResults:ReturnType<typeof shoot>[]=[];
   function update(p: Point, dt: number, look: Look = { yaw: 0, pitch: 0 }, paused=false) {
-    if(!preview&&!reference&&!paused){syncSlot(inventory,weapon,cooldown);advanceStowed(inventory,dt);tickPickups(pickups,dt);weapon=advanceWeapon(weapon,dt,spec);cooldown=Math.max(0,cooldown-dt);jumpState=advanceJump(jumpState,dt);}
+    if(!preview&&!reference&&!paused){syncSlot(inventory,weapon,cooldown);advanceStowed(inventory,dt);tickPickups(pickups,dt);weapon=advanceWeapon(weapon,dt,spec);if(weaponId==='smg')weapon={...weapon,cadenceCarry:cadenceCarry(cooldown,dt)};cooldown=Math.max(0,cooldown-dt);jumpState=advanceJump(jumpState,dt);}
     syncDoors();if(!paused)atmosphere.update(dt,p);
     const texel=64/shadows.mapSize;
     moon.position.set(Math.round((p.x+24.75)/texel)*texel,55,Math.round((p.z-13.75)/texel)*texel);
@@ -575,18 +585,19 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean}
       camera.rotation.set(look.pitch, look.yaw, kick.roll);
     }
     scopeBody.setEnabled(weaponId==='sniper');secondBarrel.setEnabled(weaponId==='shotgun');
-    gun.scaling.z=weaponId==='pistol'?1:1.6;barrel.scaling.z=weaponId==='sniper'?2:weaponId==='pistol'?1:1.5;
+    gun.scaling.z=weaponId==='pistol'?1:weaponId==='smg'?1.2:weaponId==='dmr'?1.9:1.6;barrel.scaling.z=weaponId==='sniper'?2:weaponId==='dmr'?1.8:weaponId==='pistol'?1:weaponId==='smg'?1.2:1.5;
     const inside=indoorAt(p);for(const item of interiorLights)item.light.setEnabled(!preview&&!reference&&item.id===inside?.id);
     syncBot();syncSupplies();
+    if(active){const sequence=advanceBurst(weapon,dt);weapon=sequence.state;if(sequence.due>0){const shot=shoot(true);if(shot.fired)autoShotResults.push(shot);else weapon=cancelBurst(weapon);}}
   }
   setPreview(false);
   resize();
-  function shoot() {
+  function shoot(continued=false) {
     if (preview || reference || (duelMode&&(battleState().playerHealth===0||!!battleState().winner))) return { fired: false, hit: false };
-    if(cooldown>1e-8)return {fired:false,hit:false,reason:'cooldown'};
+    if(!continued&&cooldown>1e-8)return {fired:false,hit:false,reason:'cooldown'};
     const attempt=tryFire(weapon);weapon=attempt.state;
     if(!attempt.fired)return {fired:false,hit:false,reason:attempt.reason};
-    if(duelMode)(survivalMode?survival:ffaMode?ffa:duel).playerFired();shots++;recoil.fire(weaponId);cooldown=spec.interval;
+    if(duelMode)(survivalMode?survival:ffaMode?ffa:duel).playerFired();shots++;recoil.fire(weaponId);if(!continued){cooldown=Math.max(0,spec.interval-(weaponId==='smg'?(weapon.cadenceCarry??0):0));weapon=startBurst(weapon,spec);}
     let anyHit=false,anyEliminated=false,impact=false,totalDamage=0;
     let lastPoint=camera.position.clone();
     const offsets=pelletOffsets(spec);
@@ -630,10 +641,10 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean}
   }
   function reload() {
     if(preview||reference||(duelMode&&(battleState().playerHealth===0||!!battleState().winner)))return false;
-    const next=beginReload(weapon,spec);const started=next!==weapon;weapon=next;return started;
+    const next=beginReload(weapon,spec);const started=next!==weapon;weapon=started?cancelBurst(next):next;return started;
   }
   function resetPractice() {
-    weaponId=startWeapon;spec=WEAPONS[weaponId];inventory=createInventory(startWeapon);pickups=createPickups();weapon=createWeapon(spec);cooldown=0;scoped=false;jumpState=createJump();hits=0;destroyed=0;shots=0;
+    autoShotResults.length=0;weaponId=startWeapon;spec=WEAPONS[weaponId];inventory=createInventory(startWeapon);pickups=createPickups();weapon=createWeapon(spec);cooldown=0;scoped=false;jumpState=createJump();hits=0;destroyed=0;shots=0;
     effects.clear();botEffects.clear();recoil.clear();robotImpact.reset();doors=createDoors();environment.doors=doors;duel=createDuel(fixedDifficulty(),environment.randomSpawns?randomOutdoorSpawn([PROTOTYPE.spawn]):{x:0,z:18},undefined,environment);ffa=createBotMatch(fixedDifficulty(),environment);survival=createSurvivalMatch(botDifficulty,undefined,environment);syncDoors();seenResupply=0;for(const rig of botRigs){rig.fx.reset();rig.health=100;}seenRespawn=0;syncBot();
     for(const target of targets){
       target.health=PRACTICE_RULES.maxHealth;target.flash=0;target.root.setEnabled(!duelMode);
@@ -680,6 +691,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean}
     resetJump(){jumpState=createJump();},
     setMode(mode:'practice'|'duel'|'ffa'|'survival',difficulty?:SurvivalDifficulty){if(isSurvivalDifficulty(difficulty))botDifficulty=difficulty;if(mode!=='survival'&&botDifficulty==='auto')botDifficulty='normal';ffaMode=mode==='ffa';survivalMode=mode==='survival';duelMode=mode!=='practice';resetPractice();},
     consumeSounds(){return soundEvents.splice(0);},
+    consumeAutoShots(){return autoShotResults.splice(0);},
     duelState:()=>({...battleState(),active:duelMode}),
     inventoryState(){syncSlot(inventory,weapon,cooldown);return {inventory,pickups};},
     pickup(p:Point,id:string,replace?:number){if(preview||reference||(duelMode&&(battleState().playerHealth===0||!!battleState().winner)))return 'unavailable';syncSlot(inventory,weapon,cooldown);const result=takePickup(inventory,p,pickups,id,replace);if(result==='added')equip();return result;},

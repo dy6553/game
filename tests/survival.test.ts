@@ -17,7 +17,7 @@ test('cleared waves advance without consuming lives and only the final wave wins
  const match=battle();for(let wave=1;wave<=10;wave++){combat(match);assert.equal(match.state().wave,wave);let guard=0;while(match.state().phase==='combat'&&guard++<100){for(const bot of match.state().bots)if(bot.health>0)match.hurt(bot.id,100);if(match.state().phase==='combat')tick(match,3);}assert.ok(guard<100);assert.equal(match.state().lives,3);assert.equal(match.state().winner,wave===10?'player':'');}assert.equal(match.state().phase,'won');assert.ok(match.state().playerKills>10,'survival must not stop at the duel kill goal');
 });
 test('a dead wave enemy never revives after the wave quota is exhausted',()=>{
- const match=battle();combat(match);match.hurt('bot-1',100);tick(match,10);assert.equal(match.state().bots.find(b=>b.id==='bot-1').health,0);assert.equal(match.state().defeated,1);assert.equal(match.state().remaining,2);assert.ok(match.state().bots.filter(b=>b.health>0).length<=3);
+ const match=battle();combat(match);match.hurt('bot-1',100);tick(match,1.5);assert.equal(match.state().spawned,4);match.hurt('bot-1',100);tick(match,10);assert.equal(match.state().bots.find(b=>b.id==='bot-1').health,0);assert.equal(match.state().defeated,2);assert.equal(match.state().remaining,2);assert.ok(match.state().bots.filter(b=>b.health>0).length<=3);
 });
 test('survival mode is selectable combat and pausing freezes its initial preparation',()=>{
  const e=new NullEngine({renderWidth:640,renderHeight:360,textureSize:512,deterministicLockstep:false,lockstepMaxSteps:4});try{const world=createHarborScene(e,{randomSpawns:false});world.setMode('survival','normal');assert.equal(world.duelState().mode,'survival');assert.equal(world.duelState().lives,3);const before=world.duelState().prepareRemaining;world.update({x:0,z:-8},10,undefined,true);assert.equal(world.duelState().prepareRemaining,before);world.scene.dispose();}finally{e.dispose();}
@@ -26,7 +26,7 @@ test('survival mode is selectable combat and pausing freezes its initial prepara
 test('all wave quotas scale to twelve, active enemies stay capped and hard wins only after thirty',()=>{
  for(const [level,goal] of [['normal',20],['hard',30]]){
   const match=battle(level);for(let wave=1;wave<=goal;wave++){
-   combat(match);assert.equal(match.state().total,Math.min(12,3+Math.floor((wave-1)/2)));
+   combat(match);assert.equal(match.state().total,Math.min(12,4+Math.floor((wave-1)/2)));
    if(wave===19){for(let i=0;i<10;i++){assert.equal(match.hurt('bot-1',100),true);tick(match,3);}assert.equal(match.state().phase,'combat');assert.equal(match.state().remaining,2);}
    let guard=0;while(match.state().phase==='combat'&&guard++<50){assert.ok(match.state().bots.filter(b=>b.health>0).length<=3);for(const bot of match.state().bots)if(bot.health>0)match.hurt(bot.id,100);if(match.state().phase==='combat')tick(match,3);}assert.ok(guard<50);assert.equal(match.state().winner,wave===goal?'player':'');
   }assert.equal(match.state().wave,goal);
@@ -37,6 +37,7 @@ test('real wave clear heals and refills every held gun while keeping the acquire
   const world=createHarborScene(e,{randomSpawns:false});world.setMode('survival','easy');world.selectWeapon('sniper');const p={x:0,z:-4};world.update(p,0);assert.equal(world.pickup(p,'crate-machinegun'),'added');world.switchWeapon(0);world.update(p,5);assert.equal(world.duelState().phase,'combat');
   p.z=10;world.update(p,0,{yaw:0,pitch:0});world.scene.render();assert.equal(world.shoot().eliminated,true);
   p.z=0;for(const id of ['bot-2','bot-3']){world.update(p,1.6);const target=world.duelState().bots.find(b=>b.id===id);world.update(p,0,{yaw:Math.atan2(target.position.x-p.x,target.position.z-p.z),pitch:0});world.scene.render();assert.equal(world.shoot().eliminated,true);}
+  world.update(p,1.6);const reinforcement=world.duelState().bots.find(b=>b.health>0)!;p.x=reinforcement.position.x;p.z=reinforcement.position.z-5;world.update(p,0,{yaw:0,pitch:0});world.scene.render();assert.equal(world.shoot().eliminated,true);
   world.update(p,0);assert.equal(world.duelState().wave,2);assert.equal(world.duelState().phase,'preparing');assert.equal(world.duelState().playerHealth,100);const bag=world.inventoryState();assert.deepEqual(bag.inventory.slots.map(s=>s.id),['sniper','machinegun']);assert.deepEqual(bag.inventory.slots.map(s=>s.weapon.ammo),[5,30]);assert.ok(bag.pickups.find(c=>c.id==='crate-machinegun').remaining>0,'normal wave progression preserves supply timers');
   world.scene.dispose();
  }finally{e.dispose();}
