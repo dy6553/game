@@ -1,22 +1,6 @@
-import { moveWithCollisions,PROTOTYPE,worldSolids } from './world.ts';
-import type { MatchState,Player } from './network-game.ts';
-// A bounded display estimate; never fed back into server hit or movement validation.
+import {harborWorld,createWorld} from './world.ts';import type {MatchState,Player} from './network-game.ts';
 export function createRemoteMotion(){
- let doors:MatchState['doors'];
- let player:Player|null=null,tick=0,received=0,vx=0,vz=0;
- return {
-  reset(){player=null;vx=vz=0;},
-  receive(state:MatchState,id:string,now:number){
-   doors=state.doors;const next=state.players.find(p=>p.id!==id);if(!next){player=null;return;}
-   const gap=state.tick-tick,canEstimate=player&&player.id===next.id&&player.health>0&&next.health>0&&state.players.every(p=>p.connected)&&!state.winner&&gap>0&&gap<=6;
-   vx=canEstimate?(next.x-player!.x)/(gap*.05):0;vz=canEstimate?(next.z-player!.z)/(gap*.05):0;
-   const speed=Math.hypot(vx,vz),limit=PROTOTYPE.speed*1.5;if(speed>limit){vx=vz=0;}
-   player=next;tick=state.tick;received=now;
-  },
-  sample(now:number,rttMs:number|null){
-   if(!player)return undefined;
-   const age=Math.max(0,now-received),horizon=age>300?0:Math.min(.15,(age+Math.max(0,rttMs??0)/2)/1000);
-   const p=moveWithCollisions(player,{x:vx*horizon,z:vz*horizon},worldSolids(doors));return {...p,id:player.id};
-  },
- };
+ let world=harborWorld,map='harbor',doors:MatchState['doors'];const actors=new Map<string,{player:Player;tick:number;received:number;vx:number;vz:number}>();
+ function sampleAll(now:number,rttMs:number|null){return [...actors.values()].map(a=>{const age=Math.max(0,now-a.received),horizon=age>300?0:Math.min(.15,(age+Math.max(0,rttMs??0)/2)/1000),p=world.moveWithCollisions(a.player,{x:a.vx*horizon,z:a.vz*horizon},world.worldSolids(doors));return {...p,id:a.player.id};});}
+ return {reset(){actors.clear();},receive(state:MatchState,id:string,now:number){const m=state.map==='factory'?'factory':'harbor';if(m!==map){map=m;world=m==='factory'?createWorld('factory'):harborWorld;actors.clear();}doors=state.doors;const present=new Set<string>();for(const p of state.players){if(p.id===id||p.abandoned||p.playing===false)continue;present.add(p.id);const old=actors.get(p.id),gap=old?state.tick-old.tick:0,active=p.connected&&((state.mode??'duel')!=='duel'||state.players.every(p=>p.connected)),estimate=old&&old.player.health>0&&p.health>0&&active&&!state.winner&&gap>0&&gap<=6;let vx=estimate?(p.x-old!.player.x)/(gap*.05):0,vz=estimate?(p.z-old!.player.z)/(gap*.05):0;if(Math.hypot(vx,vz)>world.PROTOTYPE.speed*1.5)vx=vz=0;actors.set(p.id,{player:structuredClone(p),tick:state.tick,received:now,vx,vz});}for(const key of actors.keys())if(!present.has(key))actors.delete(key);},sample(now:number,rtt:number|null){return sampleAll(now,rtt)[0];},sampleAll};
 }

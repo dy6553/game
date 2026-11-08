@@ -12,7 +12,8 @@ export const CHARACTER_TYPES = ['robot', 'robot-cat', 'welder'] as const;
 export type CharacterType = typeof CHARACTER_TYPES[number];
 export function isCharacterType(value: unknown): value is CharacterType { return value === 'robot' || value === 'robot-cat' || value === 'welder'; }
 
-export function createCharacter(scene: Scene, parent: TransformNode, type: CharacterType) {
+export function createCharacter(scene: Scene, parent: TransformNode, type: CharacterType, options:{detail?:'full'|'remote'}={}) {
+  const remote=options.detail==='remote';
   const root = new TransformNode(`character-${type}`, scene); root.parent = parent;
   const meshes: Mesh[] = [];
   const mat = (name: string, color: string, glow = false) => {
@@ -31,15 +32,15 @@ export function createCharacter(scene: Scene, parent: TransformNode, type: Chara
     m.position.set(x,y,z); m.material=material; m.parent=root; m.isPickable=false; meshes.push(m); return m;
   };
   const round = (name: string,x:number,y:number,z:number,w:number,h:number,d:number,m:StandardMaterial,power=0.45) => {
-    const mesh=MeshBuilder.CreateSphere(name,{diameter:2,segments:24,updatable:true},scene);
+    const mesh=MeshBuilder.CreateSphere(name,{diameter:2,segments:remote?10:24,updatable:true},scene);
     const points=mesh.getVerticesData(VertexBuffer.PositionKind)!;
     for(let i=0;i<points.length;i++) points[i]=Math.sign(points[i]!)*Math.pow(Math.abs(points[i]!),power)*[w/2,h/2,d/2][i%3]!;
     const normals:number[]=[]; VertexData.ComputeNormals(points,mesh.getIndices()!,normals);
     mesh.updateVerticesData(VertexBuffer.PositionKind,points,true);mesh.updateVerticesData(VertexBuffer.NormalKind,normals);
     return add(mesh,x,y,z,m);
   };
-  const ball=(name:string,x:number,y:number,z:number,d:number,m:StandardMaterial)=>add(MeshBuilder.CreateSphere(name,{diameter:d,segments:20},scene),x,y,z,m);
-  const cylinder=(name:string,x:number,y:number,z:number,d:number,h:number,m:StandardMaterial)=>add(MeshBuilder.CreateCylinder(name,{diameter:d,height:h,tessellation:24},scene),x,y,z,m);
+  const ball=(name:string,x:number,y:number,z:number,d:number,m:StandardMaterial)=>add(MeshBuilder.CreateSphere(name,{diameter:d,segments:remote?8:20},scene),x,y,z,m);
+  const cylinder=(name:string,x:number,y:number,z:number,d:number,h:number,m:StandardMaterial)=>add(MeshBuilder.CreateCylinder(name,{diameter:d,height:h,tessellation:remote?8:24},scene),x,y,z,m);
   const arms:Array<{upper:TransformNode;lower:TransformNode}>=[];let weaponSocket:Mesh;
   for(const side of [-1,1]) {
     round('robot-boot',side*0.24,0.15,0.1,0.38,0.29,0.6,ivory);
@@ -123,7 +124,7 @@ export function createCharacter(scene: Scene, parent: TransformNode, type: Chara
     ball('cat-nose',0,1.94,0.43,0.085,copper);
     round('cat-forehead-light',0,2.3,0.18,0.045,0.18,0.04,cyan);
     const path=Array.from({length:25},(_,i)=>{const t=i/24;return new Vector3(0.12+0.55*Math.sin(t*2.5),0.9+1.1*t,-0.25-0.65*Math.sin(t*Math.PI*0.85));});
-    add(MeshBuilder.CreateTube('cat-tail',{path,radius:0.075,tessellation:12},scene),0,0,0,dark);
+    add(MeshBuilder.CreateTube('cat-tail',{path,radius:0.075,tessellation:remote?6:12},scene),0,0,0,dark);
     for(let i=2;i<25;i+=3) ball('tail-segment',path[i]!.x,path[i]!.y,path[i]!.z,0.17,i%2?copper:ivory);
     const tip=path[path.length-1]!;ball('cat-tail-tip',tip.x,tip.y,tip.z,0.18,cyan);
   }

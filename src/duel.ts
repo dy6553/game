@@ -85,20 +85,21 @@ function createDuel(difficulty:BotDifficulty='easy',spawnPoint:Point=BOT_SPAWN,o
   if(!canStand(spawnPoint,PROTOTYPE.radius))throw new Error('Invalid bot spawn');let respawnPoint={...spawnPoint},spawnScheduled=false;
   const selected=isBotDifficulty(difficulty)?difficulty:'easy';const profile:BotProfile=override??BOT_DIFFICULTIES[selected];let strafeDirection=1;
   let protection=0,playerPosition:Point={...PROTOTYPE.spawn};
+  let playerDeaths=0;
   let playerHealth=100,botHealth=100,playerKills=0,botKills=0,playerDead=0,botDead=0;
   let position={...respawnPoint},aim=0,cooldown=0,repath=0,route:Point[]=[],respawnVersion=0;
   let locked:Point|null=null,warning=0,damageVersion=0;
   let botWeapon=createWeapon(PRACTICE_RULES);
   let winner:''|'player'|'bot'='';
-  function hurt(who:'player'|'bot',damage:number=DUEL_RULES.damage){
+  function hurt(who:'player'|'bot',damage:number=DUEL_RULES.damage,credit=true){
     if(!Number.isFinite(damage)||damage<0)throw new Error('Invalid damage');
-    if(winner||playerHealth===0||botHealth===0||(who==='player'&&protection>0))return false;
+    if(winner||(who==='player'&&playerHealth===0)||(who==='bot'&&botHealth===0)||(who==='player'&&protection>0))return false;
     if(who==='bot'){
       botHealth=Math.max(0,botHealth-damage);
       if(botHealth===0){playerKills++;botDead=DUEL_RULES.botRespawnSeconds;aim=0;locked=null;warning=0;if(playerKills===10)winner='player';return true;}
     }else{
       damageVersion++;playerHealth=Math.max(0,playerHealth-damage);
-      if(playerHealth===0){botKills++;playerDead=3;aim=0;locked=null;warning=0;if(botKills===10)winner='bot';return true;}
+      if(playerHealth===0){playerDeaths++;if(credit)botKills++;playerDead=3;aim=0;locked=null;warning=0;if(botKills===10)winner='bot';return true;}
     }
     return false;
   }
@@ -139,7 +140,7 @@ function createDuel(difficulty:BotDifficulty='easy',spawnPoint:Point=BOT_SPAWN,o
       else if(botWeapon.ammo===0)botWeapon=beginReload(botWeapon,PRACTICE_RULES);
     }
   }
-  return {hurt,update,playerFired(){protection=0;},separate(others:readonly Point[]){if(locked)return;for(const other of others){if(Math.abs((other.y??0)-(position.y??0))>1)continue;const dx=position.x-other.x,dz=position.z-other.z,d=Math.hypot(dx,dz);if(d<1.5){const n=d>.01?d:1;position=moveWithCollisions(position,{x:(d>.01?dx/n:1)*.08,z:dz/n*.08},environment?worldSolids(environment.doors):undefined);}}},setSpawn(p:Point){if(!canStand(p,PROTOTYPE.radius))throw new Error('Invalid bot spawn');respawnPoint={...p};spawnScheduled=true;},state:()=>({protection,playerPosition:{...playerPosition},difficulty:selected,playerHealth,botHealth,playerKills,botKills,playerDead,botDead,position:{...position},winner,respawnVersion,aim,warning,locked:locked?{...locked}:null,damageVersion,botAmmo:botWeapon.ammo})};
+  return {hurt,hurtSelf:(damage:number)=>hurt('player',damage,false),healPlayer(amount:number){if(playerHealth<=0||winner)return 0;const before=playerHealth;playerHealth=Math.min(100,playerHealth+Math.max(0,amount));return playerHealth-before;},update,playerFired(){protection=0;},separate(others:readonly Point[]){if(locked)return;for(const other of others){if(Math.abs((other.y??0)-(position.y??0))>1)continue;const dx=position.x-other.x,dz=position.z-other.z,d=Math.hypot(dx,dz);if(d<1.5){const n=d>.01?d:1;position=moveWithCollisions(position,{x:(d>.01?dx/n:1)*.08,z:dz/n*.08},environment?worldSolids(environment.doors):undefined);}}},setSpawn(p:Point){if(!canStand(p,PROTOTYPE.radius))throw new Error('Invalid bot spawn');respawnPoint={...p};spawnScheduled=true;},state:()=>({protection,playerPosition:{...playerPosition},difficulty:selected,playerDeaths,playerHealth,botHealth,playerKills,botKills,playerDead,botDead,position:{...position},winner,respawnVersion,aim,warning,locked:locked?{...locked}:null,damageVersion,botAmmo:botWeapon.ammo})};
 }
 
 const GROUP_SPAWNS:readonly Point[]=[{x:0,z:-8},{x:0,z:18},{x:-24,z:0},{x:24,z:0},{x:0,z:-28},{x:0,z:30},{x:-40,z:-32},{x:40,z:-32},{x:-40,z:30},{x:40,z:30}];
@@ -153,18 +154,19 @@ function createBotMatch(difficulty:BotDifficulty='easy',environment?:BotEnvironm
  const occupied:Point[]=[PROTOTYPE.spawn];
  const bots=[0,1,2].map(i=>{const spawn=environment?.randomSpawns?randomOutdoorSpawn(occupied):GROUP_SPAWNS[i+1]!;occupied.push(spawn);return {id:`bot-${i+1}`,name:`봇 ${i+1}`,kills:0,agent:createDuel(selected,spawn,undefined,environment)};});
  let protection=0;
+ let playerDeaths=0;
  let playerHealth=100,playerKills=0,playerDead=0,respawnVersion=0,damageVersion=0,playerPosition={...GROUP_SPAWNS[0]!},lastAttacker={...BOT_SPAWN};
  let winner:''|'player'|'bot'='',winnerName='';
  function livePositions(except?:string){return [...(playerHealth>0&&except!=='player'?[playerPosition]:[]),...bots.filter(b=>b.id!==except&&b.agent.state().botHealth>0).map(b=>b.agent.state().position)];}
  function hurt(id:string,damage=25){
-  const bot=bots.find(b=>b.id===id);if(winner||playerHealth===0||!bot)return false;
+  const bot=bots.find(b=>b.id===id);if(winner||!bot)return false;
   const killed=bot.agent.hurt('bot',damage);if(killed){playerKills++;if(playerKills>=10){winner='player';winnerName='나';}}return killed;
  }
  function hurtPlayer(id:string,damage=25){
   if(!Number.isFinite(damage)||damage<0)throw new Error('Invalid damage');
-  const bot=bots.find(b=>b.id===id);if(protection>0||winner||playerHealth===0||!bot||bot.agent.state().botHealth===0||damage===0)return false;
-  damageVersion++;lastAttacker=bot.agent.state().position;playerHealth=Math.max(0,playerHealth-damage);
-  if(playerHealth===0){bot.kills++;playerDead=3;if(bot.kills>=10){winner='bot';winnerName=bot.name;}return true;}return false;
+  const bot=bots.find(b=>b.id===id),self=id==='player';if(protection>0||winner||playerHealth===0||(!self&&(!bot||bot.agent.state().botHealth===0))||damage===0)return false;
+  damageVersion++;lastAttacker=bot?.agent.state().position??playerPosition;playerHealth=Math.max(0,playerHealth-damage);
+  if(playerHealth===0){playerDeaths++;if(bot)bot.kills++;playerDead=3;if(bot&&bot.kills>=10){winner='bot';winnerName=bot.name;}return true;}return false;
  }
  function update(dt:number,p:Point,visible:(from:Point,id?:string)=>boolean,fire:(from:Point,target:Point,id?:string)=>boolean|void){
   if(!Number.isFinite(dt)||dt<0)throw new Error('Invalid elapsed time');if(winner)return;protection=Math.max(0,protection-dt);
@@ -183,9 +185,9 @@ function createBotMatch(difficulty:BotDifficulty='easy',environment?:BotEnvironm
  function state(){
   const rows=bots.map(b=>{const s=b.agent.state();return {id:b.id,name:b.name,health:s.botHealth,kills:b.kills,dead:s.botDead,position:s.position,locked:s.locked,warning:s.warning,aim:s.aim,ammo:s.botAmmo};});
   const warning=rows.find(b=>b.health>0&&b.locked),aim=Math.max(...rows.map(b=>b.aim));
-  return {protection,mode:'ffa' as const,difficulty:selected,playerHealth,playerKills,playerDead,respawnVersion,damageVersion,playerPosition:{...playerPosition},position:{...lastAttacker},winner,winnerName,bots:rows,botHealth:rows[0]!.health,botKills:Math.max(...rows.map(b=>b.kills)),botDead:0,aim,warning:warning?.warning??0,locked:warning?.locked??null,botAmmo:rows[0]!.ammo};
+  return {protection,mode:'ffa' as const,difficulty:selected,playerDeaths,playerHealth,playerKills,playerDead,respawnVersion,damageVersion,playerPosition:{...playerPosition},position:{...lastAttacker},winner,winnerName,bots:rows,botHealth:rows[0]!.health,botKills:Math.max(...rows.map(b=>b.kills)),botDead:0,aim,warning:warning?.warning??0,locked:warning?.locked??null,botAmmo:rows[0]!.ammo};
  }
- return {hurt,hurtPlayer,update,state,playerFired(){protection=0;}};
+ return {hurt,hurtPlayer,hurtSelf:(damage:number)=>hurtPlayer('player',damage),healPlayer(amount:number){if(playerHealth<=0||winner)return 0;const before=playerHealth;playerHealth=Math.min(100,playerHealth+Math.max(0,amount));return playerHealth-before;},update,state,playerFired(){protection=0;}};
 }
 
 // User-approved survival tuning; tests may inject explicit boundary fixtures.
@@ -214,8 +216,8 @@ function createSurvivalMatch(difficulty:SurvivalDifficulty='easy',options:Surviv
  }
  function hurtPlayer(id:string,damage=25){
   if(!Number.isFinite(damage)||damage<0)throw new Error('Invalid damage');const slot=slots.find(b=>b.id===id);
-  if(protection>0||phase!=='combat'||playerHealth===0||!slot||slot.agent.state().botHealth===0||damage===0)return false;
-  playerHealth=Math.max(0,playerHealth-damage);damageVersion++;lastAttacker=slot.agent.state().position;
+  if(protection>0||phase!=='combat'||playerHealth===0||(id!=='player'&&(!slot||slot.agent.state().botHealth===0))||damage===0)return false;
+  playerHealth=Math.max(0,playerHealth-damage);damageVersion++;lastAttacker=slot?.agent.state().position??playerPosition;
   if(playerHealth===0){lives--;if(lives===0){phase='lost';playerDead=0;}else{phase='respawning';playerDead=3;}return true;}return false;
  }
  function update(dt:number,p:Point,visible:(from:Point,id?:string)=>boolean,fire:(from:Point,target:Point,id?:string)=>boolean|void){
@@ -236,7 +238,7 @@ function createSurvivalMatch(difficulty:SurvivalDifficulty='easy',options:Surviv
    playerHealth,playerKills,playerDead,respawnVersion,damageVersion,playerPosition:{...playerPosition},position:{...lastAttacker},winner:phase==='won'?'player' as const:phase==='lost'?'bot' as const:'',winnerName:phase==='won'?'생존 성공':phase==='lost'?'생명 소진':'',bots,
    botHealth:bots[0]?.health??0,botKills:3-lives,botDead:0,aim:phase==='combat'?Math.max(0,...bots.map(b=>b.aim)):0,warning:warning?.warning??0,locked:warning?.locked??null,botAmmo:bots[0]?.ammo??0};
  }
- return {hurt,hurtPlayer,update,state,playerFired(){protection=0;}};
+ return {hurt,hurtPlayer,hurtSelf:(damage:number)=>hurtPlayer('player',damage),healPlayer(amount:number){if(playerHealth<=0||phase==='won'||phase==='lost')return 0;const before=playerHealth;playerHealth=Math.min(100,playerHealth+Math.max(0,amount));return playerHealth-before;},update,state,playerFired(){protection=0;}};
 }
 
 // No application defaults: the caller must supply an approved adaptation policy.

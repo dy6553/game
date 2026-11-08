@@ -6,7 +6,7 @@ import type { Scene } from '@babylonjs/core/scene.js';
 import type { TransformNode } from '@babylonjs/core/Meshes/transformNode.js';
 import type { Mesh } from '@babylonjs/core/Meshes/mesh.js';
 
-export function createRobotImpact(scene:Scene,root:TransformNode,body:Mesh[]) {
+export function createRobotImpact(scene:Scene,root:TransformNode,body:Mesh[],options:{particleLimit?:number}={}) {
   // Private copies prevent opponent flashes/eye shutdown from changing the player.
   const materials=new Map<StandardMaterial,{mat:StandardMaterial;emission:Color3;diffuse:Color3;lit:boolean}>();
   for(const mesh of body)if(mesh.material instanceof StandardMaterial){
@@ -17,7 +17,7 @@ export function createRobotImpact(scene:Scene,root:TransformNode,body:Mesh[]) {
   const material=(name:string,color:string,glow:boolean)=>{const mat=new StandardMaterial(name,scene);mat.diffuseColor=Color3.FromHexString(color);if(glow){mat.emissiveColor=mat.diffuseColor.clone();mat.disableLighting=true;}return mat;};
   const electric=material('robot-fx-electric','#b4eeff',true),gold=material('robot-fx-gold','#ffd59b',true),metal=material('robot-fx-metal','#658494',false),smoke=material('robot-fx-smoke','#647784',false);
   smoke.alpha=.22;smoke.disableDepthWrite=true;
-  const particles=Array.from({length:32},(_,i)=>{
+  const particles=Array.from({length:Math.max(4,Math.min(32,options.particleLimit??32))},(_,i)=>{
     const kind=i<24?'spark':i<30?'debris':'smoke';
     const mesh=kind==='smoke'?MeshBuilder.CreateSphere('robot-fx-smoke',{diameter:.25,segments:4},scene):MeshBuilder.CreateBox(`robot-fx-${kind}`,{size:kind==='spark'?.035:.09},scene);
     mesh.material=kind==='smoke'?smoke:kind==='debris'?metal:i%2?electric:gold;

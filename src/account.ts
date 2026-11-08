@@ -1,7 +1,7 @@
 import type {Growth} from './progression.ts';
 type AuthReply={data?:{user?:{id:string};session?:{token:string}}|null;error?:{message?:string}|null};
 export type AuthSDK={getSession():Promise<AuthReply>;signIn:{email(body:{email:string;password:string}):Promise<unknown>};signUp:{email(body:{email:string;password:string;name:string}):Promise<unknown>};signOut():Promise<unknown>};
-export type OfficialProfile={admin?:boolean;growth?:Growth;id:string;played:number;wins:number;recent:{endedAt:number;outcome:'win'|'loss';kills:number;deaths:number}[]};
+export type OfficialProfile={admin?:boolean;growth?:Growth;id:string;played:number;wins:number;recent:{mode?:'duel'|'ffa'|'team';endedAt:number;outcome:'win'|'loss';kills:number;deaths:number}[]};
 function checked(reply:unknown){if(reply&&typeof reply==='object'&&'error' in reply&&reply.error)throw Error('로그인 요청을 완료하지 못했습니다. 입력 내용과 연결을 확인하세요.');}
 export function createAccount(sdk:AuthSDK,fetcher:typeof fetch,endpoint:string){
  let profile:OfficialProfile|null=null,operation=0,signedOut=false;

@@ -1,7 +1,7 @@
 import {harborWorld,createWorld} from './world.ts';
 import type {DashState} from './dash.ts';
 import type {JumpState} from './jump.ts';
-import { advancePlayerMotion,type Command,type MatchState,type Player } from './network-game.ts';
+import { advancePlayerMotion,onlinePlaying,type Command,type MatchState,type Player } from './network-game.ts';
 type Move=Omit<Command,'seq'>;
 type Point={x:number;z:number;y?:number};
 // Only presentation is predicted. Health, ammo, hits, kills and the canonical position remain server owned.
@@ -16,7 +16,7 @@ export function createOnlineMotion(onCorrection:(meters:number)=>void=()=>{}){
   receive(state:MatchState,id:string){
    const nextMap=state.map==='factory'?'factory':'harbor';if(nextMap!==map){map=nextMap;world=map==='factory'?createWorld('factory'):harborWorld;me=null;}
    doors=state.doors;const next=state.players.find(p=>p.id===id);if(!next)return;
-   const playing=!state.winner&&state.players.length===2&&state.players.every(p=>p.connected)&&next.health>0;
+   const playing=onlinePlaying(state,id)&&next.health>0;
    const discontinuity=!me||me.id!==id||!active||!playing||(me.health===0)!==(next.health===0)||age>.5;
    pending=pending.filter(p=>p.seq>next.seq);
    if(discontinuity){snap(next);}else{

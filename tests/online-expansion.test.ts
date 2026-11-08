@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {createNetworkGame} from '../src/network-game.ts';
+test('FFA accepts twenty players, rejects twenty-one and continues after one disconnects',()=>{const g=createNetworkGame(undefined,'harbor',{mode:'ffa',randomPickups:true});for(let n=0;n<20;n++)g.join('p'+n);assert.equal(g.state.players.length,20);assert.throws(()=>g.join('overflow'));g.disconnect('p19');g.input('p0',{seq:1,x:1,y:0,yaw:0,pitch:0,fire:false,shot:false,reload:false,jump:false,sprint:false,scope:false});const x=g.state.players[0].x;g.step();assert.notEqual(g.state.players[0].x,x);assert.equal(g.state.pickups.length,10);});

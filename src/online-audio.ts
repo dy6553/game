@@ -1,4 +1,4 @@
-import type {MatchState,Player} from './network-game.ts';
+import {onlinePlaying,type MatchState,type Player} from './network-game.ts';
 import {spatialSound,type Sound} from './audio.ts';
 export type AudioCue={kind:Sound;pan:number;volume:number};
 type Baseline={tick:number;id:string;me:Player;connected:boolean;eventId:number};
@@ -8,7 +8,7 @@ export function createOnlineAudio(){
  return {reset(){previous=undefined;footDistance=0;alternate=false;},update(state:MatchState,id:string,yaw:number,audible:boolean):AudioCue[]{
   const me=state.players.find(p=>p.id===id);if(!me){previous=undefined;footDistance=0;return [];}
   if(previous&&previous.id===id&&state.tick<=previous.tick)return [];
-  const old=previous,connected=state.players.length===2&&state.players.every(p=>p.connected);
+  const old=previous,connected=onlinePlaying(state,id);
   const eventId=Math.max(old?.eventId??-1,...state.events.map(e=>e.id));
   previous={tick:state.tick,id,me:structuredClone(me),connected,eventId};
   if(!old||old.id!==id||!audible||!connected||!old.connected){footDistance=0;return [];}

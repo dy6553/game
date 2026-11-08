@@ -1,6 +1,7 @@
 import {neon} from '@neondatabase/serverless';
 import migration from './growth-schema.js';
 import adminMigration from './admin-schema.js';
+import multiplayerMigration from './multiplayer-schema.js';
 import {createAdminStore} from './admin-levels.js';
 import {growth,reward} from '../src/progression.ts';
 import {validRun,validFinish} from './growth.js';
@@ -10,7 +11,7 @@ export function createRecordStore(env,database){
  if(!database&&!env.DATABASE_URL)throw Error('Database is not configured');
  const sql=database??neon(env.DATABASE_URL,{fetchOptions:{signal:AbortSignal.timeout(10000)}});
  async function prepare(){
-  if(!preparations.has(env))preparations.set(env,sql.transaction((migration+adminMigration).split(';').map(s=>s.trim()).filter(Boolean).map(s=>sql.query(s))).catch(error=>{preparations.delete(env);throw error;}));
+  if(!preparations.has(env))preparations.set(env,sql.transaction([...(migration+adminMigration).split(';').map(s=>s.trim()).filter(Boolean).map(s=>sql.query(s)),...multiplayerMigration.map(s=>sql.query(s))]).catch(error=>{preparations.delete(env);throw error;}));
   await preparations.get(env);
  }
  const admin=createAdminStore(sql);
@@ -47,9 +48,10 @@ export function createRecordStore(env,database){
    return {...await this.profile(rows[0].id),growth:await this.progression(subject),admin:await this.isAdmin(subject)};
   },
   async profile(id){
+   await prepare();
    const rows=await sql`SELECT p.id,p.played,p.wins,
     COALESCE((SELECT jsonb_agg(r ORDER BY r.ended_at DESC,r.match_id DESC)
-     FROM (SELECT ended_at,outcome,kills,deaths,match_id FROM harbor.recent
+     FROM (SELECT ended_at,outcome,kills,deaths,match_id,mode FROM harbor.recent
       WHERE profile_id=p.id ORDER BY ended_at DESC,match_id DESC LIMIT 20) r),'[]'::jsonb) AS recent
     FROM harbor.profiles p JOIN neon_auth."user" u ON u.id::text=p.subject WHERE p.id=${id}::uuid`;
    return rows.length?publicProfile(rows[0]):null;
@@ -71,8 +73,8 @@ export function createRecordStore(env,database){
      INSERT INTO harbor.growth(profile_id,xp) SELECT id,${reward({...row,mode:'online'})} FROM totals WHERE ${event.endedAt}>=(SELECT started_at FROM harbor.growth_epoch WHERE single)
      ON CONFLICT(profile_id) DO UPDATE SET xp=harbor.growth.xp+EXCLUDED.xp RETURNING profile_id
     ), history AS (
-     INSERT INTO harbor.recent(profile_id,match_id,ended_at,outcome,kills,deaths)
-     SELECT id,${event.matchId}::uuid,${event.endedAt},${row.outcome},${row.kills},${row.deaths} FROM totals RETURNING profile_id
+     INSERT INTO harbor.recent(profile_id,match_id,ended_at,outcome,kills,deaths,mode)
+     SELECT id,${event.matchId}::uuid,${event.endedAt},${row.outcome},${row.kills},${row.deaths},${event.mode??'duel'} FROM totals RETURNING profile_id
     ) SELECT profile_id FROM history`));
    // Separate pruning cannot lose a result or affect counters if interrupted; retry is idempotent.
    // Keep the newest 20 even when an older queued result arrives after a newer match.

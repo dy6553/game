@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
-import { createNetworkGame } from '../src/network-game.ts';
+import { createNetworkGame,onlinePlaying } from '../src/network-game.ts';
 
 // Execute the actual Worker room against a deterministic runtime, without waiting 30 real seconds.
 async function runtime(saved?:unknown){
@@ -12,7 +12,7 @@ async function runtime(saved?:unknown){
  const source=readFileSync(new URL('../server/worker.js',import.meta.url),'utf8').split('export class Lobby')[0]!.replace(/^import .*;\n/gm,'').replace('export class Room','class Room');
  const ctx={storage:{async get(k:string){return storage.get(k);},async put(k:string,v:unknown){storage.set(k,structuredClone(v));},async setAlarm(){},async delete(k:string){storage.delete(k);},async deleteAll(){storage.clear();}},blockConcurrencyWhile:async(f:()=>unknown)=>f(),waitUntil:(p:Promise<unknown>)=>p};
  class Socket {handlers:any={};messages:any[]=[];closed=false;accept(){}send(s:string){this.messages.push(JSON.parse(s));}close(){this.closed=true;this.handlers.close?.();}addEventListener(n:string,f:any){this.handlers[n]=f;}hello(token:string){this.handlers.message({data:JSON.stringify({type:'hello',token})});}}
- const sandbox:any={createNetworkGame,captureOfficialResult,createResultOutbox,createIdentityVerifier,Date:{now:()=>now},crypto:{randomUUID:()=>String(Math.random())},URL,Response:class{constructor(body:any,options:any){}},DurableObject:class{},setTimeout:()=>1,clearTimeout(){},setInterval:(f:()=>void)=>{intervals.add(f);return f;},clearInterval:(f:()=>void)=>intervals.delete(f),WebSocketPair:class{0=new Socket();1=new Socket();constructor(){pairs.push(this);}}};
+ const sandbox:any={createNetworkGame,onlinePlaying,captureOfficialResult,createResultOutbox,createIdentityVerifier,Date:{now:()=>now},crypto:{randomUUID:()=>String(Math.random())},URL,Response:class{constructor(body:any,options:any){}},DurableObject:class{},setTimeout:()=>1,clearTimeout(){},setInterval:(f:()=>void)=>{intervals.add(f);return f;},clearInterval:(f:()=>void)=>intervals.delete(f),WebSocketPair:class{0=new Socket();1=new Socket();constructor(){pairs.push(this);}}};
  vm.runInNewContext(source+'\nglobalThis.Room=Room;',sandbox);
  const room=new sandbox.Room(ctx,{});await Promise.resolve();await Promise.resolve();
  async function connect(token:string){await room.fetch(new Request('https://room/ws',{headers:{Upgrade:'websocket'}}));const socket=pairs.at(-1)[1];socket.hello(token);return socket;}
@@ -43,7 +43,7 @@ test('storage alarm independently closes disconnected rooms without incoming pac
 
 test('new rooms receive a trusted player-region placement hint and ignore spoofed client hints',async()=>{
  const source=readFileSync(new URL('../server/worker.js',import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replaceAll('export class ','class ').replace('export default ','globalThis.worker=');
- const sandbox:any={createNetworkGame,captureOfficialResult,createResultOutbox,createIdentityVerifier,Date,crypto,URL,Headers,Request,Response,DurableObject:class{ctx:any;env:any;constructor(ctx:any,env:any){this.ctx=ctx;this.env=env;}}};
+ const sandbox:any={createNetworkGame,onlinePlaying,captureOfficialResult,createResultOutbox,createIdentityVerifier,Date,crypto,URL,Headers,Request,Response,DurableObject:class{ctx:any;env:any;constructor(ctx:any,env:any){this.ctx=ctx;this.env=env;}}};
  vm.runInNewContext(source+'\nglobalThis.Lobby=Lobby;',sandbox);
  const storage=new Map(),hints:any[]=[];
  const ctx={blockConcurrencyWhile:async(f:()=>unknown)=>f(),storage:{get:async(k:string)=>storage.get(k),put:async(k:string,v:unknown)=>storage.set(k,v),delete:async(k:string)=>storage.delete(k),setAlarm:async()=>{}}};
@@ -55,4 +55,9 @@ test('new rooms receive a trusted player-region placement hint and ignore spoofe
   assert.equal((await sandbox.worker.fetch(request,env)).status,200);
  }
  assert.deepEqual(hints,['apac',undefined]);
+});
+
+test('twenty-player room keeps running when one leaves, expires reconnects individually and rejects late return',async()=>{
+ const r=await runtime();r.room.game=createNetworkGame(undefined,'harbor',{mode:'ffa'});for(let i=0;i<20;i++){r.room.game.join('p'+i);r.room.sessions['t'+i]='p'+i;}
+ const sockets=[];for(let i=0;i<20;i++)sockets.push(await r.connect('t'+i));r.advance(50);assert.equal(r.room.game.state.started,true);sockets[19].close();const tick=r.room.game.state.tick;r.advance(50);assert.ok(r.room.game.state.tick>tick);assert.equal(sockets[0].closed,false);r.advance(20000);const returned=await r.connect('t19');assert.equal(returned.closed,false);returned.close();r.room.stop();r.advance(30001);const late=await r.connect('t19');assert.equal(late.closed,true);assert.equal(r.room.game.state.players[19].abandoned,true);assert.equal(sockets[0].closed,false);
 });

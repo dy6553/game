@@ -34,7 +34,7 @@ export function createAccountView(authURL:string,endpoint:string,connect=connect
   if(!publicView)onGrowth(profile?.growth??growth(0),!!profile);
   if(!profile)return;
   el('account-public-id').textContent='대원 ID · '+profile.id;el('account-summary').textContent=`${!publicView&&profile.growth?'Lv'+profile.growth.level+' · '+profile.growth.xp+' XP · ':''}공식 온라인 ${profile.played}경기 · ${profile.wins}승 ${profile.played-profile.wins}패`;
-  const list=el('account-recent');list.replaceChildren();for(const r of profile.recent){const li=document.createElement('li');li.textContent=`${r.outcome==='win'?'승리':'패배'} · ${r.kills}킬 / ${r.deaths}데스 · ${new Date(r.endedAt).toLocaleString('ko-KR')}`;list.append(li);}
+  const list=el('account-recent');list.replaceChildren();for(const r of profile.recent){const li=document.createElement('li');li.textContent=`${r.mode==='ffa'?'개인전 · ':r.mode==='team'?'팀전 · ':''}${r.outcome==='win'?'승리':'패배'} · ${r.kills}킬 / ${r.deaths}데스 · ${new Date(r.endedAt).toLocaleString('ko-KR')}`;list.append(li);}
  }
  async function run(action:()=>Promise<void>){if(busy)return;busy=true;for(const b of panel.querySelectorAll<HTMLButtonElement>('button:not(#account-close)'))b.disabled=true;status('연결 중…');
   try{await action();await flushGrowth();}catch(error){status(error instanceof Error?error.message:'연결하지 못했습니다. 다시 시도하세요.');}
