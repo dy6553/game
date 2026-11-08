@@ -116,6 +116,20 @@ export default {async fetch(request,env){
    const forwarded=new Headers(request.headers);forwarded.delete('Authorization');forwarded.delete('X-Harbor-Location');
    const hints={AS:'apac',OC:'oc',NA:'wnam',SA:'sam',EU:'weur',AF:'afr'};const hint=hints[request.cf?.continent];if(hint)forwarded.set('X-Harbor-Location',hint);
    response=await env.LOBBY.get(env.LOBBY.idFromName('public')).fetch(new Request('https://lobby/',{method:'POST',body:JSON.stringify(body),headers:forwarded}));
+  }else if(['/admin/players/find','/admin/players/level'].includes(url.pathname)&&request.method==='POST'){
+   if(env.ACCOUNTS_ENABLED!=='true')throw Error('Accounts not ready');
+   let subject;try{subject=await createIdentityVerifier(env)(request);}catch{}
+   if(!subject)response=json({error:'로그인이 필요합니다.'},401);
+   else {
+    const store=createRecordStore(env);
+    if(!await store.isAdmin(subject))response=json({error:'관리자 권한이 필요합니다.'},403);
+    else {const raw=await request.text();if(raw.length>2048)response=json({error:'입력 내용을 확인하세요.'},400);
+     else {let body;try{body=JSON.parse(raw);}catch{response=json({error:'입력 내용을 확인하세요.'},400);}
+      if(!response)try{response=json(url.pathname.endsWith('/find')?await store.adminFind(subject,body?.email):await store.adminEdit(subject,body));}
+      catch(error){const messages={400:'입력 내용을 확인하세요.',403:'관리자 권한이 필요합니다.',404:'계정을 찾지 못했습니다. 해당 계정으로 게임에 먼저 로그인했는지 확인하세요.',409:'경험치가 변경되었거나 요청이 충돌했습니다. 계정을 다시 조회한 뒤 저장하세요.'};if(messages[error.status])response=json({error:messages[error.status]},error.status);else throw error;}
+     }
+    }
+   }
   }else if((url.pathname==='/growth/start'||/^\/growth\/finish\/[0-9a-f-]{36}$/i.test(url.pathname))&&request.method==='POST'){
    if(env.ACCOUNTS_ENABLED!=='true')throw Error('Accounts not ready');
    let subject;try{subject=await createIdentityVerifier(env)(request);}catch{}

@@ -1,5 +1,7 @@
 import {neon} from '@neondatabase/serverless';
 import migration from './growth-schema.js';
+import adminMigration from './admin-schema.js';
+import {createAdminStore} from './admin-levels.js';
 import {growth,reward} from '../src/progression.ts';
 import {validRun,validFinish} from './growth.js';
 import {publicProfile} from './official-records.js';
@@ -8,10 +10,14 @@ export function createRecordStore(env,database){
  if(!database&&!env.DATABASE_URL)throw Error('Database is not configured');
  const sql=database??neon(env.DATABASE_URL,{fetchOptions:{signal:AbortSignal.timeout(10000)}});
  async function prepare(){
-  if(!preparations.has(env))preparations.set(env,sql.transaction(migration.split(';').map(s=>s.trim()).filter(Boolean).map(s=>sql.query(s))).catch(error=>{preparations.delete(env);throw error;}));
+  if(!preparations.has(env))preparations.set(env,sql.transaction((migration+adminMigration).split(';').map(s=>s.trim()).filter(Boolean).map(s=>sql.query(s))).catch(error=>{preparations.delete(env);throw error;}));
   await preparations.get(env);
  }
+ const admin=createAdminStore(sql);
  return {
+  async isAdmin(subject){await prepare();return admin.isAdmin(subject);},
+  async adminFind(subject,email){await prepare();return admin.find(subject,email);},
+  async adminEdit(subject,body){await prepare();return admin.edit(subject,body);},
   async progression(subject){
    await prepare();const rows=await sql`SELECT COALESCE(g.xp,0) AS xp FROM harbor.profiles p JOIN neon_auth."user" u ON u.id::text=p.subject LEFT JOIN harbor.growth g ON g.profile_id=p.id WHERE p.subject=${subject}`;
    if(!rows.length)throw Error('Account no longer exists');return growth(Number(rows[0].xp));
@@ -38,7 +44,7 @@ export function createRecordStore(env,database){
     SELECT id::text FROM neon_auth."user" WHERE id::text=${subject} FOR KEY SHARE
     ON CONFLICT(subject) DO UPDATE SET subject=EXCLUDED.subject RETURNING id`;
    if(!rows.length)throw Error('Account no longer exists');
-   return {...await this.profile(rows[0].id),growth:await this.progression(subject)};
+   return {...await this.profile(rows[0].id),growth:await this.progression(subject),admin:await this.isAdmin(subject)};
   },
   async profile(id){
    const rows=await sql`SELECT p.id,p.played,p.wins,
