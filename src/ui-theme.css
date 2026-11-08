@@ -1,0 +1,65 @@
+/* Shared game UI. Touch geometry below deliberately preserves phone dimensions. */
+:root{--ui-panel:#0b1d29f2;--ui-line:#66858b66;--ui-text:#eef3e9;--ui-muted:#a3b9bc;--ui-gold:#efd18a;--ui-accent:#8bd4bd}
+.account-card,.game-choice-panel,.result-card,.online-lobby>div,.pause-panel>div,.help{background:linear-gradient(145deg,#142d3a,#081722);border:1px solid var(--ui-line);border-top:3px solid var(--ui-gold);border-radius:8px;box-shadow:0 16px 48px #0008;color:var(--ui-text)}
+.account-card button,.pause-panel button,.result-card button,.online-lobby button,.game-choice-panel>header button{border-radius:5px;font-weight:600;border-color:var(--ui-line)}
+.account-card input:not([type=checkbox]),.online-lobby input{background:#06141f;border-color:#5b7c86;border-radius:5px}
+#account-signin,#account-signup-submit,#admin-save,#resume,#online-create{background:var(--ui-gold);color:#1e271e;border-color:#ffe6ad}
+.account-actions{flex-wrap:wrap}.account-card .account-actions button{flex:1;min-width:130px}
+.game-choice-panel{backdrop-filter:none}.game-choice-options button{border-radius:6px;background:#0d2431;border-color:#68858a66}
+.game-choice-options button[aria-pressed=true]{background:#263d3d;border-color:var(--ui-gold);color:var(--ui-text);box-shadow:inset 3px 0 var(--ui-gold)}
+.game-choice-trigger{border-radius:5px;background:#0b2230;border-color:#72919466;font-size:13px;min-height:44px}
+.choice-trigger-edit{color:#b9cfca;letter-spacing:0}.game-choice-panel footer{letter-spacing:0;color:var(--ui-muted)}
+.shooter-lobby.home-screen{padding:22px 28px 14px;background:linear-gradient(90deg,#04121dec,transparent 40%,transparent 58%,#04121dca),linear-gradient(0deg,#04121dea,transparent 46%,#04121d80)}
+.shooter-lobby .lobby-header{min-height:58px;padding-bottom:12px}.shooter-lobby .lobby-nav{gap:4px}.shooter-lobby .lobby-nav button{min-height:44px;padding:9px 18px;font-size:14px}
+.shooter-lobby .lobby-header-actions{gap:8px}.shooter-lobby .lobby-header-actions button{min-height:40px;padding:8px 13px;border-radius:5px;font-size:12px;backdrop-filter:none}
+.shooter-lobby .lobby-ready{font-size:10px}.shooter-lobby .lobby-brand h1{font-size:24px}.shooter-lobby .lobby-brand .eyebrow{font-size:8px;letter-spacing:.13em}
+.shooter-lobby-body{margin-top:24px;gap:24px;grid-template-columns:220px minmax(0,1fr) 340px;grid-template-rows:minmax(0,1fr)}
+.shooter-lobby .lobby-side{gap:10px;min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#537b80 transparent}
+.growth-card,.lobby-operation,.equipped-character,.equipped-weapon,.lobby-match-dock{border-radius:6px;border-color:var(--ui-line);background:#0a2030e8;backdrop-filter:none;box-shadow:0 8px 24px #0003}
+.growth-card{padding:10px 13px;border-left:2px solid var(--ui-accent)}.growth-card summary{font-size:12px;line-height:1.5;min-height:24px;font-weight:650;list-style:none}.growth-card summary::-webkit-details-marker{display:none}.growth-card p{font-size:11px}.growth-card progress{margin:8px 0 2px;height:5px}
+.lobby-operation{padding:15px 14px;border-left:2px solid var(--ui-gold)}.lobby-operation h2{font-size:23px;margin:7px 0}.lobby-operation p{font-size:11px;line-height:1.6;max-width:none;margin:0}.operation-tag{display:none}.operation-lines{opacity:.06}
+.equipped-heading{font-size:11px;margin-top:4px;letter-spacing:0}.equipped-character,.equipped-weapon{padding:12px 14px}.equipped-character{font-size:11px}.equipped-weapon .loadout-summary{font-size:11px;line-height:1.6;margin:8px 0 0}.equipped-art{height:60px}.equipped-art svg{height:52px}
+.equipped-label{font-size:11px;letter-spacing:0}.equipped-character .game-choice-trigger,.equipped-weapon .game-choice-trigger{min-height:40px;font-size:14px}
+.shooter-lobby .operator-nameplate{top:116px;bottom:auto}.operator-nameplate h2{font-size:26px}.operator-connection{font-size:10px;letter-spacing:.06em}.operator-caption{bottom:66px}.operator-caption p{font-size:10px}
+.lobby-match-dock{align-self:end;margin-bottom:8px;padding:18px;border-top:2px solid var(--ui-gold);max-height:100%;overflow:auto;scrollbar-width:thin;scrollbar-color:#537b80 transparent}
+.match-dock-heading{margin-bottom:12px}.match-dock-heading .eyebrow{font-size:11px;letter-spacing:.06em}.match-signal{opacity:.5}
+.home-map-setting{margin-bottom:12px}.home-map-setting label{display:grid;gap:5px;font-size:11px;color:var(--ui-muted)}.home-map-setting .game-choice-trigger{width:100%;min-height:44px;font-size:14px}
+.home-mode-tabs{gap:6px;padding:4px;background:#06141fb3;border-radius:5px}.home-mode-tabs button{min-height:38px;border:0;border-radius:3px;font-size:12px;background:transparent;color:#a5bdbf}
+.home-mode-tabs button[aria-pressed=true]{color:#fae4b1;background:#354744;box-shadow:inset 0 -2px var(--ui-gold)}
+.home-match-settings{gap:10px;margin-top:12px}.home-match-settings label{font-size:11px;gap:5px}.home-match-settings .game-choice-trigger{font-size:13px;min-height:42px}
+.home-mode-summary{font-size:12px;line-height:1.5;color:#adc6c7;margin:10px 0}.home-start-actions{position:sticky;bottom:-2px;background:linear-gradient(transparent,#0a2030 15%);padding-top:5px;z-index:2}
+#home-start{min-height:58px;border-radius:5px;background:linear-gradient(115deg,#f2d695,#d5b66a);border-color:#ffe9b5;color:#16251f;box-shadow:0 4px 16px #0004;font-size:18px;font-weight:750;letter-spacing:0}
+#home-start-locked{font-size:11px;min-height:30px;border:0;background:transparent;color:#a5bfbd}.shooter-lobby .lobby-footer{font-size:9px;letter-spacing:.03em;padding-top:10px;margin-top:10px}
+/* One settings drawer keeps the arena clear on every screen. */
+.topbar{top:max(14px,env(safe-area-inset-top));left:auto;right:max(16px,env(safe-area-inset-right))}.topbar>.brand{display:none}
+#menu-toggle{display:block;min-height:40px;padding:8px 14px;border-radius:5px;background:#0a1e2de8;border-color:var(--ui-line);font-size:12px}
+.toolbar{display:none;position:absolute;right:0;top:48px;width:min(350px,calc(100vw - 24px));max-width:none;max-height:calc(100dvh - 78px);overflow:auto;padding:14px;background:var(--ui-panel);border:1px solid var(--ui-line);border-radius:6px;gap:10px;box-shadow:0 12px 30px #0008}
+.menu-open .toolbar{display:grid;grid-template-columns:1fr 1fr}.toolbar button,.toolbar select,.toolbar .game-choice-trigger{width:100%;min-height:42px;font-size:12px}.toolbar label{min-width:0}.toolbar .pc-jump-setting,.toolbar .weapon-setting{grid-column:1/-1}
+.duel-hud,.ammo-hud,.practice-score{border-color:#7b99954d;border-radius:6px;box-shadow:0 4px 16px #0003}.touch-controls button{border-color:#bed6d38c;box-shadow:0 3px 10px #0003;font-weight:650}.single-fire{background:#214552b8;border-color:#f3e2b8!important}.sprint-button,.dash-button{border-radius:12px}
+#weapon-slots button{border-radius:5px;background:#0b2230df}.menu-open .touch-controls,.menu-open .ammo-hud{visibility:hidden}
+@media(pointer:fine) and (min-width:901px) and (min-height:551px){.duel-hud,.practice-score{top:18px;left:20px}.duel-hud{width:280px;font-size:12px;padding:12px 14px}.duel-hud strong{font-size:16px}.ammo-hud{top:18px;right:104px;bottom:auto;min-width:140px}.location{top:auto;bottom:20px;left:20px;font-size:10px}.desktop-hint{display:none}}
+/* A tablet's short edge is >=600 CSS px; phones retain their current controls. */
+@media(any-pointer:coarse) and (min-width:900px) and (min-height:600px) and (orientation:landscape){
+ :root{--pad-stick:clamp(150px,20vh,200px);--pad-fire:clamp(100px,13vh,128px);--pad-action:clamp(72px,9.5vh,94px);--pad-edge:max(28px,env(safe-area-inset-right));--pad-bottom:max(24px,env(safe-area-inset-bottom));--pad-gap:22px}
+ .touch-controls{display:block}.move-control{left:max(28px,env(safe-area-inset-left));bottom:var(--pad-bottom)}#joystick{width:var(--pad-stick);height:var(--pad-stick);border-width:2px;background:#102a3973}#joystick-thumb{width:56px;height:56px;left:calc(50% - 28px);top:calc(50% - 28px)}
+ .single-fire{width:var(--pad-fire);height:var(--pad-fire);right:var(--pad-edge);bottom:var(--pad-bottom);font-size:21px;border-width:2px}
+ .reload-button,.jump-button,.scope-button{width:var(--pad-action);height:var(--pad-action);font-size:15px;padding:0}
+ .jump-button{right:calc(var(--pad-edge) + 10px);bottom:calc(var(--pad-bottom) + var(--pad-fire) + var(--pad-gap))}
+ .reload-button{right:calc(var(--pad-edge) + var(--pad-fire) + var(--pad-gap));bottom:calc(var(--pad-bottom) + 8px)}
+ .scope-button{right:calc(var(--pad-edge) + var(--pad-fire) + var(--pad-gap));bottom:calc(var(--pad-bottom) + var(--pad-fire) + var(--pad-gap))}
+ .sprint-button,.dash-button{width:80px;height:62px;font-size:14px;bottom:calc(var(--pad-bottom) + var(--pad-stick) + 20px)}.sprint-button{left:max(36px,env(safe-area-inset-left))}.dash-button{left:calc(max(36px,env(safe-area-inset-left)) + 94px)}
+ #inventory-ui{bottom:var(--pad-bottom);max-width:44vw}#weapon-slots{grid-template-columns:repeat(3,minmax(90px,1fr));gap:8px}#weapon-slots button{min-height:48px;font-size:14px;padding:9px 12px}#door-action,#pickup-panel button{min-height:48px;font-size:14px}#door-panel,#pickup-panel{font-size:13px;padding:10px}
+ .duel-hud{font-size:13px;width:300px;padding:12px 14px}.duel-hud strong{font-size:17px}#duel-health{font-size:16px}.ammo-hud{min-width:150px;padding:10px 13px;right:100px}.ammo-hud b{font-size:28px}.ammo-hud p,.ammo-hud>span{font-size:12px}#menu-toggle{min-height:48px;font-size:15px;padding:10px 15px}
+ .game-choice-panel,.account-card,.result-card,.online-lobby>div{padding:28px}.game-choice-options button{min-height:110px}.account-card button,.result-card button,.online-lobby button{min-height:48px}
+}
+@media(min-width:1500px) and (min-height:700px){.shooter-lobby-body{grid-template-columns:250px minmax(0,1fr) 380px;gap:32px}.shooter-lobby.home-screen{padding:28px 40px 18px}}
+@media(max-width:1100px) and (min-width:601px){.shooter-lobby-body{grid-template-columns:180px minmax(0,1fr) 285px;gap:16px}.shooter-lobby.home-screen{padding:16px 20px 10px}.shooter-lobby .lobby-nav button{padding:8px 12px}.shooter-lobby .lobby-ready{display:none}.lobby-match-dock{padding:14px}.equipped-character,.equipped-weapon{padding:10px}.equipped-weapon .loadout-summary{font-size:10px}}
+@media(max-height:550px) and (min-width:601px){
+ .shooter-lobby.home-screen{padding:10px 14px 7px}.shooter-lobby .lobby-header{min-height:38px;padding-bottom:7px}.shooter-lobby .lobby-brand h1{font-size:18px}.shooter-lobby .lobby-nav button{min-height:34px;padding:6px 10px;font-size:12px}.shooter-lobby .lobby-header-actions button{min-height:34px;padding:6px 9px;font-size:10px}.shooter-lobby .lobby-ready{display:none}
+ .shooter-lobby-body{margin-top:10px;grid-template-columns:160px minmax(0,1fr) 250px;gap:14px}.shooter-lobby .lobby-side{gap:7px}.growth-card{padding:7px 10px}.growth-card summary{font-size:11px;min-height:22px}.lobby-operation{display:none}.equipped-heading{font-size:9px;margin-top:0}.equipped-character,.equipped-weapon{padding:8px 10px}.equipped-character .game-choice-trigger,.equipped-weapon .game-choice-trigger{min-height:32px;font-size:12px}.equipped-art{height:34px}.equipped-art svg{height:34px}.equipped-weapon .loadout-summary{font-size:9px;margin-top:4px}.equipped-label{font-size:9px}
+ .lobby-match-dock{padding:10px;margin-bottom:0}.match-dock-heading{display:none}.home-map-setting{margin-bottom:7px}.home-map-setting label{font-size:10px;gap:3px}.home-map-setting .game-choice-trigger{min-height:32px;padding:5px 9px;font-size:12px}.home-mode-tabs{padding:3px;gap:3px}.home-mode-tabs button{min-height:30px;font-size:10px;padding:5px 6px}.home-match-settings{margin-top:7px;gap:7px}.home-match-settings label{font-size:9px;gap:3px}.home-match-settings .game-choice-trigger{min-height:30px;padding:5px 8px;font-size:11px}.home-mode-summary{font-size:10px;margin:7px 0;line-height:1.35}#home-start{min-height:44px;font-size:16px}.home-start-actions{padding-top:3px}.shooter-lobby .lobby-footer{font-size:7px;margin-top:6px;padding-top:6px}.shooter-lobby .operator-nameplate{top:auto;bottom:28px}.operator-nameplate h2{font-size:16px}.shooter-lobby .operator-caption{display:none}
+ #menu-toggle{min-height:38px;padding:6px 10px;font-size:12px}
+}
+@media(max-width:760px) and (min-width:601px) and (orientation:landscape){.shooter-lobby-body{grid-template-columns:145px minmax(0,1fr) 232px;gap:10px}.shooter-lobby .lobby-header-actions{gap:4px}.shooter-lobby .lobby-brand .eyebrow{display:none}.shooter-lobby .lobby-nav{gap:0}}
+@media(orientation:portrait) and (max-width:600px){.shooter-lobby .lobby-side{height:auto;overflow:visible}.shooter-lobby .growth-card{grid-column:1/-1}.shooter-lobby-body{grid-template-columns:none}.shooter-lobby .lobby-match-dock{max-height:none;overflow:visible}.home-map-setting{margin-bottom:10px}}
+@media(prefers-reduced-motion:reduce){.game-choice-trigger,.home-mode-tabs button,#home-start{transition:none;animation:none}}

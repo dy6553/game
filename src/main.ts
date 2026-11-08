@@ -14,7 +14,6 @@ import { createOnlineMotion } from './online-motion.ts';
 import { createOnlineClient } from './online.ts';
 import type { MatchState,Command } from './network-game.ts';
 import { simulationSteps } from './simulation.ts';
-import { createPerformanceHud } from './performance-hud.ts';
 import { createRenderBudget } from './render-budget.ts';
 import { sprintMultiplier } from './sprint.ts';
 import { createGameAudio,spatialSound } from './audio.ts';
@@ -27,6 +26,7 @@ import { isCharacterType } from './characters.ts';
 import { viewMovement } from './view.ts';
 import { isWeaponId,WEAPONS,WEAPON_IDS } from './weapons.ts';
 import './style.css';
+import './ui-theme.css';
 const readMode=(value:string):'practice'|'duel'|'ffa'|'survival'=>value==='survival'?'survival':value==='ffa'?'ffa':value==='duel'?'duel':'practice';
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
@@ -65,7 +65,6 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <p>맵을 남쪽 상점 거리와 양옆 골목으로 넓혔습니다. 중앙 거리 양쪽의 열린 출입구와 남쪽 거리의 상점, 총 6곳의 1층에 들어갈 수 있습니다. 문 버튼 없이 걸어서 출입합니다.</p>
     <p>시작 무기는 메뉴에서 선택하며 변경하면 경기를 새로 시작합니다. 기관총은 발사 버튼을 누르고 있거나 PC 마우스 고정 상태에서 왼쪽 버튼을 누르면 연사합니다. 산탄총은 탄알 6개가 퍼지며, 저격총은 확대 버튼 또는 PC Q키로 조준합니다.</p>
     <p>야경 개선: 젖은 노면의 빛, 수면 반짝임, 벽·지붕 표면과 금속 광택을 추가했습니다. 자동 화질은 지속적인 프레임 저하가 있을 때 렌더 해상도를 조절합니다. 높음은 수동 고화질, 균형은 낮은 부하 설정입니다.</p>
-    <p>성능 표시는 최근 최대 10초의 플레이 구간을 측정합니다. 평균 FPS는 높을수록, P95 프레임 시간은 낮을수록 부드럽습니다. 끊김은 50ms를 넘은 프레임 수입니다. 메뉴·일시정지 구간은 제외하며, 화질을 비교할 때는 같은 장소에서 같은 시간 동안 움직여 보세요.</p>
     <fieldset class="audio-settings"><legend>소리</legend><label><input id="audio-mute" type="checkbox"> 음소거</label><label>전체<input id="audio-master" type="range" min="0" max="100" aria-label="전체 음량"></label><label>효과음<input id="audio-effects" type="range" min="0" max="100" aria-label="효과음 음량"></label><label>환경음<input id="audio-environment" type="range" min="0" max="100" aria-label="환경음 음량"></label><button id="audio-test" type="button">좌우 소리 확인</button><small>이어폰으로 왼쪽 → 오른쪽 소리를 확인하세요.</small><small id="audio-status">시작 버튼을 누르면 소리를 켭니다.</small></fieldset>
     <label class="graphics-setting">화면 흔들림<select id="screen-shake"><option value="off">끄기</option><option value="low" selected>약하게</option><option value="normal">보통</option></select></label><p>총기 반동·로봇 피격·처치 연출을 추가했습니다. 화면 흔들림은 조절할 수 있으며, 조준 방향과 무기 피해량은 바꾸지 않습니다.</p>
     <label class="sensitivity-setting">모바일 조준 감도 <output id="look-sensitivity-value">1.00배</output><input id="look-sensitivity" type="range" min="25" max="200" step="5" value="100" aria-label="모바일 조준 감도"></label>
@@ -125,7 +124,7 @@ async function start() {
   const densityCap=()=>Math.min(window.devicePixelRatio||1,graphicsMode==='high'?2:graphicsMode==='balanced'?1:mobile?1.5:1.75);
   let budget=createRenderBudget(densityCap()),qualityHigh=!mobile;
   engine.setHardwareScalingLevel(1/budget.density);
-  const performanceHud=createPerformanceHud(engine);const playtest=createPlaytest();
+  const playtest=createPlaytest();
   let selectedMap:MapId='harbor';
   let world = createHarborScene(engine);
   const nearbyDoor=(p:Point,doors:Parameters<typeof world.geometry.nearbyDoor>[1])=>(world.geometry??harborWorld).nearbyDoor(p,doors);
@@ -176,9 +175,9 @@ async function start() {
   const onlineLobby=document.querySelector<HTMLElement>('#online-lobby')!;
   let currentGrowth=growth(0),growthLoggedIn=false;
   const accountView=createAccountView(import.meta.env?.VITE_NEON_AUTH_URL??'',import.meta.env?.VITE_ONLINE_URL??'',undefined,(g,loggedIn)=>{
-   currentGrowth=g;growthLoggedIn=loggedIn;homeView.setTier(loggedIn?g.tier:0);const factory=document.querySelector<HTMLOptionElement>('#home-map option[value=factory]')!;factory.disabled=!loggedIn||g.level<3;factory.textContent=factory.disabled?'폐공장 · Lv3 해금':'폐공장';if(factory.disabled)document.querySelector<HTMLSelectElement>('#home-map')!.value='harbor';
-   document.querySelector('#growth-summary')!.textContent=loggedIn?`Lv${g.level} · ${g.xp} XP · 다음 레벨까지 ${200-g.within} XP · 봇 강화 ${g.tier}단계 ▾`:'성장 · 전장 선택 ▾ · 로그인 후 서버 저장';
-   document.querySelector<HTMLProgressElement>('#growth-progress')!.value=g.within;
+   currentGrowth=g;growthLoggedIn=loggedIn;const factory=document.querySelector<HTMLOptionElement>('#home-map option[value=factory]')!;factory.disabled=!loggedIn||g.level<3;factory.textContent=factory.disabled?'폐공장 · Lv3 해금':'폐공장';if(factory.disabled)document.querySelector<HTMLSelectElement>('#home-map')!.value='harbor';homeView.setTier(loggedIn?g.tier:0);
+   document.querySelector('#growth-summary')!.textContent=loggedIn?`Lv${g.level} · ${g.xp.toLocaleString('ko-KR')} XP ▾`:'성장 기록 · 로그인 ▾';
+   document.querySelector<HTMLProgressElement>('#growth-progress')!.value=g.within;document.querySelector('#growth-next')!.textContent=loggedIn?`다음 레벨까지 ${200-g.within} XP · 봇 강화 ${g.tier}단계`:'로그인하면 성장 기록을 서버에 저장합니다.';
    for(const option of document.querySelectorAll<HTMLOptionElement>('option[value=welder]')){option.disabled=!loggedIn||g.level<3;option.textContent=option.disabled?'용접 로봇 · Lv3 해금':'용접 로봇';if(option.disabled&&option.selected){(option.parentElement as HTMLSelectElement).value='robot';if(world.characterType==='welder')world.selectCharacter('robot');}}
   });
   let growthTicket:ReturnType<typeof accountView.startGrowth>=Promise.resolve(null);
@@ -543,7 +542,7 @@ async function start() {
     document.querySelector<HTMLElement>('#mouse-aim-hint')!.hidden=!canPlay||document.pointerLockElement===canvas;
     document.querySelector('#pause-description')!.textContent=onlineActive?'내 조작만 멈춥니다. 상대의 경기는 계속됩니다.':'전투와 이동이 멈췄습니다.';
     document.querySelector<HTMLElement>('#pause-indicator')!.hidden=manualPaused||!picker.hidden||comparing||portraitTouch||(!menuOpen&&help.hidden);
-    performanceHud.update(elapsed,canPlay);playtest.frame(elapsed,onlineActive?'online':world.duelState().active?'bot':'practice',canPlay,onlineActive?online.network.rttMs:null);
+    playtest.frame(elapsed,onlineActive?'online':world.duelState().active?'bot':'practice',canPlay,onlineActive?online.network.rttMs:null);
     if(graphicsMode==='auto'){
       const density=budget.sample(elapsed,canPlay);
       if(density!==null){engine.setHardwareScalingLevel(1/density);engine.resize();world.resize();}
