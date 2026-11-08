@@ -68,3 +68,16 @@ test('independent touches move, turn and fire; cancellation releases only the ma
     if(oldWin)Object.defineProperty(globalThis,'window',oldWin);else Reflect.deleteProperty(globalThis,'window');
   }
 });
+
+function desktopFixture(run:(canvas:any,doc:any,send:(type:string,props?:object)=>void)=>void){
+ class E extends EventTarget{style={transform:''};focus(){}setPointerCapture(){}getBoundingClientRect(){return {left:0,top:0,width:100,height:100};}}
+ const canvas=new E(),el=new E(),doc=Object.assign(new EventTarget(),{hidden:false,pointerLockElement:null as E|null,querySelector:()=>el});const oldDoc=Object.getOwnPropertyDescriptor(globalThis,'document'),oldWin=Object.getOwnPropertyDescriptor(globalThis,'window');Object.defineProperty(globalThis,'document',{value:doc,configurable:true});Object.defineProperty(globalThis,'window',{value:new EventTarget(),configurable:true});
+ const send=(type:string,props={})=>canvas.dispatchEvent(Object.assign(new Event(type,{cancelable:true}),{pointerType:'mouse',pointerId:1,button:0,clientX:20,clientY:20,...props}));
+ try{run(canvas,doc,send);}finally{if(oldDoc)Object.defineProperty(globalThis,'document',oldDoc);else Reflect.deleteProperty(globalThis,'document');if(oldWin)Object.defineProperty(globalThis,'window',oldWin);else Reflect.deleteProperty(globalThis,'window');}
+}
+test('locked desktop mousemove turns without holding a button and pointermove never doubles motion',()=>desktopFixture((canvas,doc,send)=>{
+ const input=createInput(canvas);doc.pointerLockElement=canvas;const move=()=>doc.dispatchEvent(Object.assign(new Event('mousemove'),{movementX:40,movementY:20}));move();assert.ok(input.look.yaw>0,'document mousemove must turn the locked camera');const look={...input.look};send('pointermove',{movementX:40,movementY:20});assert.deepEqual(input.look,look,'pointermove cannot double the same physical motion');assert.equal(input.consumeShots(),0);input.setEnabled(false);move();assert.deepEqual(input.look,look);input.setEnabled(true);doc.pointerLockElement=null;move();assert.deepEqual(input.look,look);
+}));
+test('first PC click locks aim without firing, locked clicks fire, touch and fallback still drag',()=>desktopFixture((canvas,doc,send)=>{
+ let requests=0,auto=true;const input=createInput(canvas,{requestMouseLock(){if(!auto)return false;requests++;return true;}});send('pointerdown');send('pointerup');assert.equal(requests,1,'gameplay click must request aim lock');assert.equal(input.consumeShots(),0,'activation cannot waste ammo');send('pointerdown',{button:2});assert.equal(requests,1);doc.pointerLockElement=canvas;doc.dispatchEvent(new Event('pointerlockchange'));send('pointerdown');assert.equal(input.consumeShots(),1);assert.equal(input.firing,true);send('pointerup');assert.equal(input.firing,false);doc.pointerLockElement=null;doc.dispatchEvent(new Event('pointerlockchange'));send('pointerdown',{pointerType:'touch'});send('pointermove',{pointerType:'touch',clientX:60});assert.ok(input.look.yaw>0);send('pointerup',{pointerType:'touch'});assert.equal(requests,1);auto=false;send('pointerdown');send('pointerup');assert.equal(input.consumeShots(),1);input.setEnabled(false);send('pointerdown');assert.equal(requests,1,'pause must not request pointer lock');
+}));

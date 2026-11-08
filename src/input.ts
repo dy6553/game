@@ -1,7 +1,7 @@
 import { normalized } from './world.ts';
 import { turnView } from './view.ts';
 
-export function createInput(canvas: HTMLCanvasElement) {
+export function createInput(canvas: HTMLCanvasElement, options: {requestMouseLock?:()=>boolean} = {}) {
   let enabled = true;
   let touchSensitivity = 1;
   const keys = new Set<string>();
@@ -58,14 +58,18 @@ export function createInput(canvas: HTMLCanvasElement) {
     if (lookPointer !== null || (event.pointerType === 'mouse' && event.button !== 0)) return;
     event.preventDefault(); canvas.focus();
     if (event.pointerType === 'mouse' && document.pointerLockElement === canvas) { mouseHeld=true;shots++; return; }
+    if(event.pointerType==='mouse'&&options.requestMouseLock?.())return;
     lookPointer = event.pointerId; last = { x: event.clientX, y: event.clientY };
     pressedAt = { ...last }; mouseDragged = false;
     canvas.setPointerCapture(event.pointerId);
   });
+  document.addEventListener('mousemove',event=>{
+    if(enabled&&document.pointerLockElement===canvas)look=turnView(look,event.movementX,event.movementY,.0025);
+  });
   const moveLook = (event:PointerEvent) => {
     if (!enabled) return;
     if (document.pointerLockElement === canvas && event.pointerType === 'mouse') {
-      look = turnView(look, event.movementX, event.movementY, 0.0025);
+      return; // Pointer Lock uses document mousemove; never apply a second delta.
     } else if (event.pointerId === lookPointer) {
       if (Math.hypot(event.clientX - pressedAt.x, event.clientY - pressedAt.y) > 6) mouseDragged = true;
       look = turnView(look, event.clientX - last.x, event.clientY - last.y, event.pointerType === 'touch' ? .007*touchSensitivity : .004);

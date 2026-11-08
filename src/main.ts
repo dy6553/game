@@ -35,6 +35,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <section id="online-lobby" class="online-lobby" hidden aria-labelledby="online-title"><div><button id="online-back">홈으로</button><h2 id="online-title">온라인 1대1</h2><p id="online-map"></p><p>먼저 10킬 · 두 사람이 연결되면 시작합니다.</p><label>캐릭터<select id="online-character"><option value="robot">소형 로봇</option><option value="robot-cat">고양이형 로봇</option></select></label><label>시작 무기<select id="online-weapon"><option value="pistol">권총</option><option value="machinegun">기관총</option><option value="shotgun">산탄총</option><option value="sniper">저격총</option></select></label><div class="online-actions"><button id="online-create">방 만들기</button><button id="online-quick">자동 매칭</button></div><label>방 코드<input id="online-code" maxlength="8" autocomplete="off" placeholder="8자리 코드"></label><button id="online-join">코드로 입장</button><p id="online-message" role="status"></p><p>온라인 대전에서는 메뉴를 열어도 상대의 경기는 계속됩니다.</p></div></section>
   <div id="lobby-deploy-transition" class="lobby-deploy-transition" role="status" hidden><div><span>HARBOR / DEPLOYMENT</span><strong>출격 중</strong><i></i></div></div>
   ${RESULTS_MARKUP}
+  <div id="mouse-aim-hint" class="mouse-only" hidden>화면을 클릭해서 마우스로 조준 · Esc로 해제</div>
   <canvas id="game" tabindex="0" aria-label="항구 도시 1인칭 탐색. WASD로 이동하고 화면을 드래그해 시점을 돌립니다."></canvas>
   <header class="topbar">
     <div class="brand"><span class="eyebrow">HARBOR / FIRST PERSON</span><h1>항구의 밤<span>1인칭</span></h1></div>
@@ -55,7 +56,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <section class="help" id="help" hidden>
     <button id="help-close" class="panel-close" aria-label="도움말 닫기">닫기</button><h2>조작과 게임 안내</h2><p>초록 입구와 ‘출입 가능’ 표지가 있는 건물은 1층·2층·옥상에 갈 수 있습니다. 입구에서 E 또는 문 버튼으로 문을 열고 닫습니다. 보급 상자가 가까우면 E는 획득을 우선합니다. 서쪽 계단으로 2층, 동쪽 계단으로 옥상에 오릅니다. 몹도 문과 계단으로 추격합니다. 몹은 건물 밖 지상에서만 생성됩니다. 부활 후 3초 동안 보호되며 사격하면 해제됩니다.</p><p>대시: PC F키 또는 대시 버튼. 이동 방향(멈췄다면 보는 방향)으로 4m를 0.2초에 이동하며 사용 시점부터 3초 뒤 다시 사용할 수 있습니다. 지상에서만 시작하고 대시 중 점프는 불가합니다. 사격·재장전은 가능하며 무적이나 벽 관통은 없습니다.</p><p>생존 자동 난이도는 9단계이며 보통에 해당하는 5단계에서 시작합니다. 총 20웨이브입니다. 체력 50 이상으로 2웨이브 연속 클리어하면 한 단계 상승하고, 사망 후 재도전할 때 한 단계 내려갑니다. 조준·경고 시간과 이동·좌우 이동 속도가 조금씩 변하며 전투 중에는 유지됩니다.</p><p>생존: 생명 3개, 쉬움 10·보통 20·어려움 30웨이브. 동시 최대 3명이며 첫 적 4명에서 2웨이브마다 1명씩 늘어 최대 12명입니다. 적 부활·증원 대기는 1.5초입니다. 준비 시간은 5초이며 체력·탄창을 회복합니다. 사망 시 3초 후 현재 웨이브의 적·상자와 소지 무기를 초기화해 시작 총으로 재도전합니다.</p><p>봇 3명 개인전에서는 봇끼리 싸우지 않고 나만 공격합니다. 나와 각 봇의 점수를 따로 기록하며 먼저 10킬이면 승리합니다. 사망하면 3초 후 다른 캐릭터들과 먼 지점에서 시작 총으로 부활합니다.</p><p>봇 대전은 쉬움·보통·어려움 중 선택합니다. 보통·어려움은 더 빨리 조준하고 좌우로 움직이며, 발사 경고 중에는 멈춥니다. 난이도를 변경하면 새 경기를 시작합니다.</p><p>보급 상자 근처에서 E키 또는 획득 버튼으로 무기를 줍습니다. 최대 3개를 소지하며 숫자 1~3 또는 아래 슬롯 버튼으로 바꿉니다. 가득 차면 버릴 총을 선택하세요. 상자는 20초 후 다시 나오며, 사망하면 시작 총만 남습니다.</p>
     <p>로봇의 눈높이에서 거리를 탐색합니다. 화면 중앙의 조준점이 바라보는 방향입니다.</p>
-    <p><strong>PC</strong> WASD 이동 · Shift 달리기 · 마우스 드래그로 시점 변경 · 짧게 클릭하면 발사. 메뉴의 마우스 고정 버튼으로 자유롭게 조준할 수 있습니다. Esc를 누르면 고정을 해제하고 일시정지합니다.</p>
+    <p><strong>PC</strong> WASD 이동 · Shift 달리기 · 게임 화면 클릭 후 마우스로 시점 변경 · 첫 클릭은 마우스를 고정하고 다음 클릭부터 발사합니다. 고정 실패 시 계속하기로 드래그 조준을 사용할 수 있습니다. Esc를 누르면 고정을 해제하고 일시정지합니다.</p>
     <p><strong>휴대폰</strong> 왼쪽 스틱 이동 · 화면 빈 공간을 좌우·위아래로 드래그해 시점 변경</p>
     <p><strong>달리기</strong> PC는 Shift를 누르고 앞으로 이동하세요. 휴대폰은 스틱 위의 달리기 버튼으로 켜고 끕니다. 이동 속도는 1.5배이며 발사·재장전·확대 조준 중에는 걷습니다. 스태미나 제한은 없습니다.</p>
     <p><strong>점프</strong> 휴대폰은 점프 버튼을 누릅니다. PC는 스페이스바로 점프합니다. 메뉴에서 J키로 변경할 수 있습니다.</p>
@@ -71,7 +72,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <details class="developer-settings"><summary>개발용 도구</summary><button id="reference-open" aria-pressed="false">시안 비교</button><p>배경 시안과 현재 맵을 비교합니다.</p></details>
     <label class="graphics-setting">그래픽 화질 <select id="graphics-quality"><option value="auto" selected>자동 · 기기에 맞춤</option><option value="high">높음 · 선명한 화면</option><option value="balanced">균형 · 부드러운 실행</option></select></label>
   </section>
-  <div class="desktop-hint"><kbd>W</kbd><span><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><p>이동 <i>·</i> 드래그로 시점 변경</p></div>
+  <div class="desktop-hint"><kbd>W</kbd><span><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><p>이동 <i>·</i> 화면 클릭 후 마우스로 조준</p></div>
   <div class="touch-controls">
     <button id="sprint" class="sprint-button" aria-pressed="false" aria-label="달리기 켜기">달리기</button>
     <div class="move-control"><div id="joystick" role="group" aria-label="이동 가상 스틱"><div class="stick-cross"></div><div id="joystick-thumb"></div></div><span>이동</span></div>
@@ -140,7 +141,8 @@ async function start() {
     engine.setHardwareScalingLevel(1/budget.density);qualityHigh=graphicsMode==='high'||(graphicsMode==='auto'&&!mobile);
     world.setQuality(qualityHigh);engine.resize();world.resize();
   });
-  const input = createInput(canvas);
+  let clickToLock=true;
+  const input = createInput(canvas,{requestMouseLock(){if(!clickToLock||!canUseInventory())return false;lockMouse();return true;}});
   input.setEnabled(false);
   const sensitivity=document.querySelector<HTMLInputElement>('#look-sensitivity')!;
   const setSensitivity=(value:number)=>{
@@ -189,7 +191,7 @@ async function start() {
     if(!onlineActive){lobbyPolish.deploy();lobbyCue('deploy');gameChoices.close();onlineActive=true;homeOpen=false;home.hidden=true;onlineLobby.hidden=true;document.body.classList.remove('at-home');picker.hidden=true;manualPaused=false;pausePanel.hidden=true;world.setPreview(false);const me=state.players.find(p=>p.id===id);if(me){world.selectCharacter(me.character);world.selectWeapon(me.weaponId);input.resetLook();input.setLook(me.yaw,me.pitch);}hasPlayed=true;canvas.focus();}
     for(const cue of onlineAudio.update(state,id,input.look.yaw,canUseInventory()&&online.connected))audio.play(cue.kind,cue.pan,cue.volume);
     observeOnlineResult(state,id);
-  },status=>{if(status!=='대전 중'&&status!=='경기 종료')resultOnlineReady=false;onlineStatus=status;document.querySelector('#online-message')!.textContent=status;},session=>{onlineAudio.reset();pendingDash=false;onlineCode=session.code;resultTracker.start();shownResult='';resultOnlineTick=null;resultOnlineReady=false;resultView.hide();},()=>accountView.token());
+  },status=>{if(status!=='대전 중'&&status!=='경기 종료')resultOnlineReady=false;onlineStatus=status;document.querySelector('#online-message')!.textContent=status;},session=>{clickToLock=true;onlineAudio.reset();pendingDash=false;onlineCode=session.code;resultTracker.start();shownResult='';resultOnlineTick=null;resultOnlineReady=false;resultView.hide();},()=>accountView.token());
   let pendingDoor:string|undefined;
   let pendingSlot:number|undefined,pendingTake:{pickup:string;replace?:number}|undefined,choosePickupId:string|undefined;
   const inventoryUi=document.querySelector<HTMLElement>('#inventory-ui')!,slotButtons=[...document.querySelectorAll<HTMLButtonElement>('#weapon-slots button')];
@@ -247,19 +249,21 @@ async function start() {
     pausePanel.hidden=false;document.querySelector<HTMLButtonElement>('#resume')!.focus();
   };
   const resumeGame=()=>{manualPaused=false;pausePanel.hidden=true;input.reset();canvas.focus();};
+  const reportMouseLock=(message:string)=>{
+    for(const id of ['pointer-status','pause-lock-status'])document.querySelector(`#${id}`)!.textContent=message;
+    if(message){pauseGame();document.querySelector('#pause-lock-status')!.textContent=message;}
+  };
+  document.addEventListener('pointerlockerror',()=>reportMouseLock('마우스를 고정하지 못했습니다. 계속하기로 드래그 조준을 사용하거나 고정을 다시 시도하세요.'));
   const lockMouse=()=>{
-    const report=(message:string)=>{
-      for(const id of ['pointer-status','pause-lock-status'])document.querySelector(`#${id}`)!.textContent=message;
-      if(message){pauseGame();document.querySelector('#pause-lock-status')!.textContent=message;}
-    };
+    const report=reportMouseLock;
     if(!canvas.requestPointerLock){report('마우스 고정을 지원하지 않습니다. 계속하기를 누르면 드래그로 조준할 수 있습니다.');return;}
     try{const result=canvas.requestPointerLock();result?.catch(()=>report('마우스를 고정하지 못했습니다. 계속하기로 드래그 조준을 사용하거나 고정을 다시 시도하세요.'));}catch{report('마우스를 고정하지 못했습니다. 계속하기로 드래그 조준을 사용할 수 있습니다.');}
   };
   document.querySelector('#pause-open')!.addEventListener('click',pauseGame);
-  document.querySelector('#resume')!.addEventListener('click',resumeGame);
-  document.querySelector('#resume-locked')!.addEventListener('click',()=>{resumeGame();lockMouse();});
-  document.querySelector('#pointer-lock')!.addEventListener('click',()=>{canvas.focus();lockMouse();});
-  document.addEventListener('pointerlockchange',()=>{const locked=document.pointerLockElement===canvas;if(wasLocked&&!locked)pauseGame();wasLocked=locked;});
+  document.querySelector('#resume')!.addEventListener('click',()=>{clickToLock=false;resumeGame();});
+  document.querySelector('#resume-locked')!.addEventListener('click',()=>{clickToLock=true;resumeGame();lockMouse();});
+  document.querySelector('#pointer-lock')!.addEventListener('click',()=>{clickToLock=true;canvas.focus();lockMouse();});
+  document.addEventListener('pointerlockchange',()=>{const locked=document.pointerLockElement===canvas;if(locked){for(const id of ['pointer-status','pause-lock-status'])document.querySelector('#'+id)!.textContent='';}if(wasLocked&&!locked)pauseGame();wasLocked=locked;});
   window.addEventListener('blur',pauseGame);
   document.addEventListener('visibilitychange',()=>{if(document.hidden)pauseGame();});
   let menuOpen=false;
@@ -337,7 +341,7 @@ async function start() {
     const changed=mode.value!==nextMode||weapon.value!==nextWeapon||difficulty.value!==nextDifficulty;
     mode.value=nextMode;weapon.value=nextWeapon;if(isSurvivalDifficulty(nextDifficulty))difficulty.value=nextDifficulty;
     if((changed||homeMatchPending)&&isWeaponId(nextWeapon)){world.setMode(readMode(nextMode),isSurvivalDifficulty(nextDifficulty)?nextDifficulty:'easy');world.selectWeapon(nextWeapon);restart();}
-    homeOpen=false;home.hidden=true;document.body.classList.remove('at-home');homeMatchPending=false;void audio.unlock();input.reset();picker.hidden=true;world.setPreview(false);closeMenu();hasPlayed=true;resumeGame();
+    homeOpen=false;home.hidden=true;document.body.classList.remove('at-home');homeMatchPending=false;clickToLock=true;void audio.unlock();input.reset();picker.hidden=true;world.setPreview(false);closeMenu();hasPlayed=true;resumeGame();
     if(locked)lockMouse();
   };
   startButton.addEventListener('click',()=>beginGame(false));
@@ -537,6 +541,7 @@ async function start() {
     lobbyPolish.update();world.setLobbyMotion(!reducedLobbyMotion.matches&&!document.hidden&&document.hasFocus()&&!gameChoices.isOpen&&!resultView.isOpen);audio.setInterfaceActive(!document.hidden&&document.hasFocus());
     const canPlay=!lobbyPolish.deploying&&!gameChoices.isOpen&&!resultView.isOpen&&!homeOpen&&!manualPaused&&!document.hidden&&!portraitTouch&&picker.hidden&&!comparing&&!menuOpen&&help.hidden&&document.hasFocus();
     input.setEnabled(canPlay);
+    document.querySelector<HTMLElement>('#mouse-aim-hint')!.hidden=!canPlay||!clickToLock||document.pointerLockElement===canvas;
     document.querySelector('#pause-description')!.textContent=onlineActive?'내 조작만 멈춥니다. 상대의 경기는 계속됩니다.':'전투와 이동이 멈췄습니다.';
     document.querySelector<HTMLElement>('#pause-indicator')!.hidden=manualPaused||!picker.hidden||comparing||portraitTouch||(!menuOpen&&help.hidden);
     performanceHud.update(elapsed,canPlay);playtest.frame(elapsed,onlineActive?'online':world.duelState().active?'bot':'practice',canPlay,onlineActive?online.network.rttMs:null);
