@@ -1,3 +1,4 @@
+import {harborWorld,createWorld} from './world.ts';
 import type {DashState} from './dash.ts';
 import type {JumpState} from './jump.ts';
 import { advancePlayerMotion,type Command,type MatchState,type Player } from './network-game.ts';
@@ -5,7 +6,7 @@ type Move=Omit<Command,'seq'>;
 type Point={x:number;z:number;y?:number};
 // Only presentation is predicted. Health, ammo, hits, kills and the canonical position remain server owned.
 export function createOnlineMotion(onCorrection:(meters:number)=>void=()=>{}){
- let doors:MatchState['doors'];
+ let doors:MatchState['doors'],world=harborWorld,map='harbor';
  let me:Player|null=null,position:Point={x:0,z:0},offset:Point={x:0,z:0},active=false,age=0;
  let predictedDash:DashState|undefined,predictedJump:JumpState|undefined;
  let pending:{seq:number;command:Move}[]=[];
@@ -13,13 +14,14 @@ export function createOnlineMotion(onCorrection:(meters:number)=>void=()=>{}){
  return {
   reset(){me=null;active=false;pending=[];offset={x:0,z:0};age=0;predictedDash=undefined;predictedJump=undefined;},
   receive(state:MatchState,id:string){
+   const nextMap=state.map==='factory'?'factory':'harbor';if(nextMap!==map){map=nextMap;world=map==='factory'?createWorld('factory'):harborWorld;me=null;}
    doors=state.doors;const next=state.players.find(p=>p.id===id);if(!next)return;
    const playing=!state.winner&&state.players.length===2&&state.players.every(p=>p.connected)&&next.health>0;
    const discontinuity=!me||me.id!==id||!active||!playing||(me.health===0)!==(next.health===0)||age>.5;
    pending=pending.filter(p=>p.seq>next.seq);
    if(discontinuity){snap(next);}else{
     let replay={...next,dash:next.dash?{...next.dash}:undefined,jump:{...next.jump}};
-    for(const p of pending)replay={...replay,...advancePlayerMotion(replay,p.command,.05,doors)};
+    for(const p of pending)replay={...replay,...advancePlayerMotion(replay,p.command,.05,doors,world)};
     const target:Point={x:replay.x,z:replay.z,y:replay.y};predictedDash=replay.dash;predictedJump=replay.jump;
     const distance=Math.hypot(target.x-position.x,target.z-position.z);onCorrection(distance);
     if(distance>3){snap(next);}else{
@@ -33,7 +35,7 @@ export function createOnlineMotion(onCorrection:(meters:number)=>void=()=>{}){
    const elapsed=Math.max(0,Math.min(Number.isFinite(dt)?dt:0,.1));age+=elapsed;
    if(me){
     if(!connected||age>.5){snap(me);active=false;}
-    else if(active){let remaining=elapsed;while(remaining>1e-8){const step=Math.min(remaining,.025);const moved=advancePlayerMotion({...me,...position,dash:predictedDash,jump:predictedJump},command,step,doors);position={x:moved.x,z:moved.z,y:moved.y};predictedDash=moved.dash;predictedJump=moved.jump;remaining-=step;}}
+    else if(active){let remaining=elapsed;while(remaining>1e-8){const step=Math.min(remaining,.025);const moved=advancePlayerMotion({...me,...position,dash:predictedDash,jump:predictedJump},command,step,doors,world);position={x:moved.x,z:moved.z,y:moved.y};predictedDash=moved.dash;predictedJump=moved.jump;remaining-=step;}}
    }
    const decay=Math.exp(-elapsed*18);offset.x*=decay;offset.z*=decay;
    return {x:position.x+offset.x,z:position.z+offset.z,...(position.y?{y:position.y}:{})};

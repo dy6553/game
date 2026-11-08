@@ -30,3 +30,22 @@ test('account deletion requires a verified login before opening the DB',async()=
  const env={ALLOWED_ORIGINS:'https://game.test',ACCOUNTS_ENABLED:'true'};
  const response=await worker.fetch(new Request('https://worker/account',{method:'DELETE',headers:{Origin:'https://game.test'},body:JSON.stringify({password:'correct-password',userId:'victim'})}),env);assert.equal(response.status,401);
 });
+test('factory and welding unlocks cannot be forged by guests; growth requires login',async()=>{
+ let reserved=false;const env={ALLOWED_ORIGINS:'https://game.test',ACCOUNTS_ENABLED:'true',LOBBY:{idFromName(){},get(){return {fetch(){reserved=true;return Response.json({});}};}}};
+ for(const body of [{action:'create',map:'factory',accountLevel:99,accountSubject:'victim'},{action:'create',character:'welder',accountLevel:99}]){
+  const res=await worker.fetch(new Request('https://worker/session',{method:'POST',headers:{Origin:'https://game.test'},body:JSON.stringify(body)}),env);assert.equal(res.status,403);assert.equal(reserved,false);
+ }
+ for(const path of ['/growth/start','/growth/finish/00000000-0000-4000-8000-000000000000']){
+  const res=await worker.fetch(new Request('https://worker'+path,{method:'POST',headers:{Origin:'https://game.test'},body:'{}'}),env);assert.equal(res.status,401);
+ }
+});
+test('factory room checks actual room map for joining and preserves map in checkpoint',async()=>{
+ const values=new Map();const ctx={storage:{async get(k){return values.get(k);},async put(k,v){values.set(k,v);},async setAlarm(){}},blockConcurrencyWhile(fn){return fn();},waitUntil(){}};
+ const room=new Room(ctx,{});await new Promise(r=>setTimeout(r,0));
+ const reserve=body=>room.fetch(new Request('https://room/reserve',{method:'POST',body:JSON.stringify(body)}));
+ assert.equal((await reserve({map:'factory',accountSubject:'a',accountLevel:2})).status,403);
+ assert.equal((await reserve({map:'factory',accountSubject:'a',accountLevel:3})).status,200);
+ assert.equal(values.get('checkpoint').state.map,'factory');
+ assert.equal((await reserve({map:'harbor',accountSubject:'b',accountLevel:1})).status,403,'joining an unlocked map checks actual room regardless of requested map');
+ assert.equal((await reserve({map:'harbor',accountSubject:'b',accountLevel:3})).status,200);
+});

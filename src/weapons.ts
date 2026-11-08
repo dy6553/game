@@ -23,3 +23,7 @@ export function advanceBurst<T extends import('./combat.ts').WeaponState>(state:
  return {state:{...state,burstRemaining:state.burstRemaining-1,burstWait:wait+.08},due:1};
 }
 export function cadenceCarry(cooldown:number,dt:number){return cooldown>0?Math.max(0,dt-cooldown):0;}
+export function upgradedWeapon(id:WeaponId,tier:number,botMode:boolean):Readonly<WeaponSpec>{
+ const base=WEAPONS[id],n=botMode&&Number.isInteger(tier)?Math.max(0,Math.min(3,tier)):0;
+ return n?{...base,damage:base.damage*(1+n*.05),reloadSeconds:base.reloadSeconds*(1-n*.05)}:base;
+}

@@ -18,13 +18,13 @@ export function createOnlineClient(endpoint:string,onState:(state:MatchState,id:
   current.onerror=()=>onStatus('서버 연결을 확인하고 있습니다.');
  }
  return {get available(){return !!url;},get network(){return timing.read();},get connected(){return socket?.readyState===WebSocket.OPEN;},
-  async enter(action:'create'|'join'|'quick',code:string,weapon:string,character:string){
+  async enter(action:'create'|'join'|'quick',code:string,weapon:string,character:string,map='harbor'){
    const ticket=++operation;
    if(!url)throw new Error('온라인 서버 연결을 준비 중입니다. 봇 대전과 표적 연습은 바로 이용할 수 있습니다.');
    stopped=true;timing.reset();clearTimeout(retry);socket?.close();socket=null;session=null;onStatus('방 연결 중…');
    const token=await getToken();if(ticket!==operation)return;
    const headers:Record<string,string>={'Content-Type':'application/json'};if(token)headers.Authorization='Bearer '+token;
-   const response=await fetch(url+'/session',{method:'POST',headers,body:JSON.stringify({action,code:action==='join'?code:undefined,weapon,character}),signal:AbortSignal.timeout(10000)});
+   const response=await fetch(url+'/session',{method:'POST',headers,body:JSON.stringify({action,code:action==='join'?code:undefined,weapon,character,map}),signal:AbortSignal.timeout(10000)});
    const data=await response.json();if(ticket!==operation)return;if(!response.ok)throw new Error(data.error??'방에 입장하지 못했습니다.');session=data;stopped=false;attempt=0;seq=0;onSession(data);connect();
   },
   send(command:Omit<Command,'seq'>){if(!stopped&&socket?.readyState===WebSocket.OPEN&&socket.bufferedAmount<65536){const sent=seq++;timing.sent(sent);socket.send(JSON.stringify({type:'input',command:{...command,seq:sent}}));return sent;}return null;},

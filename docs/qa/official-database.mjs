@@ -10,6 +10,7 @@ await pg.exec(await readFile(new URL('../../server/migrations/001-official-recor
 assert.equal((await checkAccountHealth(healthEnv,async q=>(await pg.query(q)).rows)).ready,true);
 await pg.query('INSERT INTO neon_auth."user"(id,email) VALUES ($1,$2),($3,$4)',['a','private-a@example.com','b','private-b@example.com']);
 const sql=(strings,...params)=>{const text=strings.reduce((s,part,i)=>s+(i?'$'+i:'')+part,'');return {text,params,then(resolve,reject){return pg.query(text,params).then(r=>r.rows).then(resolve,reject);}};};
+sql.query=(text,params=[])=>({text,params,then(resolve,reject){return pg.query(text,params).then(r=>r.rows).then(resolve,reject);}});
 sql.transaction=queries=>pg.transaction(async tx=>{const results=[];for(const q of queries)results.push((await tx.query(q.text,q.params)).rows);return results;});
 const store=createRecordStore({},sql),a=await store.account('a'),b=await store.account('b');
 const event=(n)=>({matchId:`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`,endedAt:n*1000,rows:[{subject:'a',outcome:'win',kills:10,deaths:2},{subject:'b',outcome:'loss',kills:2,deaths:10}]});

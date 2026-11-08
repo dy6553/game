@@ -28,6 +28,9 @@ export class Room extends DurableObject {
    if(Date.now()-this.last>120000&&this.sockets.size===0){this.reset();}
    if(this.game.state.players.length>=2||this.game.state.winner)return json({error:'입장할 수 없는 방입니다.'},409);
    const input=await request.json(),id=crypto.randomUUID(),token=crypto.randomUUID();
+   const map=this.game.state.players.length?this.game.state.map:(input.map==='factory'?'factory':'harbor');
+   if(map==='factory'&&(!input.accountSubject||!(input.accountLevel>=3)))return json({error:'폐공장은 로그인 후 Lv3에 해금됩니다.'},403);
+   if(!this.game.state.players.length)this.game=createNetworkGame(undefined,map);
    if(input.accountSubject&&Object.values(this.accounts).includes(input.accountSubject))return json({error:'같은 계정으로 양쪽에 입장할 수 없습니다.'},409);
    const p=this.game.join(id,input.weapon,input.character);if(input.accountSubject)this.accounts[id]=input.accountSubject;p.connected=false;this.sessions[token]=id;this.last=Date.now();await this.save();await this.ctx.storage.setAlarm(Date.now()+120000);return json({id,token});
   });
@@ -74,7 +77,8 @@ export class Lobby extends DurableObject {
   const rate=this.rates.get(ip)??{at:now,count:0};if(++rate.count>12)return json({error:'잠시 후 다시 시도해 주세요.'},429);this.rates.set(ip,rate);
   const body=await request.json();let roomCode=body.code?.toUpperCase();
   if(body.action==='join'&&!/^[0-9A-F]{8}$/.test(roomCode??''))return json({error:'방 코드 8자리를 확인해 주세요.'},400);
-  if(body.action==='quick'){const pending=await this.ctx.storage.get('waiting');if(pending&&now-pending.at<60000)roomCode=pending.code;await this.ctx.storage.delete('waiting');}
+  const waitingKey=body.map==='factory'?'waiting-factory':'waiting';
+  if(body.action==='quick'){const pending=await this.ctx.storage.get(waitingKey);if(pending&&now-pending.at<60000)roomCode=pending.code;await this.ctx.storage.delete(waitingKey);}
   if(!roomCode)roomCode=code();
   const hint=request.headers.get('X-Harbor-Location');
   const stub=this.env.ROOMS.get(this.env.ROOMS.idFromName(roomCode),hint?{locationHint:hint}:undefined);
@@ -83,10 +87,10 @@ export class Lobby extends DurableObject {
   if(body.action==='join'&&(!known||now-known>120000))return json({error:'방이 없거나 입장 시간이 지났습니다.'},404);
   const reservation=await stub.fetch('https://room/reserve',{method:'POST',body:JSON.stringify(body)});
   const session=await reservation.json();if(!reservation.ok)return json(session,reservation.status);
-  if(!known){await this.ctx.storage.put('room:'+roomCode,now);if(body.action==='quick')await this.ctx.storage.put('waiting',{code:roomCode,at:now});}
+  if(!known){await this.ctx.storage.put('room:'+roomCode,now);if(body.action==='quick')await this.ctx.storage.put(waitingKey,{code:roomCode,at:now});}
   await this.ctx.storage.setAlarm(now+180000);return json({...session,code:roomCode});
  });}
- async alarm(){const rooms=await this.ctx.storage.list({prefix:'room:'});for(const [key,at] of rooms)if(Date.now()-at>120000)await this.ctx.storage.delete(key);await this.ctx.storage.delete('waiting');}
+ async alarm(){const rooms=await this.ctx.storage.list({prefix:'room:'});for(const [key,at] of rooms)if(Date.now()-at>120000)await this.ctx.storage.delete(key);await this.ctx.storage.delete('waiting');await this.ctx.storage.delete('waiting-factory');}
 }
 export default {async fetch(request,env){
  const origin=request.headers.get('Origin'),allowed=env.ALLOWED_ORIGINS.split(',');
@@ -102,11 +106,23 @@ export default {async fetch(request,env){
    if(!['create','join','quick'].includes(body.action))return json({error:'잘못된 요청'},400);
    let subject;try{subject=await createIdentityVerifier(env)(request);}catch{response=json({error:'로그인이 만료되었거나 올바르지 않습니다. 다시 로그인하세요.'},401);}
    if(response){const result=new Response(response.body,response);for(const [key,value] of Object.entries(headers))result.headers.set(key,value);return result;}
-   delete body.accountSubject;delete body.userId;
-   if(subject){if(env.ACCOUNTS_ENABLED!=='true')throw Error('Accounts not ready');await createRecordStore(env).account(subject);body.accountSubject=subject;}
+   delete body.accountSubject;delete body.userId;delete body.accountLevel;
+   body.map=body.map==='factory'?'factory':'harbor';
+   if(subject){if(env.ACCOUNTS_ENABLED!=='true')throw Error('Accounts not ready');await createRecordStore(env).account(subject);body.accountSubject=subject;body.accountLevel=(await createRecordStore(env).progression(subject)).level;}
+   if(body.action!=='join'&&body.map==='factory'&&(!subject||body.accountLevel<3)){const denied=json({error:'폐공장은 로그인 후 Lv3에 해금됩니다.'},403);for(const [key,value] of Object.entries(headers))denied.headers.set(key,value);return denied;}
+   if(body.character==='welder'&&(!subject||body.accountLevel<3)){
+    const denied=json({error:'용접 로봇은 로그인 후 Lv3에 해금됩니다.'},403);for(const [key,value] of Object.entries(headers))denied.headers.set(key,value);return denied;
+   }
    const forwarded=new Headers(request.headers);forwarded.delete('Authorization');forwarded.delete('X-Harbor-Location');
    const hints={AS:'apac',OC:'oc',NA:'wnam',SA:'sam',EU:'weur',AF:'afr'};const hint=hints[request.cf?.continent];if(hint)forwarded.set('X-Harbor-Location',hint);
    response=await env.LOBBY.get(env.LOBBY.idFromName('public')).fetch(new Request('https://lobby/',{method:'POST',body:JSON.stringify(body),headers:forwarded}));
+  }else if((url.pathname==='/growth/start'||/^\/growth\/finish\/[0-9a-f-]{36}$/i.test(url.pathname))&&request.method==='POST'){
+   if(env.ACCOUNTS_ENABLED!=='true')throw Error('Accounts not ready');
+   let subject;try{subject=await createIdentityVerifier(env)(request);}catch{}
+   if(!subject)response=json({error:'로그인이 필요합니다.'},401);
+   else {const raw=await request.text();if(raw.length>2048)response=json({error:'잘못된 요청'},400);
+    else {const body=JSON.parse(raw),store=createRecordStore(env);try{response=json(url.pathname==='/growth/start'?await store.startRun(subject,body):await store.finishRun(subject,url.pathname.split('/')[3],body));}catch(error){if(error.message.startsWith('Invalid'))response=json({error:'잘못된 경기 결과'},400);else throw error;}}
+   }
   }else if(url.pathname==='/account'&&request.method==='DELETE'){
    if(env.ACCOUNTS_ENABLED!=='true')throw Error('Accounts not ready');
    let subject;try{subject=await createIdentityVerifier(env)(request);}catch{}

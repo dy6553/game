@@ -1,17 +1,24 @@
-import { canStand, moveWithCollisions, PROTOTYPE,randomOutdoorSpawn,worldSolids,nearbyDoor,toggleDoor,BUILDINGS,stairways,type Doors, type Point } from './world.ts';
+import {harborWorld,type World,type Doors,type Point} from './world.ts';
 import { createWeapon, advanceWeapon, beginReload, tryFire, PRACTICE_RULES } from './combat.ts';
-export const DUEL_RULES = Object.freeze({health:100,damage:25,aimSeconds:1,fireSeconds:0.8,respawnSeconds:3,botRespawnSeconds:1.5,goal:10,warningSeconds:0.4});
 export type BotDifficulty='easy'|'normal'|'hard';
-export const BOT_DIFFICULTIES=Object.freeze({
+export type BotEnvironment={doors:Doors;randomSpawns?:boolean};
+type BotProfile={aimSeconds:number;warningSeconds:number;speed:number;strafe:boolean;strafeSpeed?:number};
+export type SurvivalOptions={prepareSeconds:number;initialEnemies:number;increaseEvery:number;maxEnemies:number;restoreBetweenWaves:boolean};
+export type SurvivalDifficulty=BotDifficulty|'auto';
+export type AdaptiveDifficultyPolicy={initial:BotDifficulty;healthyThreshold:number;clearsToRaise:number;stepsPerTier?:number};
+export function createBotRules(world:World=harborWorld){
+const {canStand,moveWithCollisions,PROTOTYPE,randomOutdoorSpawn,worldSolids,nearbyDoor,toggleDoor,BUILDINGS,stairways}=world;
+const DUEL_RULES = Object.freeze({health:100,damage:25,aimSeconds:1,fireSeconds:0.8,respawnSeconds:3,botRespawnSeconds:1.5,goal:10,warningSeconds:0.4});
+const BOT_DIFFICULTIES=Object.freeze({
  easy:{name:'쉬움',aimSeconds:1,warningSeconds:.4,speed:3,strafe:false},
  normal:{name:'보통',aimSeconds:.7,warningSeconds:.35,speed:4,strafe:true},
  hard:{name:'어려움',aimSeconds:.45,warningSeconds:.3,speed:5,strafe:true},
 });
-export function isBotDifficulty(value:unknown):value is BotDifficulty{return value==='easy'||value==='normal'||value==='hard';}
-export const BOT_SPAWN:Point={x:0,z:18};
+function isBotDifficulty(value:unknown):value is BotDifficulty{return value==='easy'||value==='normal'||value==='hard';}
+const BOT_SPAWN:Point={x:0,z:18};
 // Grid routing uses the same collision geometry and radius as player movement.
 let navigationSamples=0;
-export function navigationStats(){return {collisionSamples:navigationSamples};}
+function navigationStats(){return {collisionSamples:navigationSamples};}
 const step=2;
 // The map is fixed; plan with open doors and validate live door collisions during movement.
 const standCache=new Map<string,boolean>(),segmentCache=new Map<string,boolean>();
@@ -25,7 +32,7 @@ function clearSegment(a:Point,b:Point){
  for(let i=0;i<=n;i++){navigationSamples++;const t=n?i/n:0;if(!canStand({x:a.x+(b.x-a.x)*t,z:a.z+(b.z-a.z)*t},PROTOTYPE.radius,worldSolids())){clear=false;break;}}
  if(key){if(segmentCache.size>=16384)segmentCache.delete(segmentCache.keys().next().value!);segmentCache.set(key,clear);}return clear;
 }
-export function findRoute(start:Point,goal:Point):Point[]{
+function findRoute(start:Point,goal:Point):Point[]{
   if(!canStand(start,PROTOTYPE.radius,worldSolids())||!canStand(goal,PROTOTYPE.radius,worldSolids()))return [];
   if(clearSegment(start,goal))return [{...goal}];
   const key=(p:Point)=>`${p.x},${p.z}`;
@@ -53,7 +60,7 @@ export function findRoute(start:Point,goal:Point):Point[]{
 }
 
 const staticStairEdges=new Map<string,Point[]|null>();
-export function verticalRoute(start:Point,goal:Point):Point[]{
+function verticalRoute(start:Point,goal:Point):Point[]{
  if(Math.abs((start.y??0)-(goal.y??0))<.1&&!(start.y??0))return findRoute(start,goal);
  const relevant=BUILDINGS.filter(b=>b.enterable&&[start,goal].some(p=>Math.abs(p.x-b.x)<b.width/2&&Math.abs(p.z-b.z)<b.depth/2));const solids=worldSolids();
  const nodes:Point[]=[start,goal,...relevant.flatMap(b=>stairways(b).flatMap(s=>[s.start,s.end]))];
@@ -74,9 +81,7 @@ export function verticalRoute(start:Point,goal:Point):Point[]{
  return [];
 }
 
-export type BotEnvironment={doors:Doors;randomSpawns?:boolean};
-type BotProfile={aimSeconds:number;warningSeconds:number;speed:number;strafe:boolean;strafeSpeed?:number};
-export function createDuel(difficulty:BotDifficulty='easy',spawnPoint:Point=BOT_SPAWN,override?:BotProfile,environment?:BotEnvironment){
+function createDuel(difficulty:BotDifficulty='easy',spawnPoint:Point=BOT_SPAWN,override?:BotProfile,environment?:BotEnvironment){
   if(!canStand(spawnPoint,PROTOTYPE.radius))throw new Error('Invalid bot spawn');let respawnPoint={...spawnPoint},spawnScheduled=false;
   const selected=isBotDifficulty(difficulty)?difficulty:'easy';const profile:BotProfile=override??BOT_DIFFICULTIES[selected];let strafeDirection=1;
   let protection=0,playerPosition:Point={...PROTOTYPE.spawn};
@@ -137,13 +142,13 @@ export function createDuel(difficulty:BotDifficulty='easy',spawnPoint:Point=BOT_
   return {hurt,update,playerFired(){protection=0;},separate(others:readonly Point[]){if(locked)return;for(const other of others){if(Math.abs((other.y??0)-(position.y??0))>1)continue;const dx=position.x-other.x,dz=position.z-other.z,d=Math.hypot(dx,dz);if(d<1.5){const n=d>.01?d:1;position=moveWithCollisions(position,{x:(d>.01?dx/n:1)*.08,z:dz/n*.08},environment?worldSolids(environment.doors):undefined);}}},setSpawn(p:Point){if(!canStand(p,PROTOTYPE.radius))throw new Error('Invalid bot spawn');respawnPoint={...p};spawnScheduled=true;},state:()=>({protection,playerPosition:{...playerPosition},difficulty:selected,playerHealth,botHealth,playerKills,botKills,playerDead,botDead,position:{...position},winner,respawnVersion,aim,warning,locked:locked?{...locked}:null,damageVersion,botAmmo:botWeapon.ammo})};
 }
 
-export const GROUP_SPAWNS:readonly Point[]=[{x:0,z:-8},{x:0,z:18},{x:-24,z:0},{x:24,z:0},{x:0,z:-28},{x:0,z:30},{x:-40,z:-32},{x:40,z:-32},{x:-40,z:30},{x:40,z:30}];
-export function distantSpawn(others:readonly Point[]):Point{
+const GROUP_SPAWNS:readonly Point[]=[{x:0,z:-8},{x:0,z:18},{x:-24,z:0},{x:24,z:0},{x:0,z:-28},{x:0,z:30},{x:-40,z:-32},{x:40,z:-32},{x:-40,z:30},{x:40,z:30}];
+function distantSpawn(others:readonly Point[]):Point{
  const candidates=GROUP_SPAWNS.filter(p=>canStand(p,PROTOTYPE.radius));
  const score=(p:Point)=>others.length?Math.min(...others.map(o=>Math.hypot(o.x-p.x,o.z-p.z))):0;
  return {...candidates.reduce((best,p)=>score(p)>score(best)?p:best,candidates[0]!)};
 }
-export function createBotMatch(difficulty:BotDifficulty='easy',environment?:BotEnvironment){
+function createBotMatch(difficulty:BotDifficulty='easy',environment?:BotEnvironment){
  const selected=isBotDifficulty(difficulty)?difficulty:'easy';
  const occupied:Point[]=[PROTOTYPE.spawn];
  const bots=[0,1,2].map(i=>{const spawn=environment?.randomSpawns?randomOutdoorSpawn(occupied):GROUP_SPAWNS[i+1]!;occupied.push(spawn);return {id:`bot-${i+1}`,name:`봇 ${i+1}`,kills:0,agent:createDuel(selected,spawn,undefined,environment)};});
@@ -184,11 +189,9 @@ export function createBotMatch(difficulty:BotDifficulty='easy',environment?:BotE
 }
 
 // User-approved survival tuning; tests may inject explicit boundary fixtures.
-export type SurvivalOptions={prepareSeconds:number;initialEnemies:number;increaseEvery:number;maxEnemies:number;restoreBetweenWaves:boolean};
-export const SURVIVAL_RULES:Readonly<SurvivalOptions>=Object.freeze({prepareSeconds:5,initialEnemies:4,increaseEvery:2,maxEnemies:12,restoreBetweenWaves:true});
-export type SurvivalDifficulty=BotDifficulty|'auto';
-export function isSurvivalDifficulty(value:unknown):value is SurvivalDifficulty{return value==='auto'||isBotDifficulty(value);}
-export function createSurvivalMatch(difficulty:SurvivalDifficulty='easy',options:SurvivalOptions=SURVIVAL_RULES,environment?:BotEnvironment){
+const SURVIVAL_RULES:Readonly<SurvivalOptions>=Object.freeze({prepareSeconds:5,initialEnemies:4,increaseEvery:2,maxEnemies:12,restoreBetweenWaves:true});
+function isSurvivalDifficulty(value:unknown):value is SurvivalDifficulty{return value==='auto'||isBotDifficulty(value);}
+function createSurvivalMatch(difficulty:SurvivalDifficulty='easy',options:SurvivalOptions=SURVIVAL_RULES,environment?:BotEnvironment){
  if(!Number.isFinite(options.prepareSeconds)||options.prepareSeconds<0||![options.initialEnemies,options.increaseEvery,options.maxEnemies].every(n=>Number.isInteger(n)&&n>0)||options.initialEnemies>options.maxEnemies)throw new Error('Invalid survival options');
  const automatic=difficulty==='auto',adaptive=automatic?createAdaptiveDifficulty({initial:'normal',healthyThreshold:50,clearsToRaise:2,stepsPerTier:4}):null;
  let selected:BotDifficulty=automatic?'normal':isBotDifficulty(difficulty)?difficulty:'easy';const totalWaves=automatic?20:{easy:10,normal:20,hard:30}[selected];
@@ -237,8 +240,7 @@ export function createSurvivalMatch(difficulty:SurvivalDifficulty='easy',options
 }
 
 // No application defaults: the caller must supply an approved adaptation policy.
-export type AdaptiveDifficultyPolicy={initial:BotDifficulty;healthyThreshold:number;clearsToRaise:number;stepsPerTier?:number};
-export function createAdaptiveDifficulty(policy:AdaptiveDifficultyPolicy){
+function createAdaptiveDifficulty(policy:AdaptiveDifficultyPolicy){
  const subdivisions=policy.stepsPerTier??1;
  if(!Number.isInteger(subdivisions)||subdivisions<1)throw new Error('Invalid adaptation steps');
  if(!isBotDifficulty(policy.initial)||!Number.isFinite(policy.healthyThreshold)||policy.healthyThreshold<0||policy.healthyThreshold>100||!Number.isInteger(policy.clearsToRaise)||policy.clearsToRaise<1)throw new Error('Invalid adaptive difficulty policy');
@@ -256,9 +258,13 @@ export function createAdaptiveDifficulty(policy:AdaptiveDifficultyPolicy){
  };
 }
 
-export function adaptiveBotProfile(stage:number):BotProfile{
+function adaptiveBotProfile(stage:number):BotProfile{
  if(!Number.isInteger(stage)||stage<1||stage>9)throw new Error('Invalid adaptive stage');
  const low=stage<=5?BOT_DIFFICULTIES.easy:BOT_DIFFICULTIES.normal,high=stage<=5?BOT_DIFFICULTIES.normal:BOT_DIFFICULTIES.hard,t=stage<=5?(stage-1)/4:(stage-5)/4;
  const lerp=(a:number,b:number)=>a+(b-a)*t,speed=lerp(low.speed,high.speed);
  return {aimSeconds:lerp(low.aimSeconds,high.aimSeconds),warningSeconds:lerp(low.warningSeconds,high.warningSeconds),speed,strafe:stage>1,strafeSpeed:speed*Math.min(1,(stage-1)/4)};
 }
+
+return {DUEL_RULES,BOT_DIFFICULTIES,isBotDifficulty,BOT_SPAWN,navigationStats,findRoute,verticalRoute,createDuel,GROUP_SPAWNS,distantSpawn,createBotMatch,SURVIVAL_RULES,isSurvivalDifficulty,createSurvivalMatch,createAdaptiveDifficulty,adaptiveBotProfile};
+}
+export const {DUEL_RULES,BOT_DIFFICULTIES,isBotDifficulty,BOT_SPAWN,navigationStats,findRoute,verticalRoute,createDuel,GROUP_SPAWNS,distantSpawn,createBotMatch,SURVIVAL_RULES,isSurvivalDifficulty,createSurvivalMatch,createAdaptiveDifficulty,adaptiveBotProfile}=createBotRules();

@@ -1,14 +1,18 @@
 export type Point = { x: number; z: number; y?:number };
 export type Rect = { id: string; x: number; z: number; width: number; depth: number; height?:number; yMin?:number;yMax?:number;slope?:{start:Point&{y:number};end:Point&{y:number}} };
 export type Building = Rect & { height: number; palette: number; enterable?:boolean };
+export type Doors=Record<string,boolean>;
+export type Stairway={building:string;start:Point&{y:number};end:Point&{y:number};width:number};
+export type MapId='harbor'|'factory';
+export function createWorld(map:MapId='harbor'){
 
 // Exploration values only; these are not final combat balance or map dimensions.
-export const PROTOTYPE = {
+const PROTOTYPE = {
   halfWidth: 64, halfDepth: 60, maxZ:34, radius: 0.55, speed: 7,
   spawn: { x: 0, z: -8 },
 };
 
-export const BUILDINGS: Building[] = [-19, 19].flatMap((z, row) =>
+const BUILDINGS: Building[] = [-19, 19].flatMap((z, row) =>
   [-33, -17, 17, 33].map((x, column) => ({
     id: `building-${row}-${column}`, x, z,
     width: column === 0 || column === 3 ? 11 : 12,
@@ -18,9 +22,12 @@ export const BUILDINGS: Building[] = [-19, 19].flatMap((z, row) =>
 );
 BUILDINGS.push(...[-45,-17,17,45].map((x,i)=>({id:`south-${i}`,x,z:-45,width:12,depth:12,height:8+i%2*2,palette:i%3,enterable:Math.abs(x)===17})),
  ...[-53,53].flatMap((x,i)=>[-19,19].map((z,j)=>({id:`outer-${i}-${j}`,x,z,width:10,depth:13,height:8+j*2,palette:(i+j)%3}))));
+if(map==='factory')BUILDINGS.splice(0,BUILDINGS.length,
+ ...[-22,22].flatMap((z,row)=>[-24,24].map((x,col)=>({id:`factory-hall-${row}-${col}`,x,z,width:18,depth:18,height:9,palette:(row+col)%3,enterable:true}))),
+ ...[-49,49].flatMap((x,col)=>[-43,20].map((z,row)=>({id:`factory-store-${row}-${col}`,x,z,width:13,depth:17,height:11,palette:2,enterable:false}))));
 const ENTERABLE_BUILDINGS=BUILDINGS.filter(b=>b.enterable);
-export const DOOR_WIDTH=3.2;
-export function buildingWalls(b:Building):Rect[]{
+const DOOR_WIDTH=3.2;
+function buildingWalls(b:Building):Rect[]{
  const front=b.z<0?1:-1,t=.4,segment=(b.width-DOOR_WIDTH)/2;
  return [
  {id:b.id+'-west',x:b.x-b.width/2+t/2,z:b.z,width:t,depth:b.depth},
@@ -28,13 +35,13 @@ export function buildingWalls(b:Building):Rect[]{
  {id:b.id+'-back',x:b.x,z:b.z-front*(b.depth/2-t/2),width:b.width,depth:t},
  ...[-1,1].map(side=>({id:b.id+'-front-'+side,x:b.x+side*(DOOR_WIDTH/2+segment/2),z:b.z+front*(b.depth/2-t/2),width:segment,depth:t}))];
 }
-export function interiorFurniture(b:Building):Rect[]{return [
+function interiorFurniture(b:Building):Rect[]{return [
  {id:b.id+'-counter',x:b.x+b.width/2-1.3,z:b.z,width:1.4,depth:4},
  {id:b.id+'-table',x:b.x-1.5,z:b.z+(b.z<0?1:-1)*2,width:1.5,depth:1.5}];}
-export function indoorAt(p:Point){return BUILDINGS.find(b=>b.enterable&&Math.abs(p.x-b.x)<b.width/2-.4&&Math.abs(p.z-b.z)<b.depth/2-.4);}
+function indoorAt(p:Point){return BUILDINGS.find(b=>b.enterable&&Math.abs(p.x-b.x)<b.width/2-.4&&Math.abs(p.z-b.z)<b.depth/2-.4);}
 
 
-export const COVERS: Rect[] = [
+const COVERS: Rect[] = [
  {id:'combat-container-west',x:-38,z:3,width:4,depth:2.6,height:2.6},
  {id:'combat-container-east',x:38,z:-3,width:4,depth:2.6,height:2.6},
  {id:'combat-utility-south',x:-5,z:-29,width:3,depth:1.6,height:2.2},
@@ -46,15 +53,22 @@ export const COVERS: Rect[] = [
   { id: 'planter-north', x: -7.8, z: 7.5, width: 3.8, depth: 1.8 },
   { id: 'van', x: 6.8, z: -7, width: 2.6, depth: 5 },
 ];
-export const SOLIDS: Rect[] = [...BUILDINGS.flatMap(b=>b.enterable?[...buildingWalls(b),...interiorFurniture(b)]:[b]), ...COVERS];
+if(map==='factory')COVERS.splice(0,COVERS.length,
+ ...[-1,1].flatMap(side=>[
+ {id:`factory-press-${side}`,x:side*10,z:-12,width:4,depth:3,height:2.6},
+ {id:`factory-cargo-${side}`,x:side*9,z:9,width:4,depth:2.6,height:2.3},
+ {id:`factory-generator-${side}`,x:side*37,z:0,width:3.5,depth:5,height:2.4},
+ {id:`factory-boiler-${side}`,x:side*14,z:-42,width:4,depth:4,height:3},
+ ]));
+const SOLIDS: Rect[] = [...BUILDINGS.flatMap(b=>b.enterable?[...buildingWalls(b),...interiorFurniture(b)]:[b]), ...COVERS];
 
-export function circleOverlapsRect(p: Point, radius: number, rect: Rect): boolean {
+function circleOverlapsRect(p: Point, radius: number, rect: Rect): boolean {
   const nx = Math.max(rect.x - rect.width / 2, Math.min(p.x, rect.x + rect.width / 2));
   const nz = Math.max(rect.z - rect.depth / 2, Math.min(p.z, rect.z + rect.depth / 2));
   return (p.x - nx) ** 2 + (p.z - nz) ** 2 < radius ** 2 - 1e-8;
 }
 
-export function canStand(p: Point, radius: number, solids: readonly Rect[] = SOLIDS): boolean {
+function canStand(p: Point, radius: number, solids: readonly Rect[] = SOLIDS): boolean {
   return Number.isFinite(p.x) && Number.isFinite(p.z)
     && Math.abs(p.x) <= PROTOTYPE.halfWidth - radius
     && p.z >= -PROTOTYPE.halfDepth + radius && p.z <= PROTOTYPE.maxZ-radius
@@ -62,7 +76,7 @@ export function canStand(p: Point, radius: number, solids: readonly Rect[] = SOL
     && upperFloorContains(p,radius);
 }
 
-export function moveWithCollisions(
+function moveWithCollisions(
   position: Point, delta: Point, solids: readonly Rect[] = SOLIDS,
   radius = PROTOTYPE.radius,
 ): Point {
@@ -83,17 +97,16 @@ export function moveWithCollisions(
   return p;
 }
 
-export function normalized(x: number, y: number): { x: number; y: number } {
+function normalized(x: number, y: number): { x: number; y: number } {
   const length = Math.hypot(x, y);
   return length > 1 ? { x: x / length, y: y / length } : { x, y };
 }
 
-export type Doors=Record<string,boolean>;
-export const SECOND_FLOOR=3.4;
-export function doorRect(b:Building):Rect{return {id:b.id+'-door',x:b.x,z:b.z+(b.z<0?1:-1)*(b.depth/2-.2),width:DOOR_WIDTH,depth:.4,yMin:0,yMax:3.2};}
-export function createDoors():Doors{return Object.fromEntries(ENTERABLE_BUILDINGS.map(b=>[b.id,false]));}
+const SECOND_FLOOR=3.4;
+function doorRect(b:Building):Rect{return {id:b.id+'-door',x:b.x,z:b.z+(b.z<0?1:-1)*(b.depth/2-.2),width:DOOR_WIDTH,depth:.4,yMin:0,yMax:3.2};}
+function createDoors():Doors{return Object.fromEntries(ENTERABLE_BUILDINGS.map(b=>[b.id,false]));}
 const solidCache=new Map<string,Rect[]>();
-export function worldSolids(doors?:Doors):Rect[]{
+function worldSolids(doors?:Doors):Rect[]{
  const key=doors?ENTERABLE_BUILDINGS.map(b=>doors[b.id]?'1':'0').join(''):'open';const cached=solidCache.get(key);if(cached)return cached;
  const result=[...SOLIDS.map(r=>{const b=BUILDINGS.find(b=>r.id===b.id||r.id.startsWith(b.id+'-'));return {...r,yMin:0,yMax:r.id.endsWith('-counter')?1.4:r.id.endsWith('-table')?1:b?.height??r.height??(r.id==='van'?2.15:1.05)};}),
  ...BUILDINGS.filter(b=>b.enterable&&doors&&doors[b.id]!==true).map(doorRect),
@@ -103,15 +116,14 @@ export function worldSolids(doors?:Doors):Rect[]{
  {id:b.id+'-roof-rail-z',x:b.x,z:b.z+side*(b.depth/2-.2),width:b.width,depth:.15,yMin:b.height,yMax:b.height+1.2}
  ]))];solidCache.set(key,result);return result;
 }
-export function nearbyDoor(p:Point,doors:Doors){return BUILDINGS.filter(b=>b.enterable&&Object.hasOwn(doors,b.id)).map(b=>({b,d:Math.hypot(p.x-doorRect(b).x,p.z-doorRect(b).z)})).filter(v=>v.d<=2.5&&(p.y??0)<.5).sort((a,b)=>a.d-b.d)[0]?.b;}
-export function toggleDoor(doors:Doors,id:string,p:Point,actors:readonly Point[]):boolean{
+function nearbyDoor(p:Point,doors:Doors){return BUILDINGS.filter(b=>b.enterable&&Object.hasOwn(doors,b.id)).map(b=>({b,d:Math.hypot(p.x-doorRect(b).x,p.z-doorRect(b).z)})).filter(v=>v.d<=2.5&&(p.y??0)<.5).sort((a,b)=>a.d-b.d)[0]?.b;}
+function toggleDoor(doors:Doors,id:string,p:Point,actors:readonly Point[]):boolean{
  const b=BUILDINGS.find(b=>b.id===id&&b.enterable);if(!b||nearbyDoor(p,{[id]:doors[id]??false})?.id!==id)return false;
  if(doors[id]&&actors.some(a=>(a.y??0)<3.2&&circleOverlapsRect(a,PROTOTYPE.radius+.1,doorRect(b))))return false;
  doors[id]=!doors[id];return true;
 }
-export type Stairway={building:string;start:Point&{y:number};end:Point&{y:number};width:number};
 const stairCache=new WeakMap<Building,readonly Stairway[]>();
-export function stairways(b:Building):readonly Stairway[]{const cached=stairCache.get(b);if(cached)return cached;const f=b.z<0?1:-1,z0=b.z+f*(b.depth/2-2.2),z1=b.z-f*(b.depth/2-2.2);const result:Stairway[]=[
+function stairways(b:Building):readonly Stairway[]{const cached=stairCache.get(b);if(cached)return cached;const f=b.z<0?1:-1,z0=b.z+f*(b.depth/2-2.2),z1=b.z-f*(b.depth/2-2.2);const result:Stairway[]=[
  {building:b.id,width:1.8,start:{x:b.x-b.width/2+1.5,z:z0,y:0},end:{x:b.x-b.width/2+1.5,z:z1,y:SECOND_FLOOR}},
  {building:b.id,width:1.8,start:{x:b.x+b.width/2-1.5,z:z1,y:SECOND_FLOOR},end:{x:b.x+b.width/2-1.5,z:z0,y:b.height}},
  ];for(const stair of result){Object.freeze(stair.start);Object.freeze(stair.end);Object.freeze(stair);}Object.freeze(result);stairCache.set(b,result);return result;}
@@ -134,7 +146,7 @@ function elevatedStep(from:Point,to:Point):Point{
  return from.y!==undefined||next>0?{...to,y:next}:to;
 }
 const floorCache=new WeakMap<Building,Map<number,readonly Rect[]>>();
-export function floorPanels(b:Building,y:number):readonly Rect[]{
+function floorPanels(b:Building,y:number):readonly Rect[]{
  let levels=floorCache.get(b);if(!levels){levels=new Map();floorCache.set(b,levels);}const cached=levels.get(y);if(cached)return cached;
  const [a,c]=stairways(b),w=a!.width+.1,filled=y===SECOND_FLOOR?c!:a!;const result:Rect[]=[
  {id:b.id+'-floor-side',x:filled.start.x,z:b.z,width:w,depth:b.depth-.8,yMin:y-.12,yMax:y},
@@ -143,7 +155,7 @@ export function floorPanels(b:Building,y:number):readonly Rect[]{
  ];for(const panel of result)Object.freeze(panel);Object.freeze(result);levels.set(y,result);return result;
 }
 let outdoorCandidates:Point[]|undefined;
-export function randomOutdoorSpawn(others:readonly Point[],random:()=>number=Math.random):Point{
+function randomOutdoorSpawn(others:readonly Point[],random:()=>number=Math.random):Point{
  const candidates:Point[]=outdoorCandidates??[];
  if(!outdoorCandidates)for(let x=-60;x<=60;x+=4)for(let z=-56;z<=30;z+=4){const p={x,z};if(canStand(p,PROTOTYPE.radius)&&!BUILDINGS.some(b=>Math.abs(x-b.x)<b.width/2+1&&Math.abs(z-b.z)<b.depth/2+1))candidates.push(p);}
  outdoorCandidates=candidates;
@@ -154,7 +166,7 @@ export function randomOutdoorSpawn(others:readonly Point[],random:()=>number=Mat
 
 let fixedShotGeometry:Rect[]|undefined;
 const shotCache=new WeakMap<Rect[],Rect[]>();
-export function shotBoxes(doors?:Doors):Rect[]{
+function shotBoxes(doors?:Doors):Rect[]{
  const solids=worldSolids(doors),cached=shotCache.get(solids);if(cached)return cached;
  fixedShotGeometry??=ENTERABLE_BUILDINGS.flatMap(b=>[
   ...floorPanels(b,SECOND_FLOOR),...floorPanels(b,b.height),
@@ -162,3 +174,9 @@ export function shotBoxes(doors?:Doors):Rect[]{
  ]);
  const result=[...solids.filter(r=>!r.slope),...fixedShotGeometry];shotCache.set(solids,result);return result;
 }
+
+return {PROTOTYPE,BUILDINGS,DOOR_WIDTH,buildingWalls,interiorFurniture,indoorAt,COVERS,SOLIDS,circleOverlapsRect,canStand,moveWithCollisions,normalized,SECOND_FLOOR,doorRect,createDoors,worldSolids,nearbyDoor,toggleDoor,stairways,floorPanels,randomOutdoorSpawn,shotBoxes};
+}
+export const harborWorld=createWorld();
+export const {PROTOTYPE,BUILDINGS,DOOR_WIDTH,buildingWalls,interiorFurniture,indoorAt,COVERS,SOLIDS,circleOverlapsRect,canStand,moveWithCollisions,normalized,SECOND_FLOOR,doorRect,createDoors,worldSolids,nearbyDoor,toggleDoor,stairways,floorPanels,randomOutdoorSpawn,shotBoxes}=harborWorld;
+export type World=ReturnType<typeof createWorld>;

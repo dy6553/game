@@ -8,9 +8,9 @@ import { Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import type { Scene } from '@babylonjs/core/scene.js';
 import type { Mesh } from '@babylonjs/core/Meshes/mesh.js';
 
-export const CHARACTER_TYPES = ['robot', 'robot-cat'] as const;
+export const CHARACTER_TYPES = ['robot', 'robot-cat', 'welder'] as const;
 export type CharacterType = typeof CHARACTER_TYPES[number];
-export function isCharacterType(value: unknown): value is CharacterType { return value === 'robot' || value === 'robot-cat'; }
+export function isCharacterType(value: unknown): value is CharacterType { return value === 'robot' || value === 'robot-cat' || value === 'welder'; }
 
 export function createCharacter(scene: Scene, parent: TransformNode, type: CharacterType) {
   const root = new TransformNode(`character-${type}`, scene); root.parent = parent;
@@ -22,7 +22,7 @@ export function createCharacter(scene: Scene, parent: TransformNode, type: Chara
     if (glow) m.emissiveColor = m.diffuseColor.scale(0.85);
     return m;
   };
-  const ivory = mat('robot-ivory', '#e6dfcc'), dark = mat('robot-joint', '#263447');
+  const ivory = mat(type==='welder'?'welder-armor':'robot-ivory', type==='welder'?'#d88b32':'#e6dfcc'), dark = mat('robot-joint', '#263447');
   const black = mat('robot-display', '#071b27'), copper = mat('robot-copper', '#b58c59');
   const silver = mat('robot-silver', '#98a9b3'), cyan = mat('robot-cyan', '#65e9ef', true);
   const amber = mat('robot-amber', '#ffbe5e', true), cloth = mat('robot-pouch', '#454958');
@@ -87,7 +87,7 @@ export function createCharacter(scene: Scene, parent: TransformNode, type: Chara
   round('utility-pouch',-0.3,1.02,0.28,0.24,0.25,0.16,cloth);
   round('pouch-flap',-0.3,1.12,0.375,0.25,0.08,0.025,copper);
   cylinder('neck',0,1.72,0,0.23,0.2,dark);
-  if(type==='robot') {
+  if(type!=='robot-cat') {
     round('robot-head-rim',0,2,0,1.09,0.88,0.79,copper);
     round('robot-head',0,2.025,-0.02,1.04,0.83,0.8,ivory);
     round('robot-screen-rim',0,2,0.36,0.88,0.62,0.13,silver);
@@ -99,8 +99,16 @@ export function createCharacter(scene: Scene, parent: TransformNode, type: Chara
       ball('robot-ear-light',side*0.65,2,-0.025,0.12,amber);
     }
     round('brow-emblem',0,2.42,0.1,0.24,0.035,0.19,copper);
+    if(type==='welder'){
+      round('welding-mask',0,2.01,.49,.92,.72,.16,dark);
+      round('welding-visor-rim',0,2.05,.59,.69,.3,.08,copper);
+      round('welding-visor',0,2.05,.64,.55,.17,.035,cyan);
+      round('welding-filter',0,1.79,.6,.32,.12,.055,silver);
+      for(const side of [-1,1])cylinder('welding-tank',side*.16,1.4,-.53,.23,.58,copper);
+    }else {
     cylinder('antenna',-0.34,2.55,-0.12,0.045,0.45,dark);
     ball('antenna-tip',-0.34,2.79,-0.12,0.095,amber);
+    }
   } else {
     round('cat-head',0,2,0,0.93,0.72,0.72,ivory,0.6);
     round('cat-face',0,2,0.34,0.78,0.43,0.08,dark);
