@@ -1,3 +1,5 @@
+import {unobstructed} from './combat-geometry.ts';
+import {playerName} from './nickname.ts';
 import type {Sound} from './audio.ts';
 import {createMatchPickups} from './match-pickups.ts';
 import {createGear,launchRocket,useEquipment,advanceEquipment,type GearActor,type EquipmentId,type Projectile} from './equipment.ts';
@@ -12,7 +14,7 @@ import { WEAPONS,upgradedWeapon,pelletOffsets,startBurst,advanceBurst,cancelBurs
 import { createBotRules,isSurvivalDifficulty,type SurvivalDifficulty } from './duel.ts';
 import type { Engine } from '@babylonjs/core/Engines/engine.js';
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js';
-import { Vector3, Vector4 } from '@babylonjs/core/Maths/math.vector.js';
+import { Vector3, Vector4,Matrix } from '@babylonjs/core/Maths/math.vector.js';
 import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight.js';
 import { PointLight } from '@babylonjs/core/Lights/pointLight.js';
 import { createShotEffects } from './shot-effects.ts';
@@ -714,7 +716,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
        const groups=new Map<StandardMaterial,Mesh[]>();for(const m of model.meshes){const mat=m.material as StandardMaterial,group=groups.get(mat)??[];group.push(m);groups.set(mat,group);}const body:Mesh[]=[];for(const [mat,group] of groups){const merged=Mesh.MergeMeshes(group,true,true);if(merged){merged.parent=model.root;merged.material=mat;merged.isPickable=false;merged.name='remote-body-'+mat.name;body.push(merged);}}model.meshes.splice(0,model.meshes.length,...body);
        const fx=createRobotImpact(scene,model.root,body,{particleLimit:12});fx.setQuality(onlineQualityHigh);const marker=MeshBuilder.CreateBox('team-marker',{width:.45,height:.07,depth:.1},scene);marker.parent=parent;marker.position.y=2.95;marker.isPickable=false;rig={model,fx,parent,type:other.character,health:other.health,marker};remotes.set(other.id,rig);parent.position.set(other.x,(other.y??0)+other.jump.height,other.z);for(const mesh of body)shadows.addShadowCaster(mesh);
       }
-      if(rig.health===0&&other.health>0){rig.fx.reset();rig.parent.position.set(other.x,(other.y??0)+other.jump.height,other.z);}const target=estimates.get(other.id)??other,factor=1-Math.exp(-dt*35);rig.parent.position.x+=(target.x-rig.parent.position.x)*factor;rig.parent.position.z+=(target.z-rig.parent.position.z)*factor;rig.parent.position.y+=((target.y??other.y??0)+other.jump.height-rig.parent.position.y)*factor;rig.parent.rotation.y+=Math.atan2(Math.sin(other.yaw-rig.parent.rotation.y),Math.cos(other.yaw-rig.parent.rotation.y))*factor;rig.marker.material=me.team!==undefined&&me.team===other.team?friendMat:enemyMat;rig.fx.update(dt);rig.parent.setEnabled(other.connected&&(other.health>0||rig.fx.showingDeath));rig.health=other.health;
+      if(rig.health===0&&other.health>0){rig.fx.reset();rig.parent.position.set(other.x,(other.y??0)+other.jump.height,other.z);}const target=estimates.get(other.id)??other,factor=1-Math.exp(-dt*35);rig.parent.position.x+=(target.x-rig.parent.position.x)*factor;rig.parent.position.z+=(target.z-rig.parent.position.z)*factor;rig.parent.position.y+=((target.y??other.y??0)+other.jump.height-rig.parent.position.y)*factor;rig.parent.rotation.y+=Math.atan2(Math.sin(other.yaw-rig.parent.rotation.y),Math.cos(other.yaw-rig.parent.rotation.y))*factor;rig.marker.material=me.team!==undefined&&me.team===other.team?friendMat:enemyMat;rig.fx.update(dt);rig.parent.setEnabled(other.connected&&other.playing!==false&&(!other.guest||!!other.nickname)&&(other.health>0||rig.fx.showingDeath));rig.health=other.health;
     }
     for(const event of state.events)if(event.id>lastNetworkEvent){lastNetworkEvent=event.id;const from=new Vector3(event.from.x,event.from.y,event.from.z),to=new Vector3(event.to.x,event.to.y,event.to.z);(event.player===id?effects:botEffects).emit(from,to,from.subtract(to).normalize(),true,event.hit);if(event.player===id){recoil.fire(event.weapon);if(event.hit){const rig=event.target?remotes.get(event.target):[...remotes.values()].sort((a,b)=>Vector3.DistanceSquared(a.parent.position,to)-Vector3.DistanceSquared(b.parent.position,to))[0];rig?.fx.hit(to,to.x-rig.parent.position.x,event.killed);}}}
   }
@@ -744,6 +746,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     pickup(p:Point,id:string,replace?:number){if(preview||reference||(battleState().playerHealth===0||!!battleState().winner))return 'unavailable';syncSlot(inventory,weapon,cooldown);const crate=pickups.find(c=>c.id===id);if(crate?.equipmentId)return takeEquipmentPickup(localActor.gear,p,pickups,id)?'added':'unavailable';const result=takePickup(inventory,p,pickups,id,replace);if(result==='added')equip();return result;},
     switchWeapon(slot:number){if(preview||reference||(battleState().playerHealth===0||!!battleState().winner))return false;syncSlot(inventory,weapon,cooldown);if(!switchSlot(inventory,slot))return false;equip();return true;},
     reload,resetPractice,practiceState,
+    onlineNameplates(state:MatchState,id:string){const me=state.players.find(p=>p.id===id);if(!me||me.health<=0)return [];const width=engine.getRenderWidth(),height=engine.getRenderHeight(),viewport=camera.viewport.toGlobal(width,height),transform=camera.getViewMatrix().multiply(camera.getProjectionMatrix());return state.players.filter(p=>p.id!==id&&p.connected&&!p.abandoned&&p.playing!==false&&p.health>0&&(!p.guest||!!p.nickname)).flatMap(p=>{const point=new Vector3(p.x,(p.y??0)+p.jump.height+2.9,p.z);if(Vector3.DistanceSquared(camera.position,point)>60*60||!unobstructed(geometry,doors,{x:camera.position.x,y:camera.position.y,z:camera.position.z},{x:p.x,y:(p.y??0)+p.jump.height+1.8,z:p.z}))return [];const v=Vector3.Project(point,Matrix.Identity(),transform,viewport);if(v.z<0||v.z>1||v.x<0||v.x>width||v.y<0||v.y>height)return [];return [{id:p.id,name:playerName(p),x:v.x/width,y:v.y/height,health:p.health,ally:me.team!==undefined&&me.team===p.team}];});},
     renderOnline,endOnline,
     effectsState:effects.stats,
     impactState:()=>({...robotImpact.stats(),recoil:recoil.read()}),

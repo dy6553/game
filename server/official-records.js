@@ -4,11 +4,11 @@ export function captureOfficialResult(matchId,state,identities,endedAt){
  if(mode==='team'){if(!Number.isInteger(team)||team<0||team>1||state.teamScores?.[team]!==30)return null;}
  else if(!winner||winner.kills!==10)return null;
  if(state.players.some(p=>!Number.isInteger(p.kills)||p.kills<0||p.kills>(mode==='team'?30:10)||!Number.isInteger(p.deaths??0)||(p.deaths??0)<0||(p.deaths??0)>10000))return null;
- const users=state.players.map(p=>identities[p.id]).filter(Boolean);if(!users.length||new Set(users).size!==users.length)return null;
- const rows=state.players.filter(p=>identities[p.id]).map(p=>({subject:identities[p.id],outcome:(mode==='team'?p.team===team:p.id===state.winner)?'win':'loss',kills:p.kills,deaths:mode==='duel'?Math.max(p.deaths??0,state.players.find(o=>o.id!==p.id).kills):p.deaths??0}));
+ const users=state.players.filter(p=>p.participated!==false).map(p=>identities[p.id]).filter(Boolean);if(!users.length||new Set(users).size!==users.length)return null;
+ const rows=state.players.filter(p=>identities[p.id]&&p.participated!==false).map(p=>({subject:identities[p.id],outcome:(mode==='team'?p.team===team:p.id===state.winner)?'win':'loss',kills:p.kills,deaths:mode==='duel'?Math.max(p.deaths??0,state.players.find(o=>o.id!==p.id).kills):p.deaths??0}));
  return {matchId,endedAt,...(mode==='duel'?{}:{mode}),rows};
 }
-export function publicProfile(profile){return {id:profile.id,played:Number(profile.played),wins:Number(profile.wins),recent:profile.recent.map(r=>({endedAt:Number(r.ended_at),outcome:r.outcome,kills:r.kills,deaths:r.deaths,...(r.mode?{mode:r.mode}:{})}))};}
+export function publicProfile(profile){return {id:profile.id,...(profile.nickname?{nickname:profile.nickname}:{}),played:Number(profile.played),wins:Number(profile.wins),recent:profile.recent.map(r=>({endedAt:Number(r.ended_at),outcome:r.outcome,kills:r.kills,deaths:r.deaths,...(r.mode?{mode:r.mode}:{})}))};}
 // Store separately from the room checkpoint, so closing/reusing a room cannot erase delivery.
 const mutations=new WeakMap(),flushes=new WeakMap();
 function atomic(storage,action){const previous=mutations.get(storage)??Promise.resolve();const next=previous.catch(()=>{}).then(action);mutations.set(storage,next);return next;}

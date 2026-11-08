@@ -18,7 +18,7 @@ if(process.argv.includes('--signup')){
  assert.equal(el('account-form').hidden,true);assert.equal(el('account-signup-form').hidden,false);assert.equal(el('account-title').textContent,'회원가입');assert.equal(registrations,0);
  assert.equal(document.activeElement,el('signup-email'));assert.equal(el('signup-password').getAttribute('autocomplete'),'new-password');
  el('signup-password').value='temporary-password';click('account-signup-back');assert.equal(el('account-form').hidden,false);assert.equal(el('account-signup-form').hidden,true);assert.equal(el('signup-password').value,'');
- click('account-signup');el('signup-email').value='new@example.com';el('signup-password').value='password';
+ click('account-signup');el('signup-nickname').value='가입대원';el('signup-email').value='new@example.com';el('signup-password').value='password';
  el('account-signup-form').dispatchEvent(new window.Event('submit',{bubbles:true,cancelable:true}));await settle();
  assert.equal(registrations,1);assert.equal(el('account-profile').hidden,false);assert.equal(el('account-signup-form').hidden,true);assert.equal(el('signup-password').value,'');
  click('account-signout');await settle();assert.equal(el('account-form').hidden,false);assert.equal(el('account-signup-form').hidden,true);

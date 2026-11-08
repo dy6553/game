@@ -23,7 +23,7 @@ test('room cleanup preserves pending official writes and does not leak identitie
 });
 test('a guest cannot choose another account ID when reserving a room',async()=>{
  let forwarded;const env={ALLOWED_ORIGINS:'https://game.test',LOBBY:{idFromName(){},get(){return {async fetch(request){forwarded=await request.json();return Response.json({code:'1234ABCD'});}};}}};
- const response=await worker.fetch(new Request('https://worker/session',{method:'POST',headers:{Origin:'https://game.test'},body:JSON.stringify({action:'create',accountSubject:'victim',userId:'victim'})}),env);
+ const response=await worker.fetch(new Request('https://worker/session',{method:'POST',headers:{Origin:'https://game.test'},body:JSON.stringify({action:'create',nickname:'검사대원',accountSubject:'victim',userId:'victim'})}),env);
  assert.equal(response.status,200);assert.equal(forwarded.accountSubject,undefined);assert.equal(forwarded.userId,undefined);
 });
 test('account deletion requires a verified login before opening the DB',async()=>{
@@ -49,3 +49,6 @@ test('factory room checks actual room map for joining and preserves map in check
  assert.equal((await reserve({map:'harbor',accountSubject:'b',accountLevel:1})).status,403,'joining an unlocked map checks actual room regardless of requested map');
  assert.equal((await reserve({map:'harbor',accountSubject:'b',accountLevel:3})).status,200);
 });
+
+test('nickname saving requires verified login before accessing the database',async()=>{const env={ALLOWED_ORIGINS:'https://game.test',ACCOUNTS_ENABLED:'true'};const r=await worker.fetch(new Request('https://worker/account/nickname',{method:'POST',headers:{Origin:'https://game.test'},body:JSON.stringify({nickname:'남의이름',subject:'victim'})}),env);assert.equal(r.status,401);assert.equal(r.headers.get('Access-Control-Allow-Origin'),'https://game.test');});
+test('guest sessions reject missing or unsafe display names before room reservation',async()=>{let reserved=false;const env={ALLOWED_ORIGINS:'https://game.test',LOBBY:{idFromName(){},get(){return {fetch(){reserved=true;return Response.json({});}};}}};for(const nickname of [undefined,'<script>','a@example.com']){const r=await worker.fetch(new Request('https://worker/session',{method:'POST',headers:{Origin:'https://game.test'},body:JSON.stringify({action:'create',nickname})}),env);assert.equal(r.status,400);}assert.equal(reserved,false);});

@@ -1,6 +1,8 @@
 import {neon} from '@neondatabase/serverless';
 import migration from './growth-schema.js';
 import adminMigration from './admin-schema.js';
+import nicknameMigration from './nickname-schema.js';
+import {normalizeNickname} from '../src/nickname.ts';
 import multiplayerMigration from './multiplayer-schema.js';
 import {createAdminStore} from './admin-levels.js';
 import {growth,reward} from '../src/progression.ts';
@@ -11,11 +13,12 @@ export function createRecordStore(env,database){
  if(!database&&!env.DATABASE_URL)throw Error('Database is not configured');
  const sql=database??neon(env.DATABASE_URL,{fetchOptions:{signal:AbortSignal.timeout(10000)}});
  async function prepare(){
-  if(!preparations.has(env))preparations.set(env,sql.transaction([...(migration+adminMigration).split(';').map(s=>s.trim()).filter(Boolean).map(s=>sql.query(s)),...multiplayerMigration.map(s=>sql.query(s))]).catch(error=>{preparations.delete(env);throw error;}));
+  if(!preparations.has(env))preparations.set(env,sql.transaction([...(migration+adminMigration).split(';').map(s=>s.trim()).filter(Boolean).map(s=>sql.query(s)),...[...multiplayerMigration,...nicknameMigration].map(s=>sql.query(s))]).catch(error=>{preparations.delete(env);throw error;}));
   await preparations.get(env);
  }
  const admin=createAdminStore(sql);
  return {
+  async setNickname(subject,value){const nickname=normalizeNickname(value);if(!nickname)throw Error('Invalid nickname');await prepare();await this.account(subject);const rows=await sql`UPDATE harbor.profiles p SET nickname=${nickname} FROM neon_auth."user" u WHERE p.subject=${subject} AND u.id::text=p.subject RETURNING p.id`;if(!rows.length)throw Error('Account no longer exists');return this.account(subject);},
   async isAdmin(subject){await prepare();return admin.isAdmin(subject);},
   async adminFind(subject,email){await prepare();return admin.find(subject,email);},
   async adminEdit(subject,body){await prepare();return admin.edit(subject,body);},
@@ -49,7 +52,7 @@ export function createRecordStore(env,database){
   },
   async profile(id){
    await prepare();
-   const rows=await sql`SELECT p.id,p.played,p.wins,
+   const rows=await sql`SELECT p.id,p.played,p.wins,p.nickname,
     COALESCE((SELECT jsonb_agg(r ORDER BY r.ended_at DESC,r.match_id DESC)
      FROM (SELECT ended_at,outcome,kills,deaths,match_id,mode FROM harbor.recent
       WHERE profile_id=p.id ORDER BY ended_at DESC,match_id DESC LIMIT 20) r),'[]'::jsonb) AS recent

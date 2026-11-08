@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
-import { createNetworkGame,onlinePlaying } from '../src/network-game.ts';
+import { createNetworkGame,onlinePlaying,normalizeNickname } from '../src/network-game.ts';
 import {createIdentityVerifier} from './account-auth.js';
 import {captureOfficialResult,createResultOutbox} from './official-records.js';
 import {createRecordStore} from './record-store.js';
@@ -10,8 +10,8 @@ const code=()=>crypto.randomUUID().replaceAll('-','').slice(0,8).toUpperCase();
 export class Room extends DurableObject {
  accounts={};matchId=crypto.randomUUID();officialQueued=false;recording=null;closing=null;
  game=createNetworkGame();sessions={};sockets=new Map();timer=null;last=Date.now();disconnectedAt=0;startedAt=0;finishedAt=0;matchStarted=false;packets=new WeakMap();disconnects={};idleSince=0;
- constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;ctx.blockConcurrencyWhile(async()=>{const saved=await ctx.storage.get('checkpoint');if(saved){this.game=createNetworkGame(saved.state);this.accounts=saved.accounts??{};this.disconnects=saved.disconnects??{};this.idleSince=saved.idleSince??0;this.matchId=saved.matchId??this.matchId;this.officialQueued=saved.officialQueued??false;this.sessions=saved.sessions;this.last=saved.last;this.startedAt=saved.startedAt??saved.last;this.finishedAt=saved.finishedAt??0;this.matchStarted=saved.matchStarted??saved.state.players.length===2;this.disconnectedAt=(this.game.state.mode??'duel')==='duel'?(saved.disconnectedAt||saved.last):0;if(this.game.state.mode!=='duel')for(const p of this.game.state.players)if(!p.abandoned)this.disconnects[p.id]??=saved.last;}});}
- async save(){await this.ctx.storage.put('checkpoint',{state:this.game.state,disconnects:this.disconnects,idleSince:this.idleSince,accounts:this.accounts,matchId:this.matchId,officialQueued:this.officialQueued,sessions:this.sessions,last:this.last,startedAt:this.startedAt,finishedAt:this.finishedAt,matchStarted:this.matchStarted,disconnectedAt:this.disconnectedAt});}
+ constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;ctx.blockConcurrencyWhile(async()=>{const saved=await ctx.storage.get('checkpoint');if(saved){this.game=createNetworkGame(saved.state);this.accounts=saved.accounts??{};this.disconnects=saved.disconnects??{};this.idleSince=saved.idleSince??0;this.matchId=saved.matchId??this.matchId;this.officialQueued=saved.officialQueued??false;this.sessions=saved.sessions;this.last=saved.last;this.startedAt=saved.startedAt??saved.last;this.finishedAt=saved.finishedAt??0;this.matchStarted=saved.matchStarted??saved.state.players.length===2;this.disconnectedAt=(this.game.state.mode??'duel')==='duel'&&this.game.state.phase!=='waiting'?(saved.disconnectedAt||saved.last):0;if(this.game.state.mode!=='duel'||this.game.state.phase==='waiting')for(const p of this.game.state.players)if(!p.abandoned)this.disconnects[p.id]??=saved.last;}});}
+ async save(){await this.ctx.storage.put('checkpoint',{state:this.game.checkpoint(),disconnects:this.disconnects,idleSince:this.idleSince,accounts:this.accounts,matchId:this.matchId,officialQueued:this.officialQueued,sessions:this.sessions,last:this.last,startedAt:this.startedAt,finishedAt:this.finishedAt,matchStarted:this.matchStarted,disconnectedAt:this.disconnectedAt});}
  outbox(){return createResultOutbox(this.ctx.storage,event=>createRecordStore(this.env).write(event));}
  async queueResult(){
   if(this.recording)return this.recording;if(this.officialQueued)return;
@@ -30,9 +30,9 @@ export class Room extends DurableObject {
    const input=await request.json(),id=crypto.randomUUID(),token=crypto.randomUUID();
    const map=this.game.state.players.length?this.game.state.map:(input.map==='factory'?'factory':'harbor');
    if(map==='factory'&&(!input.accountSubject||!(input.accountLevel>=3)))return json({error:'폐공장은 로그인 후 Lv3에 해금됩니다.'},403);
-   if(!this.game.state.players.length)this.game=createNetworkGame(undefined,map,{mode:input.mode??'duel',randomPickups:true});
+   if(!this.game.state.players.length)this.game=createNetworkGame(undefined,map,{mode:input.mode??'duel',randomPickups:true,waitingRoom:true});
    if(input.accountSubject&&Object.values(this.accounts).includes(input.accountSubject))return json({error:'같은 계정으로 양쪽에 입장할 수 없습니다.'},409);
-   const p=this.game.join(id,input.weapon,input.character);if(input.accountSubject)this.accounts[id]=input.accountSubject;p.connected=false;this.sessions[token]=id;this.last=Date.now();await this.save();await this.ctx.storage.setAlarm(Date.now()+120000);return json({id,token,mode:this.game.state.mode,players:this.game.state.players.length,capacity:this.game.state.capacity,accepting:this.game.state.players.length<this.game.state.capacity});
+   const p=this.game.join(id,input.weapon,input.character,{nickname:normalizeNickname(input.nickname)??'대원',guest:!input.accountSubject});if(input.accountSubject)this.accounts[id]=input.accountSubject;p.connected=false;this.disconnects[id]=Date.now();this.sessions[token]=id;this.last=Date.now();await this.save();await this.ctx.storage.setAlarm(Date.now()+120000);return json({id,token,mode:this.game.state.mode,players:this.game.state.players.length,capacity:this.game.state.capacity,phase:this.game.state.phase,accepting:this.game.state.players.length<this.game.state.capacity});
   });
   if(request.headers.get('Upgrade')!=='websocket')return json({error:'WebSocket required'},426);
   const pair=new WebSocketPair(),client=pair[0],server=pair[1];server.accept();
@@ -48,21 +48,25 @@ export class Room extends DurableObject {
      server.send(JSON.stringify({type:'welcome',id,state:this.game.state}));this.start();return;
     }
     const now=Date.now(),rate=this.packets.get(server)??{at:now,count:0};if(now-rate.at>1000){rate.at=now;rate.count=0;}if(++rate.count>80){server.close(1008,'전송 속도 초과');return;}this.packets.set(server,rate);
+    if(msg.type==='start'){if(!this.game.startMatch(id))server.send(JSON.stringify({type:'room-error',reason:'방장만 시작할 수 있으며, 연결된 참가자가2명 이상이어야 합니다.'}));else this.matchStarted=true;this.ctx.waitUntil(this.save());this.broadcast();}
+    if(msg.type==='deploy'){this.game.deploy(id);this.ctx.waitUntil(this.save());this.broadcast();}
+    if(msg.type==='nickname'){if(!this.game.setGuestNickname(id,msg.nickname))server.send(JSON.stringify({type:'room-error',reason:'닉네임을2~16자로 입력하세요.'}));this.broadcast();}
     if(msg.type==='input')this.game.input(id,msg.command);
-    if(msg.type==='leave'){if((this.game.state.mode??'duel')==='duel')this.closeRoom('상대가 방을 나갔습니다.');else{this.game.abandon(id);delete this.disconnects[id];for(const token of Object.keys(this.sessions))if(this.sessions[token]===id)delete this.sessions[token];server.send(JSON.stringify({type:'closed',reason:'방을 나왔습니다.'}));server.close(1000,'나가기');}}
+    if(msg.type==='leave'){if((this.game.state.mode??'duel')==='duel'&&this.game.state.phase!=='waiting')this.closeRoom('상대가 방을 나갔습니다.');else{if(this.game.state.phase==='waiting'){this.game.leaveWaiting(id);delete this.accounts[id];}else this.game.abandon(id);delete this.disconnects[id];for(const token of Object.keys(this.sessions))if(this.sessions[token]===id)delete this.sessions[token];server.send(JSON.stringify({type:'closed',reason:'방을 나왔습니다.'}));server.close(1000,'나가기');this.broadcast();}}
 
    }catch{server.close(1008,'잘못된 메시지');}
   });
-  const close=()=>{clearTimeout(timeout);const id=this.sockets.get(server);this.sockets.delete(server);if(id){this.game.disconnect(id);if((this.game.state.mode??'duel')==='duel')this.disconnectedAt ||=Date.now();else if(!this.game.state.players.find(p=>p.id===id)?.abandoned)this.disconnects[id]=Date.now();this.last=Date.now();this.ctx.waitUntil(Promise.all([this.save(),this.ctx.storage.setAlarm(Date.now()+30000)]));}if(!this.sockets.size)this.stop();};
+  let socketClosed=false;const close=()=>{if(socketClosed)return;socketClosed=true;try{server.close(1000,'연결 종료');}catch{}clearTimeout(timeout);const id=this.sockets.get(server);this.sockets.delete(server);if(id){this.game.disconnect(id);if((this.game.state.mode??'duel')==='duel'&&this.game.state.phase!=='waiting')this.disconnectedAt ||=Date.now();else if(!this.game.state.players.find(p=>p.id===id)?.abandoned)this.disconnects[id]=Date.now();this.last=Date.now();this.broadcast();this.ctx.waitUntil(Promise.all([this.save(),this.ctx.storage.setAlarm(Date.now()+30000)]));}if(!this.sockets.size)this.stop();};
   server.addEventListener('close',close);server.addEventListener('error',close);
   return new Response(null,{status:101,webSocket:client});
  }
- expirePlayers(){for(const [id,at] of Object.entries(this.disconnects))if(Date.now()-at>=30000){this.game.abandon(id);delete this.disconnects[id];for(const token of Object.keys(this.sessions))if(this.sessions[token]===id)delete this.sessions[token];}}
+ broadcast(){const packet=JSON.stringify({type:'state',state:this.game.state});for(const socket of this.sockets.keys())try{socket.send(packet);}catch{}}
+ expirePlayers(){for(const [id,at] of Object.entries(this.disconnects))if(Date.now()-at>=30000){if(this.game.state.phase==='waiting'){this.game.leaveWaiting(id);delete this.accounts[id];}else this.game.abandon(id);delete this.disconnects[id];for(const token of Object.keys(this.sessions))if(this.sessions[token]===id)delete this.sessions[token];}}
  start(){if(this.timer)return;if(!this.startedAt)this.startedAt=Date.now();let ticks=0;this.timer=setInterval(()=>{
   if((this.game.state.mode??'duel')==='duel'&&this.disconnectedAt&&Date.now()-this.disconnectedAt>30000){this.closeRoom('상대 연결을 복구하지 못해 경기를 종료했습니다.');return;}
   if(this.game.state.winner){if(!this.finishedAt)this.finishedAt=Date.now();if(Date.now()-this.finishedAt>60000){this.closeRoom('경기가 종료되었습니다.');return;}}
-  if(!this.matchStarted&&Date.now()-this.startedAt>((this.game.state.mode??'duel')==='duel'?120000:600000)){this.closeRoom('대기 시간이 지나 방을 닫았습니다.');return;}
-  if((this.game.state.mode??'duel')==='duel'){if(this.game.state.players.length===2&&this.game.state.players.every(p=>p.connected))this.matchStarted=true;}else{this.expirePlayers();this.matchStarted=!!this.game.state.started;if(this.matchStarted&&!this.game.state.winner&&!onlinePlaying(this.game.state)){this.idleSince ||=Date.now();if(Date.now()-this.idleSince>120000){this.closeRoom('참가 인원이 부족해 경기를 종료했습니다.');return;}}else this.idleSince=0;}
+  if(!this.matchStarted&&Date.now()-this.startedAt>((this.game.state.mode??'duel')==='duel'&&!this.game.state.phase?120000:600000)){this.closeRoom('대기 시간이 지나 방을 닫았습니다.');return;}
+  this.expirePlayers();if((this.game.state.mode??'duel')==='duel'){if(this.game.state.phase)this.matchStarted=!!this.game.state.started;else if(this.game.state.players.length===2&&this.game.state.players.every(p=>p.connected))this.matchStarted=true;}else{this.expirePlayers();this.matchStarted=!!this.game.state.started;if(this.matchStarted&&!this.game.state.winner&&!onlinePlaying(this.game.state)){this.idleSince ||=Date.now();if(Date.now()-this.idleSince>120000){this.closeRoom('참가 인원이 부족해 경기를 종료했습니다.');return;}}else this.idleSince=0;}
   this.game.step();if(this.game.state.winner)this.ctx.waitUntil(this.queueResult());this.last=Date.now();const packet=JSON.stringify({type:'state',state:this.game.state});
   for(const socket of this.sockets.keys())try{socket.send(packet);}catch{socket.close();}
   if(++ticks%40===0)this.ctx.waitUntil(this.save());
@@ -80,7 +84,7 @@ export class Lobby extends DurableObject {
   const body=await request.json();let roomCode=body.code?.toUpperCase();
   if(body.action==='join'&&!/^[0-9A-F]{8}$/.test(roomCode??''))return json({error:'방 코드 8자리를 확인해 주세요.'},400);
   const waitingKey=(body.mode??'duel')==='duel'?(body.map==='factory'?'waiting-factory':'waiting'):`waiting:${body.mode}:${body.map}`;
-  if(body.action==='quick'){const pending=await this.ctx.storage.get(waitingKey);if(pending&&now-pending.at<60000)roomCode=pending.code;await this.ctx.storage.delete(waitingKey);}
+  if(body.action==='quick'){const pending=await this.ctx.storage.get(waitingKey);if(pending&&now-pending.at<(pending.phase==='waiting'?600000:60000))roomCode=pending.code;await this.ctx.storage.delete(waitingKey);}
   if(!roomCode)roomCode=code();
   const hint=request.headers.get('X-Harbor-Location');
   let stub=this.env.ROOMS.get(this.env.ROOMS.idFromName(roomCode),hint?{locationHint:hint}:undefined);
@@ -90,7 +94,7 @@ export class Lobby extends DurableObject {
   let reservation=await stub.fetch('https://room/reserve',{method:'POST',body:JSON.stringify(body)});
   if(body.action==='quick'&&reservation.status===409){roomCode=code();known=undefined;stub=this.env.ROOMS.get(this.env.ROOMS.idFromName(roomCode),hint?{locationHint:hint}:undefined);reservation=await stub.fetch('https://room/reserve',{method:'POST',body:JSON.stringify(body)});}
   const session=await reservation.json();if(!reservation.ok)return json(session,reservation.status);
-  await this.ctx.storage.put('room:'+roomCode,{at:now,ttl:(session.mode??body.mode??'duel')==='duel'?120000:600000});if(body.action==='quick'&&(session.accepting??!known))await this.ctx.storage.put(waitingKey,{code:roomCode,at:now});
+  await this.ctx.storage.put('room:'+roomCode,{at:now,ttl:session.phase?600000:(session.mode??body.mode??'duel')==='duel'?120000:600000});if(body.action==='quick'&&(session.accepting??!known))await this.ctx.storage.put(waitingKey,{code:roomCode,at:now,phase:session.phase});
   await this.ctx.storage.setAlarm(now+180000);return json({...session,code:roomCode});
  });}
  async alarm(){const rooms=await this.ctx.storage.list({prefix:'room:'});for(const [key,at] of rooms)if(Date.now()-(typeof at==='number'?at:at.at)>(at.ttl??120000))await this.ctx.storage.delete(key);await this.ctx.storage.delete('waiting');await this.ctx.storage.delete('waiting-factory');const waiting=await this.ctx.storage.list({prefix:'waiting:'});for(const [key,v] of waiting)if(Date.now()-v.at>600000)await this.ctx.storage.delete(key);}
@@ -111,14 +115,17 @@ export default {async fetch(request,env){
    if(response){const result=new Response(response.body,response);for(const [key,value] of Object.entries(headers))result.headers.set(key,value);return result;}
    delete body.accountSubject;delete body.userId;delete body.accountLevel;
    body.map=body.map==='factory'?'factory':'harbor';body.mode=['duel','ffa','team'].includes(body.mode)?body.mode:'duel';
-   if(subject){if(env.ACCOUNTS_ENABLED!=='true')throw Error('Accounts not ready');await createRecordStore(env).account(subject);body.accountSubject=subject;body.accountLevel=(await createRecordStore(env).progression(subject)).level;}
+   if(subject){if(env.ACCOUNTS_ENABLED!=='true')throw Error('Accounts not ready');const profile=await createRecordStore(env).account(subject);body.nickname=profile.nickname;body.accountSubject=subject;body.accountLevel=(await createRecordStore(env).progression(subject)).level;}
    if(body.action!=='join'&&body.map==='factory'&&(!subject||body.accountLevel<3)){const denied=json({error:'폐공장은 로그인 후 Lv3에 해금됩니다.'},403);for(const [key,value] of Object.entries(headers))denied.headers.set(key,value);return denied;}
    if(body.character==='welder'&&(!subject||body.accountLevel<3)){
     const denied=json({error:'용접 로봇은 로그인 후 Lv3에 해금됩니다.'},403);for(const [key,value] of Object.entries(headers))denied.headers.set(key,value);return denied;
    }
+   body.nickname=normalizeNickname(body.nickname);if(!body.nickname){const denied=json({error:'온라인 입장 전에 닉네임을2~16자로 설정하세요.'},400);for(const [k,v] of Object.entries(headers))denied.headers.set(k,v);return denied;}
    const forwarded=new Headers(request.headers);forwarded.delete('Authorization');forwarded.delete('X-Harbor-Location');
    const hints={AS:'apac',OC:'oc',NA:'wnam',SA:'sam',EU:'weur',AF:'afr'};const hint=hints[request.cf?.continent];if(hint)forwarded.set('X-Harbor-Location',hint);
    response=await env.LOBBY.get(env.LOBBY.idFromName('public')).fetch(new Request('https://lobby/',{method:'POST',body:JSON.stringify(body),headers:forwarded}));
+  }else if(url.pathname==='/account/nickname'&&request.method==='POST'){
+   if(env.ACCOUNTS_ENABLED!=='true')throw Error('Accounts not ready');let subject;try{subject=await createIdentityVerifier(env)(request);}catch{}if(!subject)response=json({error:'로그인이 필요합니다.'},401);else{const text=await request.text();if(text.length>256)response=json({error:'닉네임이 너무 깁니다.'},400);else{const name=normalizeNickname(JSON.parse(text).nickname);response=name?json(await createRecordStore(env).setNickname(subject,name)):json({error:'닉네임은2~16자 한글·영문·숫자·공백·_-로 입력하세요.'},400);}}
   }else if(['/admin/players/find','/admin/players/level'].includes(url.pathname)&&request.method==='POST'){
    if(env.ACCOUNTS_ENABLED!=='true')throw Error('Accounts not ready');
    let subject;try{subject=await createIdentityVerifier(env)(request);}catch{}

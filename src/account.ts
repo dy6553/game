@@ -1,13 +1,15 @@
+import {normalizeNickname} from './nickname.ts';
 import type {Growth} from './progression.ts';
 type AuthReply={data?:{user?:{id:string};session?:{token:string}}|null;error?:{message?:string}|null};
 export type AuthSDK={getSession():Promise<AuthReply>;signIn:{email(body:{email:string;password:string}):Promise<unknown>};signUp:{email(body:{email:string;password:string;name:string}):Promise<unknown>};signOut():Promise<unknown>};
-export type OfficialProfile={admin?:boolean;growth?:Growth;id:string;played:number;wins:number;recent:{mode?:'duel'|'ffa'|'team';endedAt:number;outcome:'win'|'loss';kills:number;deaths:number}[]};
+export type OfficialProfile={nickname?:string;admin?:boolean;growth?:Growth;id:string;played:number;wins:number;recent:{mode?:'duel'|'ffa'|'team';endedAt:number;outcome:'win'|'loss';kills:number;deaths:number}[]};
 function checked(reply:unknown){if(reply&&typeof reply==='object'&&'error' in reply&&reply.error)throw Error('로그인 요청을 완료하지 못했습니다. 입력 내용과 연결을 확인하세요.');}
 export function createAccount(sdk:AuthSDK,fetcher:typeof fetch,endpoint:string){
  let profile:OfficialProfile|null=null,operation=0,signedOut=false;
  async function token(){if(signedOut)return null;const reply=await sdk.getSession();checked(reply);if(!reply.data?.user){profile=null;return null;}const jwt=reply.data.session?.token;if(!jwt||jwt.split('.').length!==3)throw Error('로그인 세션을 확인하지 못했습니다. 다시 로그인하세요.');return jwt;}
  return {
   get profile(){return profile;},token,
+  async setNickname(value:string){const nickname=normalizeNickname(value),owner=profile?.id,jwt=await token();if(!nickname)throw Error('닉네임을2~16자로 입력하세요.');if(!owner||!jwt)throw Error('로그인이 필요합니다.');const ticket=operation;const response=await fetcher(endpoint.replace(/\/$/,'')+'/account/nickname',{method:'POST',headers:{Authorization:'Bearer '+jwt,'Content-Type':'application/json'},body:JSON.stringify({nickname}),signal:AbortSignal.timeout(10000)});if(!response.ok)throw Error('닉네임을 저장하지 못했습니다. 다시 시도하세요.');const data=await response.json() as OfficialProfile;if(ticket===operation&&profile?.id===owner)profile=data;else throw Error('로그인 계정이 변경되었습니다.');},
   async adminRequest(path:'/admin/players/find'|'/admin/players/level',body:unknown){
    const owner=profile?.id,jwt=await token();if(!owner||!jwt)throw Error('로그인이 필요합니다.');
    const response=await fetcher(endpoint.replace(/\/$/,'')+path,{method:'POST',headers:{Authorization:'Bearer '+jwt,'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(15000)});
@@ -25,7 +27,7 @@ export function createAccount(sdk:AuthSDK,fetcher:typeof fetch,endpoint:string){
    if(!response.ok)throw Error('공식 전적에 연결하지 못했습니다. 잠시 후 다시 시도하세요.');const data=await response.json() as OfficialProfile;if(ticket===operation)profile=data;
   },
   async signIn(email:string,password:string){checked(await sdk.signIn.email({email,password}));signedOut=false;await this.refresh();if(!profile)throw Error('로그인 쿠키를 확인하지 못했습니다. 일반 브라우저에서 다시 시도하세요.');},
-  async signUp(email:string,password:string){checked(await sdk.signUp.email({email,password,name:'항구 대원'}));signedOut=false;await this.refresh();if(!profile)throw Error('이메일 인증이 필요하면 받은 편지함을 확인한 뒤 로그인하세요.');},
+  async signUp(email:string,password:string,nickname?:string){const name=nickname===undefined?'항구 대원':normalizeNickname(nickname);if(!name)throw Error('닉네임을2~16자로 입력하세요.');checked(await sdk.signUp.email({email,password,name}));signedOut=false;await this.refresh();if(!profile)throw Error('이메일 인증이 필요하면 받은 편지함을 확인한 뒤 로그인하세요.');if(nickname!==undefined)await this.setNickname(name);},
   async signOut(){checked(await sdk.signOut());operation++;profile=null;signedOut=true;},
   async remove(password:string){
    if(password.length<8||password.length>128)throw Error('비밀번호를 입력하세요.');const jwt=await token();if(!jwt)throw Error('로그인이 필요합니다.');
