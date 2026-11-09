@@ -173,7 +173,7 @@ console.log('PASS: online inventory touch requests reach the command queue once'
 scopeGame.state.players[0].health=0;qa.emitOnline(structuredClone(scopeGame.state),'me');frame();assert.equal(el('scope').disabled,true);const deadScope=scoped;pointer('scope','pointerdown',{pointerId:43,pointerType:'touch',button:0});assert.equal(scoped,deadScope,'dead online player cannot toggle scope');click('home-open');
 console.log('PASS: online scope readiness, pressed state and death guard');
 
-click('home-settings');frame();assert.equal(el('environment-panel').hidden,false);assert.ok(el('environment-panel').contains(el('graphics-quality')));assert.ok(el('environment-panel').contains(el('look-sensitivity')));assert.ok(el('environment-panel').contains(el('audio-master')));choose('frame-target','30');choose('graphics-quality','low');assert.ok(Math.abs(calls.scaling-1/.6)<.001,'low quality lowers render resolution');el('shadows-enabled').checked=false;el('shadows-enabled').dispatchEvent(new window.Event('change',{bubbles:true}));assert.equal(calls.shadows,false);assert.equal(JSON.parse(storage.get('harbor-environment-v1')).fps,30);click('settings-tab-controls');el('mouse-sensitivity').value='150';el('mouse-sensitivity').dispatchEvent(new window.Event('input',{bubbles:true}));assert.equal(el('mouse-sensitivity-value').textContent,'1.50배');choose('jump-key','KeyJ');click('settings-tab-interface');choose('hud-size','large');choose('crosshair-color','green');el('controls-opacity').value='60';el('controls-opacity').dispatchEvent(new window.Event('input',{bubbles:true}));assert.equal(document.documentElement.style.getPropertyValue('--touch-opacity'),'0.6');const drawsWhileOpen=calls.draws??0;frame(50);assert.equal(calls.draws??0,drawsWhileOpen,'settings panel suspends covered 3D draws');click('environment-close');const drawsBefore=calls.draws??0;for(let i=0;i<12;i++)frame(1000/60);assert.ok((calls.draws??0)-drawsBefore<=7,'30 FPS caps draws while the main update loop continues');const recordsBeforeReset=storage.get('harbor-match-results-v1');click('home-settings');click('environment-reset');assert.equal(JSON.parse(storage.get('harbor-environment-v1')).fps,60);assert.equal(storage.get('harbor-match-results-v1'),recordsBeforeReset,'reset must preserve all match records');assert.equal(el('look-sensitivity').value,'100');assert.equal(el('controls-opacity').value,'100');assert.equal(el('audio-master').value,'70');click('environment-close');assert.equal(Boolean(el('home-screen').inert),false);console.log('PASS: unified settings tabs, FPS draw cap, graphics/shadows, input/UI persistence, reset preserves game data and modal focus recovery');
+click('home-settings');frame();assert.equal(el('environment-panel').hidden,false);assert.ok(el('environment-panel').contains(el('graphics-quality')));assert.ok(el('environment-panel').contains(el('look-sensitivity')));assert.ok(el('environment-panel').contains(el('audio-master')));choose('frame-target','30');choose('graphics-quality','low');assert.ok(Math.abs(calls.scaling-1/.7)<.001,'low quality lowers render resolution');el('shadows-enabled').checked=false;el('shadows-enabled').dispatchEvent(new window.Event('change',{bubbles:true}));assert.equal(calls.shadows,false);assert.equal(JSON.parse(storage.get('harbor-environment-v1')).fps,30);click('settings-tab-controls');el('mouse-sensitivity').value='150';el('mouse-sensitivity').dispatchEvent(new window.Event('input',{bubbles:true}));assert.equal(el('mouse-sensitivity-value').textContent,'1.50배');choose('jump-key','KeyJ');click('settings-tab-interface');choose('hud-size','large');choose('crosshair-color','green');el('controls-opacity').value='60';el('controls-opacity').dispatchEvent(new window.Event('input',{bubbles:true}));assert.equal(document.documentElement.style.getPropertyValue('--touch-opacity'),'0.6');const drawsWhileOpen=calls.draws??0;frame(50);assert.equal(calls.draws??0,drawsWhileOpen,'settings panel suspends covered 3D draws');click('environment-close');const drawsBefore=calls.draws??0;for(let i=0;i<12;i++)frame(1000/60);assert.ok((calls.draws??0)-drawsBefore<=7,'30 FPS caps draws while the main update loop continues');const recordsBeforeReset=storage.get('harbor-match-results-v1');click('home-settings');click('environment-reset');assert.equal(JSON.parse(storage.get('harbor-environment-v1')).fps,60);assert.equal(storage.get('harbor-match-results-v1'),recordsBeforeReset,'reset must preserve all match records');assert.equal(el('look-sensitivity').value,'100');assert.equal(el('controls-opacity').value,'100');assert.equal(el('audio-master').value,'70');click('environment-close');assert.equal(Boolean(el('home-screen').inert),false);console.log('PASS: unified settings tabs, FPS draw cap, graphics/shadows, input/UI persistence, reset preserves game data and modal focus recovery');
 click('home-online');click('home-start');click('online-create');await new Promise(r=>setImmediate(r));if(!el('nickname-dialog').hidden){el('online-nickname').value='프레임대원';el('nickname-form').dispatchEvent(new window.Event('submit',{bubbles:true,cancelable:true}));await new Promise(r=>setImmediate(r));await new Promise(r=>setImmediate(r));}const cappedOnline=createNetworkGame();cappedOnline.join('me');cappedOnline.join('foe');qa.emitOnline(structuredClone(cappedOnline.state),'me');frame();click('environment-open');click('settings-tab-graphics');choose('frame-target','30');click('environment-close');const commandsBeforeCap=calls.networkCommands.length,drawsBeforeCap=calls.draws;for(let i=0;i<60;i++)frame(1000/60);const sentAt30=calls.networkCommands.length-commandsBeforeCap;assert.ok(sentAt30>=19&&sentAt30<=21,'online input remains20Hz with30FPS draw target');assert.ok(calls.draws-drawsBeforeCap<=31,'online scene obeys30FPS target');click('home-open');console.log('PASS: 30FPS draw limit preserves the online20Hz command schedule');
 
 // Recommended presets are explicit actions and preserve unrelated preferences and records.
@@ -197,7 +197,7 @@ if(process.argv.includes('--online-event-loss')){
   game.step();
   const shot=structuredClone(game.state);
   assert.equal(shot.players[0].weapon.ammo,11,'the authoritative server consumed one bullet');
-  assert.equal(shot.players[1].health,75,'the authoritative server applied the hit');
+  assert.equal(shot.players[1].health,62.5,'the authoritative server applied the hit');
   assert.equal(shot.events.length,1,'the server emitted a shot event');
   assert.equal(shot.events[0].hit,true);
   return shot;
@@ -206,7 +206,7 @@ if(process.argv.includes('--online-event-loss')){
   const {game,rendered}=prepare(),shot=fire(game);
   qa.emitOnline(shot,'me');frame(100);
   assert.ok(rendered.some(s=>s.events.some(e=>e.id===shot.events[0].id)));
-  assert.equal(el('shot-feedback').textContent,'명중');
+  assert.equal(el('shot-feedback').textContent,'헤드샷');
   assert.equal(el('shot-feedback').hidden,false);
  });
  await test('a shot followed by an empty snapshot before rendering still reaches the renderer',()=>{
@@ -215,14 +215,14 @@ if(process.argv.includes('--online-event-loss')){
   const latest=structuredClone(game.state);assert.equal(latest.events.length,0);
   qa.emitOnline(latest,'me');frame(100);
   assert.equal(rendered.at(-1).tick,latest.tick,'rendering uses the newest authoritative state');
-  assert.equal(rendered.at(-1).players[1].health,75,'damage is preserved independently of effects');
+  assert.equal(rendered.at(-1).players[1].health,62.5,'damage is preserved independently of effects');
   assert.ok(rendered.some(s=>s.events.some(e=>e.id===shot.events[0].id)),
    'the confirmed shot must reach the renderer even when two snapshots arrive between draws');
  });
  await test('a confirmed hit followed by an empty snapshot before rendering still updates the hit HUD',()=>{
   const {game}=prepare(),shot=fire(game);
   qa.emitOnline(shot,'me');game.step();qa.emitOnline(structuredClone(game.state),'me');frame(100);
-  assert.equal(el('shot-feedback').textContent,'명중','the confirmed hit feedback must survive until a draw');
+  assert.equal(el('shot-feedback').textContent,'헤드샷','the confirmed hit feedback must survive until a draw');
   assert.equal(el('shot-feedback').hidden,false,'the confirmed hit feedback must be visible');
  });
 }
@@ -249,7 +249,7 @@ if(process.argv.includes('--frame-pacing')){
   let rendered;world.renderOnline=state=>rendered=state;
   click('environment-close');frame(100);
   assert.equal(rendered.players[0].weapon.ammo,11,'newest authoritative state survives settings');
-  assert.equal(rendered.players[1].health,75);
+  assert.equal(rendered.players[1].health,62.5);
   assert.equal(rendered.events.length,0,'expired hidden effects must not burst on resume');
  });
  await test('automatic quality measures presented frames rather than fast callbacks that skip drawing',()=>{
