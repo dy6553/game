@@ -9,7 +9,7 @@ export function createRenderBudget(cap:number){
   const fps=frames/time;time=0;frames=0;
   let next=density;
   const target=Number.isFinite(targetFps)&&targetFps>0?Math.max(30,Math.min(120,targetFps)):60;
-  if(fps<target*.85){next=Math.max(Math.min(.5,cap),density-.15);stable=0;}
+  if(fps<target*.85){next=Math.max(Math.min(.35,cap),density-.15);stable=0;}
   else if(fps>=target*.95){stable++;if(stable>=3){next=Math.min(cap,density+.05);stable=0;}}
   else stable=0;
   if(Math.abs(next-density)<.001)return null;
