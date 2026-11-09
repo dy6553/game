@@ -29,9 +29,20 @@ export function advanceEquipment(actors:GearActor[],projectiles:Projectile[],dt:
    if(!hit){Object.assign(p,end);break;}p.x+=(end.x-p.x)*Math.max(0,hit.t-.001);p.y+=(end.y-p.y)*Math.max(0,hit.t-.001);p.z+=(end.z-p.z)*Math.max(0,hit.t-.001);if(p.kind==='rocket'){p.remaining=0;break;}const v=hit.axis===0?'vx':hit.axis===1?'vy':'vz';p[v]*=-.42;p.vx*=.8;p.vz*=.8;if(hit.axis===1&&Math.abs(p.vy)<.4)p.vy=0;time*=1-hit.t;
   }p.y=Math.max(.12,p.y);
   if(p.remaining>1e-8)continue;projectiles.splice(i,1);events.push({id:nextId(),kind:p.kind,owner:p.owner,x:p.x,y:p.y,z:p.z});
-  for(const a of actors){if(a.health<=0||(a.protection??0)>0||(p.owner!==a.id&&p.team!==undefined&&a.team===p.team))continue;const eye={x:a.x,y:(a.y??0)+(a.jump?.height??0)+1.8,z:a.z},center={x:a.x,y:Math.max((a.y??0)+(a.jump?.height??0)+.2,Math.min((a.y??0)+(a.jump?.height??0)+1.8,p.y)),z:a.z};const distance=Math.hypot(p.x-center.x,p.y-center.y,p.z-center.z),origin={x:p.x,y:p.y+.02,z:p.z};if(!unobstructed(world,doors,origin,p.kind==='flash'?eye:center))continue;
-   if(p.kind==='grenade'||p.kind==='rocket'){const amount=p.kind==='rocket'?(p.direct===a.id?(p.damage??100):Math.round((p.damage??100)*Math.max(0,1-distance/5))):blastDamage(distance);if(amount>0){a.healing=0;damage(a,amount,p.owner);}}
-   else {const dx=p.x-a.x,dz=p.z-a.z,len=Math.hypot(dx,dz),facing=len?(Math.sin(a.yaw)*dx+Math.cos(a.yaw)*dz)/len:1;a.flash=Math.max(a.flash,flashDuration(Math.hypot(dx,dz,eye.y-p.y),facing));}
+  for(const a of actors){if(a.health<=0||(a.protection??0)>0||(p.owner!==a.id&&p.team!==undefined&&a.team===p.team))continue;const eye={x:a.x,y:(a.y??0)+(a.jump?.height??0)+1.8,z:a.z},center={x:a.x,y:Math.max((a.y??0)+(a.jump?.height??0)+.2,Math.min((a.y??0)+(a.jump?.height??0)+1.8,p.y)),z:a.z};const distance=Math.hypot(p.x-center.x,p.y-center.y,p.z-center.z);
+   // Reject effects with no range contribution before scanning blocking geometry.
+   if(p.kind==='grenade'||p.kind==='rocket'){
+    const amount=p.kind==='rocket'?(p.direct===a.id?(p.damage??100):Math.round((p.damage??100)*Math.max(0,1-distance/5))):blastDamage(distance);
+    if(amount<=0)continue;
+    if(!unobstructed(world,doors,{x:p.x,y:p.y+.02,z:p.z},center))continue;
+    a.healing=0;damage(a,amount,p.owner);
+   }else{
+    const dx=p.x-a.x,dz=p.z-a.z,len=Math.hypot(dx,dz),facing=len?(Math.sin(a.yaw)*dx+Math.cos(a.yaw)*dz)/len:1;
+    const duration=flashDuration(Math.hypot(dx,dz,eye.y-p.y),facing);
+    if(duration<=0)continue;
+    if(!unobstructed(world,doors,{x:p.x,y:p.y+.02,z:p.z},eye))continue;
+    a.flash=Math.max(a.flash,duration);
+   }
   }
  }
  return events;
