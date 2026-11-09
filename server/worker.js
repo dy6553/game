@@ -28,8 +28,10 @@ export class Room extends DurableObject {
   if(url.pathname==='/reserve')return this.ctx.blockConcurrencyWhile(async()=>{
    if(this.closing)await this.closing;
    if(Date.now()-this.last>120000&&this.sockets.size===0){this.reset();}
+   this.expirePlayers();const input=await request.json();
+   if(input.action==='join'&&!this.game.state.players.some(p=>!p.abandoned))return json({error:'방이 없거나 경기가 종료되었습니다.'},404);
    if(this.game.state.players.length>=(this.game.state.capacity??2)||this.game.state.winner)return json({error:'입장할 수 없는 방입니다.'},409);
-   const input=await request.json(),id=crypto.randomUUID(),token=crypto.randomUUID();
+   const id=crypto.randomUUID(),token=crypto.randomUUID();
    const map=this.game.state.players.length?this.game.state.map:(input.map==='factory'?'factory':'harbor');
    if(map==='factory'&&(!input.accountSubject||!(input.accountLevel>=3)))return json({error:'폐공장은 로그인 후 Lv3에 해금됩니다.'},403);
    if(!this.game.state.players.length)this.game=createNetworkGame(undefined,map,{mode:input.mode??'duel',randomPickups:true,waitingRoom:true,clock:()=>Date.now()});
@@ -46,13 +48,13 @@ export class Room extends DurableObject {
     if(!id){this.expirePlayers();if(msg.type!=='hello'||typeof msg.token!=='string'||!this.sessions[msg.token]){server.close(1008,'잘못된 입장 정보');return;}
      if((this.game.state.mode??'duel')==='duel'&&this.disconnectedAt&&Date.now()-this.disconnectedAt>30000){server.close(1008,'재접속 시간이 지났습니다.');this.closeRoom('상대 연결을 복구하지 못해 경기를 종료했습니다.');return;}
      id=this.sessions[msg.token];for(const [socket,other] of this.sockets)if(other===id){this.sockets.delete(socket);socket.close(1000,'새 연결로 복귀했습니다.');}
-     this.sockets.set(server,id);this.protocols.set(server,msg.protocol===2?2:1);clearTimeout(timeout);delete this.disconnects[id];this.game.join(id);this.last=Date.now();if(this.game.state.players.every(p=>p.connected))this.disconnectedAt=0;
+     this.sockets.set(server,id);this.protocols.set(server,msg.protocol===2?2:1);clearTimeout(timeout);delete this.disconnects[id];this.game.join(id);if(this.game.state.mode!=='duel'&&this.game.state.phase==='playing')this.game.deploy(id);this.last=Date.now();if(this.game.state.players.every(p=>p.connected))this.disconnectedAt=0;
      server.send(JSON.stringify({type:'welcome',id,state:this.game.state}));this.start();return;
     }
     const now=Date.now(),rate=this.packets.get(server)??{at:now,count:0};if(now-rate.at>1000){rate.at=now;rate.count=0;}if(++rate.count>80){server.close(1008,'전송 속도 초과');return;}this.packets.set(server,rate);
-    if(msg.type==='start'){if(!this.game.startMatch(id))server.send(JSON.stringify({type:'room-error',reason:'방장만 시작할 수 있으며, 연결된 참가자가2명 이상이어야 합니다.'}));else this.matchStarted=true;this.ctx.waitUntil(this.save());this.broadcast();}
+    if(msg.type==='start'){if(!this.game.startMatch(id))server.send(JSON.stringify({type:'room-error',reason:'방장만 시작할 수 있습니다. 개인전·팀전은1명부터,1대1은2명부터 시작합니다.'}));else this.matchStarted=true;this.ctx.waitUntil(this.save());this.broadcast();}
     if(msg.type==='deploy'){this.game.deploy(id);this.ctx.waitUntil(this.save());this.broadcast();}
-    if(msg.type==='nickname'){if(!this.game.setGuestNickname(id,msg.nickname))server.send(JSON.stringify({type:'room-error',reason:'닉네임을2~16자로 입력하세요.'}));this.broadcast();}
+    if(msg.type==='nickname'){if(!this.game.setGuestNickname(id,msg.nickname))server.send(JSON.stringify({type:'room-error',reason:'닉네임을2~16자로 입력하세요.'}));else if(this.game.state.mode!=='duel'&&this.game.state.phase==='playing')this.game.deploy(id);this.broadcast();}
     if(msg.type==='input')this.game.input(id,msg.command);
     if(msg.type==='leave'){if((this.game.state.mode??'duel')==='duel'&&this.game.state.phase!=='waiting')this.closeRoom('상대가 방을 나갔습니다.');else{if(this.game.state.phase==='waiting'){this.game.leaveWaiting(id);delete this.accounts[id];}else this.game.abandon(id);delete this.disconnects[id];for(const token of Object.keys(this.sessions))if(this.sessions[token]===id)delete this.sessions[token];server.send(JSON.stringify({type:'closed',reason:'방을 나왔습니다.'}));server.close(1000,'나가기');this.broadcast();}}
 
@@ -88,20 +90,19 @@ export class Lobby extends DurableObject {
   const body=await request.json();let roomCode=body.code?.toUpperCase();
   if(body.action==='join'&&!/^[0-9A-F]{8}$/.test(roomCode??''))return json({error:'방 코드 8자리를 확인해 주세요.'},400);
   const waitingKey=(body.mode??'duel')==='duel'?(body.map==='factory'?'waiting-factory':'waiting'):`waiting:${body.mode}:${body.map}`;
-  if(body.action==='quick'){const pending=await this.ctx.storage.get(waitingKey);if(pending&&now-pending.at<(pending.phase==='waiting'?600000:60000))roomCode=pending.code;await this.ctx.storage.delete(waitingKey);}
+  if(body.action==='quick'){const pending=await this.ctx.storage.get(waitingKey);if(pending&&((body.mode??'duel')!=='duel'||now-pending.at<(pending.phase==='waiting'?600000:60000)))roomCode=pending.code;await this.ctx.storage.delete(waitingKey);}
   if(!roomCode)roomCode=code();
   const hint=request.headers.get('X-Harbor-Location');
   let stub=this.env.ROOMS.get(this.env.ROOMS.idFromName(roomCode),hint?{locationHint:hint}:undefined);
-  // Joining must never silently create a room for a mistyped code.
-  let known=await this.ctx.storage.get('room:'+roomCode);const knownAt=typeof known==='number'?known:known?.at;
-  if(body.action==='join'&&(!knownAt||now-knownAt>(known?.ttl??120000)))return json({error:'방이 없거나 입장 시간이 지났습니다.'},404);
+  // The room validates join-only reservations; live codes outlast lobby discovery metadata.
+  let known=await this.ctx.storage.get('room:'+roomCode);
   let reservation=await stub.fetch('https://room/reserve',{method:'POST',body:JSON.stringify(body)});
   if(body.action==='quick'&&reservation.status===409){roomCode=code();known=undefined;stub=this.env.ROOMS.get(this.env.ROOMS.idFromName(roomCode),hint?{locationHint:hint}:undefined);reservation=await stub.fetch('https://room/reserve',{method:'POST',body:JSON.stringify(body)});}
   const session=await reservation.json();if(!reservation.ok)return json(session,reservation.status);
   await this.ctx.storage.put('room:'+roomCode,{at:now,ttl:session.phase?600000:(session.mode??body.mode??'duel')==='duel'?120000:600000});if(body.action==='quick'&&(session.accepting??!known))await this.ctx.storage.put(waitingKey,{code:roomCode,at:now,phase:session.phase});
   await this.ctx.storage.setAlarm(now+180000);return json({...session,code:roomCode});
  });}
- async alarm(){const rooms=await this.ctx.storage.list({prefix:'room:'});for(const [key,at] of rooms)if(Date.now()-(typeof at==='number'?at:at.at)>(at.ttl??120000))await this.ctx.storage.delete(key);await this.ctx.storage.delete('waiting');await this.ctx.storage.delete('waiting-factory');const waiting=await this.ctx.storage.list({prefix:'waiting:'});for(const [key,v] of waiting)if(Date.now()-v.at>600000)await this.ctx.storage.delete(key);}
+ async alarm(){const rooms=await this.ctx.storage.list({prefix:'room:'});for(const [key,at] of rooms)if(Date.now()-(typeof at==='number'?at:at.at)>(at.ttl??120000))await this.ctx.storage.delete(key);await this.ctx.storage.delete('waiting');await this.ctx.storage.delete('waiting-factory');const waiting=await this.ctx.storage.list({prefix:'waiting:'});for(const [key,v] of waiting)if(!/^waiting:(ffa|team):(harbor|factory)$/.test(key)&&Date.now()-v.at>600000)await this.ctx.storage.delete(key);}
 }
 export default {async fetch(request,env){
  const origin=request.headers.get('Origin'),allowed=env.ALLOWED_ORIGINS.split(',');

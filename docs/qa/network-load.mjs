@@ -12,8 +12,12 @@ report=await page.evaluate(async({base})=>{
  const results=[];
  for(const mode of ['ffa','team']){const host=await request({action:'create',mode,nickname:'검사방장'}),clients=[];
  try{for(let i=0;i<20;i++){const s=i?await request({action:'join',code:host.code,mode,nickname:'검사대원'+i}):host,protocol=i===19?1:2,ws=new WebSocket(base.replace('https:','wss:').replace('http:','ws:')+'/room/'+host.code),c={ws,s,state:null,lastPacket:null};
- ws.onopen=()=>ws.send(JSON.stringify({type:'hello',token:s.token,protocol}));ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.state){if(m.type==='state')c.lastPacket=m;c.state=m.state;const own=m.state.players.find(p=>p.id===s.id);if(m.ownInventory&&own)own.inventory=m.ownInventory;if(m.ownState&&own)Object.assign(own,m.ownState);}};clients.push(c);}
- await wait(()=>clients.every(c=>c.state?.players.length===20&&c.state.players.every(p=>p.connected)));clients[0].ws.send(JSON.stringify({type:'start'}));await wait(()=>clients.every(c=>c.state?.phase==='playing'&&c.lastPacket));
+ ws.onopen=()=>ws.send(JSON.stringify({type:'hello',token:s.token,protocol}));ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.state){if(m.type==='state')c.lastPacket=m;c.state=m.state;const own=m.state.players.find(p=>p.id===s.id);if(m.ownInventory&&own)own.inventory=m.ownInventory;if(m.ownState&&own)Object.assign(own,m.ownState);}};clients.push(c);
+ await wait(()=>c.state?.players.find(p=>p.id===s.id)?.connected);
+ if(i===0){c.ws.send(JSON.stringify({type:'start'}));await wait(()=>c.state?.phase==='playing'&&c.state.players.find(p=>p.id===s.id)?.playing===true);}
+ else await wait(()=>c.state?.players.find(p=>p.id===s.id)?.playing===true);
+ }
+ await wait(()=>clients.every(c=>c.state?.players.length===20&&c.state.players.every(p=>p.connected)));await wait(()=>clients.every(c=>c.state?.phase==='playing'&&c.lastPacket));
  const a=clients[0],me=()=>a.state.players.find(p=>p.id===a.s.id);
  if(!me().inventory?.slots.length||a.state.players[1].inventory)throw Error('Compact private inventory');
  if(!clients[19].state.players[0].inventory)throw Error('Legacy packet compatibility');
@@ -26,7 +30,7 @@ report=await page.evaluate(async({base})=>{
  await wait(()=>me().seq===17);const elapsed=Date.now()-begin,advanced=a.state.tick-tick;
  if(Math.abs(advanced-elapsed/50)>4)throw Error('Server tick drift');
  clients[19].ws.send(JSON.stringify({type:'leave'}));await wait(()=>a.state.players[19].abandoned);
- samples.sort((a,b)=>a-b);results.push({mode,players:20,mixedProtocols:true,ownInventory:true,invalidInputRejected:true,slowSenderAck:true,tickRate:Math.round(advanced/(elapsed/1000)*10)/10,ackMedianMs:Math.round(samples[6]),compactBytes:JSON.stringify(a.lastPacket).length,legacyBytes:JSON.stringify(clients[19].lastPacket).length});
+ samples.sort((a,b)=>a-b);results.push({mode,players:20,mixedProtocols:true,startedAlone:true,lateJoinWithoutDeploy:true,ownInventory:true,invalidInputRejected:true,slowSenderAck:true,tickRate:Math.round(advanced/(elapsed/1000)*10)/10,ackMedianMs:Math.round(samples[6]),compactBytes:JSON.stringify(a.lastPacket).length,legacyBytes:JSON.stringify(clients[19].lastPacket).length});
  }finally{for(const c of clients){if(c.ws.readyState===1)c.ws.send(JSON.stringify({type:'leave'}));c.ws.close();}}
  }
  return {pass:true,results};

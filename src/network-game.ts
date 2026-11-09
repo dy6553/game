@@ -57,8 +57,7 @@ function wallDistance(origin:number[],direction:number[],doors:Doors|undefined,w
 }
 export const availablePlayer=(p:Player)=>p.connected&&!p.abandoned&&p.playing!==false&&(!p.guest||!!normalizeNickname(p.nickname));
 export function onlinePlaying(state:MatchState,id?:string){
- const me=id?state.players.find(p=>p.id===id):undefined;if(id&&(!me||!availablePlayer(me)))return false;if(state.phase==='waiting'||state.winner||state.players.filter(availablePlayer).length<2||me?.playing===false||me?.abandoned)return false;
- if(state.mode==='team'&&new Set(state.players.filter(availablePlayer).map(p=>p.team)).size<2)return false;
+ const me=id?state.players.find(p=>p.id===id):undefined;if(id&&(!me||!availablePlayer(me)))return false;if(state.phase==='waiting'||state.winner||state.players.filter(availablePlayer).length<((state.mode??'duel')==='duel'?2:1)||me?.playing===false||me?.abandoned)return false;
  return (state.mode??'duel')==='duel'?state.players.length===2&&state.players.every(availablePlayer):true;
 }
 export function wonOnline(state:MatchState,id:string){return state.winningIds?state.winningIds.includes(id):state.winner===id;}
@@ -78,13 +77,13 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
  const api={state,
   join(playerId:string,weapon:unknown='pistol',character:unknown='robot',identity?:{nickname:string;guest:boolean}){
    const existing=state.players.find(p=>p.id===playerId);if(existing){if(existing.abandoned)throw Error('재접속 시간이 지났습니다.');existing.connected=true;state.hostId??=existing.id;inputs.delete(playerId);return existing;}
-   if(state.players.length>=state.capacity!||state.winner)throw Error('방이 가득 찼거나 이미 시작했습니다.');
+   if(state.players.length>=state.capacity!||state.winner)throw Error('방이 가득 찼거나 경기가 끝났습니다.');
    const team=mode==='team'?(state.players.filter(p=>p.team===0).length<=state.players.filter(p=>p.team===1).length?0:1):undefined;
    const p:Player={id:playerId,x:0,z:0,yaw:0,pitch:0,health:100,kills:0,totalKills:0,deaths:0,dead:0,weaponId:isWeaponId(weapon)?weapon:'pistol',weapon:createWeapon(WEAPONS.pistol),jump:createJump(),cooldown:0,connected:true,character:character==='welder'?'welder':character==='robot-cat'?'robot-cat':'robot',seq:-1,startWeapon:isWeaponId(weapon)?weapon:'pistol',inventory:createInventory(isWeaponId(weapon)?weapon:'pistol'),gear:createGear(),flash:0,healing:0,gearCooldown:0,team,playing:state.phase?false:true,participated:state.phase?false:true,nickname:identity?.nickname,guest:identity?.guest};
    spawn(p,state.players.length);state.players.push(p);state.hostId??=p.id;return p;
   },
   checkpoint(){const saved=structuredClone(state);for(const p of saved.players)if(p.guest)delete p.nickname;return saved;},
-  startMatch(playerId:string){if(state.phase!=='waiting'||state.hostId!==playerId)return false;const host=state.players.find(p=>p.id===playerId);if(!host?.connected||host.guest&&!normalizeNickname(host.nickname))return false;const players=state.players.filter(p=>p.connected&&!p.abandoned&&(!p.guest||!!normalizeNickname(p.nickname)));if(players.length<2||mode==='team'&&new Set(players.map(p=>p.team)).size<2)return false;state.phase='playing';state.started=true;inputs.clear();for(const p of players){p.playing=true;p.participated=true;}for(const p of players)spawn(p,state.players.indexOf(p));return true;},
+  startMatch(playerId:string){if(state.phase!=='waiting'||state.hostId!==playerId)return false;const host=state.players.find(p=>p.id===playerId);if(!host?.connected||host.guest&&!normalizeNickname(host.nickname))return false;const players=state.players.filter(p=>p.connected&&!p.abandoned&&(!p.guest||!!normalizeNickname(p.nickname)));if(players.length<(mode==='duel'?2:1))return false;state.phase='playing';state.started=true;inputs.clear();for(const p of players){p.playing=true;p.participated=true;}for(const p of players)spawn(p,state.players.indexOf(p));return true;},
   deploy(playerId:string){const p=state.players.find(p=>p.id===playerId);if(state.phase!=='playing'||state.winner||!p?.connected||p.abandoned||p.playing!==false||p.guest&&!normalizeNickname(p.nickname))return false;p.playing=true;p.participated=true;spawn(p,state.players.indexOf(p),true);inputs.delete(p.id);return true;},
   leaveWaiting(playerId:string){if(state.phase!=='waiting')return false;const index=state.players.findIndex(p=>p.id===playerId);if(index<0)return false;state.players.splice(index,1);inputs.delete(playerId);if(state.hostId===playerId)state.hostId=state.players.find(p=>p.connected)?.id??state.players[0]?.id;state.players.forEach((p,i)=>{if(mode==='team')p.team=i%2;spawn(p,i);});return true;},
   setGuestNickname(playerId:string,value:unknown){const p=state.players.find(p=>p.id===playerId),name=normalizeNickname(value);if(!p?.connected||!p.guest||!name)return false;p.nickname=name;if(!state.hostId)state.hostId=p.id;return true;},
