@@ -23,7 +23,7 @@ export function sampleNightGround(x:number,z:number) {
     const distance=((x-p.x-1.5)/2.1)**2+((z-p.z+2)/3.2)**2;
     if(distance<2) shade*=1-0.28*Math.exp(-distance)*(0.65+0.35*Math.sin(x*7+Math.sin(z*5))**2);
   }
-  return {r:(0.285+warmth*0.33)*shade,g:(0.3+warmth*0.19)*shade,b:(0.355+warmth*0.065)*shade};
+  return {r:(0.36+warmth*0.33)*shade,g:(0.37+warmth*0.19)*shade,b:(0.405+warmth*0.065)*shade};
 }
 
 // Authored indirect light is baked into vertex colors so mobile light-count limits

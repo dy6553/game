@@ -13,3 +13,8 @@ test('paused windows and invalid timings cannot degrade the renderer',()=>{
  for(let i=0;i<100;i++)budget.sample(1,false);assert.equal(budget.density,1);
  budget.sample(NaN,true);budget.sample(-1,true);assert.equal(budget.density,1);
 });
+
+test('auto resolution responds to sustained40FPS instead of waiting for a fall below28FPS',()=>{
+ const budget=createRenderBudget(1);for(let i=0;i<100;i++)budget.sample(1/40,true);
+ assert.ok(budget.density<1,'60FPS default must adapt to40FPS');
+});

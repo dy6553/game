@@ -85,3 +85,23 @@ test('first PC click locks aim without firing, locked clicks fire, touch and fal
 test('PC hover turns without click or lock, resets on entry/pause, and never aims over other controls',()=>desktopFixture((canvas,doc,send)=>{
  const input=createInput(canvas);send('pointermove',{clientX:100,clientY:80});send('pointermove',{clientX:140,clientY:90});assert.ok(input.look.yaw>0,'hover must turn without pointerdown');assert.equal(input.consumeShots(),0);const look={...input.look};input.setEnabled(false);send('pointermove',{clientX:900,clientY:400});assert.deepEqual(input.look,look);input.setEnabled(true);send('pointermove',{clientX:900,clientY:400});assert.deepEqual(input.look,look,'resume primes pointer position instead of snapping');send('pointermove',{clientX:920,clientY:400});assert.ok(input.look.yaw>look.yaw);const next={...input.look};send('pointerleave');send('pointermove',{clientX:10,clientY:10});assert.deepEqual(input.look,next,'re-entering cannot jump across the screen');doc.dispatchEvent(Object.assign(new Event('mousemove'),{movementX:100,movementY:20}));assert.deepEqual(input.look,next,'unlocked motion outside canvas cannot aim');send('pointermove',{pointerType:'touch',clientX:80,clientY:10});assert.deepEqual(input.look,next,'touch still requires an active drag');send('pointerdown',{clientX:10,clientY:10});assert.equal(input.firing,true,'holding fire must still work without pointer lock');assert.equal(input.consumeShots(),1);send('pointerup',{clientX:10,clientY:10});assert.equal(input.firing,false);assert.equal(input.consumeShots(),0,'release cannot fire a second shot');
 }));
+
+test('desktop hover and pointer lock use the same fine-grained sensitivity without frame-dependent smoothing',()=>desktopFixture((canvas,doc,send)=>{
+ const input=createInput(canvas);
+ const hover=(scale:number)=>{input.reset();input.resetLook();input.setMouseSensitivity(scale);send('pointermove',{clientX:100,clientY:100});send('pointermove',{clientX:140,clientY:120});return {...input.look};};
+ const base=hover(1),fine=hover(.1),fast=hover(3);
+ assert.ok(Math.abs(fine.yaw-base.yaw*.1)<1e-9,'0.10x supports precise aim');
+ assert.ok(Math.abs(fast.yaw-base.yaw*3)<1e-9,'3.00x remains selectable');
+ input.reset();input.resetLook();input.setMouseSensitivity(1);doc.pointerLockElement=canvas;
+ doc.dispatchEvent(Object.assign(new Event('mousemove'),{movementX:40,movementY:20}));
+ assert.ok(Math.abs(input.look.yaw-base.yaw)<1e-9,'locking must not change horizontal sensitivity');
+ assert.ok(Math.abs(input.look.pitch-base.pitch)<1e-9,'locking must not change vertical sensitivity');
+}));
+
+test('scoped desktop aiming follows the zoom ratio immediately and restores normal aim on exit',()=>desktopFixture((canvas,doc,send)=>{
+ let scale=1;const input=createInput(canvas,{mouseScale:()=>scale});doc.pointerLockElement=canvas;
+ const move=()=>doc.dispatchEvent(Object.assign(new Event('mousemove'),{movementX:40,movementY:0}));
+ move();const normal=input.look.yaw;input.resetLook();scale=.3;move();
+ assert.ok(Math.abs(input.look.yaw-normal*.3)<1e-9,'scope should preserve fine screen-space aim');
+ input.resetLook();scale=1;move();assert.ok(Math.abs(input.look.yaw-normal)<1e-9);
+}));

@@ -49,17 +49,17 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
   scene.clearColor = new Color4(0.035, 0.065, 0.115, 1);
   scene.imageProcessingConfiguration.toneMappingEnabled=true;
   scene.imageProcessingConfiguration.toneMappingType=1;
-  scene.imageProcessingConfiguration.exposure=1.12;
-  scene.imageProcessingConfiguration.contrast=1.08;
-  scene.ambientColor = new Color3(0.12, 0.105, 0.12);
+  scene.imageProcessingConfiguration.exposure=1.22;
+  scene.imageProcessingConfiguration.contrast=1.02;
+  scene.ambientColor = new Color3(0.2, 0.19, 0.22);
   scene.fogMode=Scene.FOGMODE_EXP2;scene.fogDensity=0.004;scene.fogColor=new Color3(0.07,0.095,0.155);
   const camera = new FreeCamera('camera', new Vector3(36, 55, -36), scene);
   camera.mode = FreeCamera.PERSPECTIVE_CAMERA;camera.updateUpVectorFromRotation=true;
   camera.fov = 1.25;
   camera.minZ = 0.06; camera.maxZ = 500;
   const sky = new HemisphericLight('sky', new Vector3(0, 1, 0), scene);
-  sky.intensity = 0.34; sky.diffuse = Color3.FromHexString('#b4b9cb');
-  sky.groundColor = Color3.FromHexString('#243446');
+  sky.intensity = 0.65; sky.diffuse = Color3.FromHexString('#b4b9cb');
+  sky.groundColor = Color3.FromHexString('#647187');
   const moon = new DirectionalLight('moon', new Vector3(-0.45, -1, 0.25), scene);
   moon.position = new Vector3(25, 55, -35); moon.intensity = 0.32;
   moon.diffuse = Color3.FromHexString('#bdcce7');
@@ -702,7 +702,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
       target.healthBar.scaling.x=1;target.healthBar.position.x=target.x;
     }
   }
-  type RemoteRig={model:ReturnType<typeof createCharacter>;fx:ReturnType<typeof createRobotImpact>;parent:TransformNode;type:CharacterType;health:number;marker:Mesh};
+  type RemoteRig={model:ReturnType<typeof createCharacter>;fx:ReturnType<typeof createRobotImpact>;parent:TransformNode;type:CharacterType;health:number;marker:Mesh;castsShadow:boolean};
   const remotes=new Map<string,RemoteRig>(),remoteParent=new TransformNode('online-opponent',scene);
   const friendMat=material('online-friendly','#6edec6','#1f806c'),enemyMat=material('online-enemy','#ff9a76','#8d3020');
   let lastNetworkEvent=-1,onlineQualityHigh=true,networkJumpTick=-1,networkJumpAge=0;
@@ -717,9 +717,12 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     for(const other of state.players){if(other.id===id||other.abandoned)continue;let rig=remotes.get(other.id);
       if(!rig||rig.type!==other.character){removeRemote(other.id);const parent=new TransformNode('online-player-'+other.id,scene);parent.parent=remoteParent;const model=createCharacter(scene,parent,other.character,{detail:'remote'});model.poseLobby(true,0,other.weaponId!=='pistol');model.root.computeWorldMatrix(true);for(const m of model.meshes)m.computeWorldMatrix(true);
        const groups=new Map<StandardMaterial,Mesh[]>();for(const m of model.meshes){const mat=m.material as StandardMaterial,group=groups.get(mat)??[];group.push(m);groups.set(mat,group);}const body:Mesh[]=[];for(const [mat,group] of groups){const merged=Mesh.MergeMeshes(group,true,true);if(merged){merged.parent=model.root;merged.material=mat;merged.isPickable=false;merged.name='remote-body-'+mat.name;body.push(merged);}}model.meshes.splice(0,model.meshes.length,...body);
-       const fx=createRobotImpact(scene,model.root,body,{particleLimit:12});fx.setQuality(onlineQualityHigh);const marker=MeshBuilder.CreateBox('team-marker',{width:.45,height:.07,depth:.1},scene);marker.parent=parent;marker.position.y=2.95;marker.isPickable=false;rig={model,fx,parent,type:other.character,health:other.health,marker};remotes.set(other.id,rig);parent.position.set(other.x,(other.y??0)+other.jump.height,other.z);for(const mesh of body)shadows.addShadowCaster(mesh);
+       const fx=createRobotImpact(scene,model.root,body,{particleLimit:12});fx.setQuality(onlineQualityHigh);const marker=MeshBuilder.CreateBox('team-marker',{width:.45,height:.07,depth:.1},scene);marker.parent=parent;marker.position.y=2.95;marker.isPickable=false;rig={model,fx,parent,type:other.character,health:other.health,marker,castsShadow:false};remotes.set(other.id,rig);parent.position.set(other.x,(other.y??0)+other.jump.height,other.z);
       }
       if(rig.health===0&&other.health>0){rig.fx.reset();rig.parent.position.set(other.x,(other.y??0)+other.jump.height,other.z);}const target=estimates.get(other.id)??other,factor=1-Math.exp(-dt*35);rig.parent.position.x+=(target.x-rig.parent.position.x)*factor;rig.parent.position.z+=(target.z-rig.parent.position.z)*factor;rig.parent.position.y+=((target.y??other.y??0)+other.jump.height-rig.parent.position.y)*factor;rig.parent.rotation.y+=Math.atan2(Math.sin(other.yaw-rig.parent.rotation.y),Math.cos(other.yaw-rig.parent.rotation.y))*factor;rig.marker.material=me.team!==undefined&&me.team===other.team?friendMat:enemyMat;rig.fx.update(dt);rig.parent.setEnabled(other.connected&&other.playing!==false&&(!other.guest||!!other.nickname)&&(other.health>0||rig.fx.showingDeath));rig.health=other.health;
+      const shadowRadius=onlineQualityHigh?40:24;
+      const castsShadow=!lowPerformance&&requestedShadows&&other.connected&&other.health>0&&other.playing!==false&&Math.hypot(other.x-me.x,other.z-me.z)<shadowRadius;
+      if(castsShadow!==rig.castsShadow){for(const mesh of rig.model.meshes){if(castsShadow)shadows.addShadowCaster(mesh);else shadows.removeShadowCaster(mesh);}rig.castsShadow=castsShadow;}
     }
     for(const event of state.events)if(event.id>lastNetworkEvent){lastNetworkEvent=event.id;const from=new Vector3(event.from.x,event.from.y,event.from.z),to=new Vector3(event.to.x,event.to.y,event.to.z);(event.player===id?effects:botEffects).emit(from,to,from.subtract(to).normalize(),true,event.hit);if(event.player===id){recoil.fire(event.weapon);if(event.hit){const rig=event.target?remotes.get(event.target):[...remotes.values()].sort((a,b)=>Vector3.DistanceSquared(a.parent.position,to)-Vector3.DistanceSquared(b.parent.position,to))[0];rig?.fx.hit(to,to.x-rig.parent.position.x,event.killed);}}}
   }
@@ -730,6 +733,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
   }
   return {
     geometry,
+    get scoped(){return scoped;},
     targetContacts:()=>targets.map((t,i)=>({id:'target-'+i,name:'표적 '+(i+1),x:t.x,z:t.z,y:0,health:t.health})),
     gearState:()=>({gear:{...localActor.gear},health:localActor.health,flash:localActor.flash,healing:localActor.healing,cooldown:localActor.gearCooldown}),
     useEquipment(kind:EquipmentId,p:Point,look:Look){if(preview||reference||battleState().winner)return false;Object.assign(localActor,{jump:jumpState,x:p.x,y:p.y??0,z:p.z,yaw:look.yaw,pitch:look.pitch,health:battleState().playerHealth});const ok=useEquipment(localActor,kind,localProjectiles,++toolSequence);if(ok&&kind!=='medkit')(survivalMode?survival:ffaMode?ffa:duel).playerFired();return ok;},
@@ -756,7 +760,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     setReducedShots(value:boolean){reducedShots=value;effects.setReduced(value);botEffects.setReduced(value);},
     setShake(level:ShakeLevel){recoil.setShake(level);},
     setShadows(enabled:boolean){requestedShadows=enabled;scene.shadowsEnabled=enabled&&!lowPerformance;},
-    setPerformanceLow(enabled:boolean){lowPerformance=enabled;scene.shadowsEnabled=requestedShadows&&!enabled;atmosphere.setLow(enabled);},
+    setPerformanceLow(enabled:boolean){if(lowPerformance===enabled)return;lowPerformance=enabled;scene.shadowsEnabled=requestedShadows&&!enabled;atmosphere.setLow(enabled);},
     setQuality(high:boolean){
       onlineQualityHigh=high;for(const r of remotes.values())r.fx.setQuality(high);atmosphere.setQuality(high);robotImpact.setQuality(high);for(const rig of botRigs.slice(1))rig.fx.setQuality(high);
       const mapSize=high?2048:1024;if(shadows.mapSize!==mapSize)shadows.mapSize=mapSize;

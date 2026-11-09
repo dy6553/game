@@ -14,3 +14,9 @@ test('authored ground lighting remains valid over the whole playable map',()=>{
     for(const value of Object.values(color))assert.ok(Number.isFinite(value)&&value>=0&&value<=1);
   }
 });
+
+test('unlit outer lanes retain a readable baked light floor without extra dynamic lights',()=>{
+ for(const [x,z] of [[-63,-59],[63,-59],[-63,33],[63,33],[60,0]]){
+  const c=sampleNightGround(x,z);assert.ok(.2126*c.r+.7152*c.g+.0722*c.b>=.32,`outer lane ${x},${z} is too dark`);
+ }
+});

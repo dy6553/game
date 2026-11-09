@@ -1,3 +1,6 @@
+import {createOnlineEvents} from './online-events.ts';
+import type {ShotEvent} from './network-game.ts';
+import type {ToolEvent} from './equipment.ts';
 import {createOnlinePump} from './online-pump.ts';
 import {installMobileBrowser} from './mobile-browser.ts';
 import {ENVIRONMENT_MARKUP,createEnvironmentPanel} from './environment-panel.ts';
@@ -136,8 +139,8 @@ async function start() {
   let settingsStorage:Storage|null=null;try{settingsStorage=localStorage;}catch{}const preferences=createEnvironmentPreferences(settingsStorage),frameLimit=createFrameLimit(preferences.value.fps);
   const savePreference=(value:Partial<EnvironmentPreferences>)=>{const next=preferences.patch(value);document.querySelector('#environment-save-status')!.textContent=preferences.saved?'설정은 이 브라우저에 자동 저장됩니다.':'저장할 수 없어 이번 접속에만 적용됩니다.';return next;};
   let graphicsMode=preferences.value.graphics;
-  const densityCap=()=>Math.min(window.devicePixelRatio||1,graphicsMode==='high'?2:graphicsMode==='balanced'?1:graphicsMode==='low'?.6:mobile?1:1.75);
-  let budget=createRenderBudget(densityCap()),qualityHigh=graphicsMode==='high'||graphicsMode==='auto'&&!mobile;
+  const densityCap=()=>Math.min(window.devicePixelRatio||1,graphicsMode==='high'?2:graphicsMode==='balanced'?1:graphicsMode==='low'?.6:1);
+  let budget=createRenderBudget(densityCap()),qualityHigh=graphicsMode==='high';
   engine.setHardwareScalingLevel(1/budget.density);
   const playtest=createPlaytest();
   let selectedMap:MapId='harbor';
@@ -153,11 +156,11 @@ async function start() {
   shake.addEventListener('change',()=>{const level=setShake(shake.value);try{localStorage.setItem('harbor-screen-shake',level);}catch{}});
   document.querySelector<HTMLSelectElement>('#graphics-quality')!.addEventListener('change',event=>{
     graphicsMode=savePreference({graphics:(event.currentTarget as HTMLSelectElement).value as EnvironmentPreferences['graphics']}).graphics;budget=createRenderBudget(densityCap());
-    engine.setHardwareScalingLevel(1/budget.density);qualityHigh=graphicsMode==='high'||(graphicsMode==='auto'&&!mobile);
+    engine.setHardwareScalingLevel(1/budget.density);qualityHigh=graphicsMode==='high';
     world.setQuality(qualityHigh);world.setPerformanceLow?.(graphicsMode==='low');engine.resize();world.resize();
   });
   const effectsSetting=document.querySelector<HTMLSelectElement>('#shot-effects')!;let reducedShots=mobile;try{const saved=localStorage.getItem('harbor-shot-effects');if(saved)reducedShots=saved==='low';}catch{}effectsSetting.value=reducedShots?'low':'full';world.setReducedShots?.(reducedShots);effectsSetting.addEventListener('change',()=>{reducedShots=effectsSetting.value==='low';world.setReducedShots?.(reducedShots);try{localStorage.setItem('harbor-shot-effects',effectsSetting.value);}catch{}});
-  const input = createInput(canvas);
+  const input = createInput(canvas,{mouseScale:()=>world.scoped?.3:1});
   input.setEnabled(false);input.setInvertY(preferences.value.invertY);input.setMouseSensitivity?.(preferences.value.mouse);input.setJumpKey(preferences.value.jump);document.querySelector<HTMLSelectElement>('#jump-key')!.value=preferences.value.jump;
   const sensitivity=document.querySelector<HTMLInputElement>('#look-sensitivity')!;
   const setSensitivity=(value:number)=>{
@@ -187,6 +190,7 @@ async function start() {
     const code=(event.currentTarget as HTMLSelectElement).value;
     if(code==='Space'||code==='KeyJ'){input.reset();input.setJumpKey(code);savePreference({jump:code});if(!settingsView.isOpen)canvas.focus();}
   });
+  const onlineShots=createOnlineEvents<ShotEvent>(),onlineTools=createOnlineEvents<ToolEvent>();
   let onlineState:MatchState|null=null,onlineId='',onlineActive=false,onlineEventId=-1;
   let onlineStatus='',onlineCode='';let resultOnlineTick:number|null=null,resultOnlineReady=false;const onlineMotion=createOnlineMotion(m=>playtest.correction(m)),remoteMotion=createRemoteMotion();
   const onlineLobby=document.querySelector<HTMLElement>('#online-lobby')!;
@@ -202,7 +206,7 @@ async function start() {
   const nicknameDialog=createNicknameDialog(),waitingView=createWaitingRoom(),nameplates=createNameplates();let roomWaiting=false,guestPromptPending=false;
   const onlineAudio=createOnlineAudio();
   const online=createOnlineClient(import.meta.env?.VITE_ONLINE_URL??(import.meta.env?.DEV?'http://127.0.0.1:8787':''),(state,id)=>{
-    playtest.packet();document.querySelector<HTMLSelectElement>('#online-mode')!.value=state.mode??'duel';onlineState=state;onlineId=id;onlineMotion.receive(state,id);remoteMotion.receive(state,id,performance.now());
+    playtest.packet();document.querySelector<HTMLSelectElement>('#online-mode')!.value=state.mode??'duel';onlineShots.receive(state.events);onlineTools.receive(state.toolEvents??[]);onlineState=state;onlineId=id;onlineMotion.receive(state,id);remoteMotion.receive(state,id,performance.now());
     const me=state.players.find(p=>p.id===id),wasActive=onlineActive,wasWaiting=roomWaiting;
     roomWaiting=needsWaiting(state,id)||!!me?.guest&&!normalizeNickname(me.nickname);
     if(!onlineActive){onlineActive=true;homeOpen=false;home.hidden=true;onlineLobby.hidden=true;picker.hidden=true;manualPaused=false;pausePanel.hidden=true;document.body.classList.remove('at-home');gameChoices.close();}
@@ -212,7 +216,7 @@ async function start() {
     if(me?.guest&&!normalizeNickname(me.nickname)&&online.connected&&!guestPromptPending){guestPromptPending=true;void nicknameDialog.open(false).then(name=>{if(!onlineActive)return;if(!name){openHome();return;}online.control('nickname',name);});}else if(me?.nickname)guestPromptPending=false;
     for(const cue of onlineAudio.update(state,id,input.look.yaw,canUseInventory()&&online.connected))audio.play(cue.kind,cue.pan,cue.volume);
     observeOnlineResult(state,id);
-  },status=>{if(status!=='대전 중'&&status!=='경기 종료')resultOnlineReady=false;onlineStatus=status;document.querySelector('#online-message')!.textContent=status;document.querySelector('#waiting-status')!.textContent=status;if(status.startsWith('연결 복구 중')||status.startsWith('방 연결 종료')){for(const p of onlineState?.players??[])if(p.guest)delete p.nickname;nameplates.clear();document.querySelector('#online-player-list')!.replaceChildren();document.querySelector('#roster-lines')!.replaceChildren();nicknameDialog.cancel();guestPromptPending=false;if(onlineState&&roomWaiting)waitingView.show(onlineState,onlineId,onlineCode,false);}},session=>{onlineToolEventId=-1;onlineAudio.reset();predictionDash=predictionJump=false;onlineCode=session.code;resultTracker.start();shownResult='';resultOnlineTick=null;resultOnlineReady=false;resultView.hide();},()=>accountView.token());
+  },status=>{if(status!=='대전 중'&&status!=='경기 종료')resultOnlineReady=false;onlineStatus=status;document.querySelector('#online-message')!.textContent=status;document.querySelector('#waiting-status')!.textContent=status;if(status.startsWith('연결 복구 중')||status.startsWith('방 연결 종료')){for(const p of onlineState?.players??[])if(p.guest)delete p.nickname;nameplates.clear();document.querySelector('#online-player-list')!.replaceChildren();document.querySelector('#roster-lines')!.replaceChildren();nicknameDialog.cancel();guestPromptPending=false;if(onlineState&&roomWaiting)waitingView.show(onlineState,onlineId,onlineCode,false);}},session=>{onlineShots.reset();onlineTools.reset();onlineToolEventId=-1;onlineAudio.reset();predictionDash=predictionJump=false;onlineCode=session.code;resultTracker.start();shownResult='';resultOnlineTick=null;resultOnlineReady=false;resultView.hide();},()=>accountView.token());
   let pendingDoor:string|undefined;
   let pendingEquipment:EquipmentId|undefined;let onlineToolEventId=-1;
   let onlineBoardKey='';const onlineBoard=document.querySelector<HTMLDetailsElement>('#online-scoreboard')!;onlineBoard.addEventListener('toggle',()=>{if(onlineBoard.open){onlineBoardKey='';input.reset();}});
@@ -335,7 +339,7 @@ async function start() {
   const refreshCharacter = () => choices.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.character === world.characterType)));
   const openPicker = () => { setComparison(false);input.setEnabled(false);document.querySelector<HTMLSelectElement>('#start-mode')!.value=document.querySelector<HTMLSelectElement>('#game-mode')!.value;document.querySelector<HTMLSelectElement>('#start-difficulty')!.value=document.querySelector<HTMLSelectElement>('#bot-difficulty')!.value;document.querySelector<HTMLSelectElement>('#start-weapon')!.value=document.querySelector<HTMLSelectElement>('#weapon-select')!.value; input.reset(); if (document.pointerLockElement) document.exitPointerLock(); world.setPreview(true); refreshCharacter(); picker.hidden = false; choices[0]!.focus(); };
   const home=document.querySelector<HTMLElement>('#home-screen')!;
-  const openHome=()=>{settingsView.close();roomWaiting=false;guestPromptPending=false;nicknameDialog.cancel();waitingView.hide();nameplates.clear();document.querySelector('#online-player-list')!.replaceChildren();document.querySelector('#roster-lines')!.replaceChildren();document.body.classList.remove('in-waiting-room');onlineBoard.open=false;pendingEquipment=undefined;onlineToolEventId=-1;void accountView.refreshGrowth().catch(()=>{});predictionDash=predictionJump=false;localDash=cancelDash(localDash);lobbyPolish.cancelDeploy();lobbyPolish.cancelDrag();gameChoices.close();syncHomeSelection();resultTracker.cancel();resultView.hide();online.leave();onlineMotion.reset();remoteMotion.reset();onlineAudio.reset();pendingDoor=undefined;pendingSlot=undefined;pendingTake=undefined;choosePickupId=undefined;onlineActive=false;onlineState=null;onlineId='';onlineEventId=-1;world.endOnline();onlineLobby.hidden=true;updateOnlineControls(false);homeOpen=true;home.hidden=false;document.body.classList.add('at-home');manualPaused=false;pausePanel.hidden=true;closeMenu();document.querySelector<HTMLElement>('#help')!.hidden=true;picker.hidden=true;setComparison(false);input.setEnabled(false);world.setPreview(true,true);document.querySelector<HTMLButtonElement>('#home-start')!.focus();};
+  const openHome=()=>{settingsView.close();roomWaiting=false;guestPromptPending=false;nicknameDialog.cancel();waitingView.hide();nameplates.clear();document.querySelector('#online-player-list')!.replaceChildren();document.querySelector('#roster-lines')!.replaceChildren();document.body.classList.remove('in-waiting-room');onlineBoard.open=false;pendingEquipment=undefined;onlineToolEventId=-1;void accountView.refreshGrowth().catch(()=>{});predictionDash=predictionJump=false;localDash=cancelDash(localDash);lobbyPolish.cancelDeploy();lobbyPolish.cancelDrag();gameChoices.close();syncHomeSelection();resultTracker.cancel();resultView.hide();online.leave();onlineMotion.reset();remoteMotion.reset();onlineAudio.reset();pendingDoor=undefined;pendingSlot=undefined;pendingTake=undefined;choosePickupId=undefined;onlineActive=false;onlineState=null;onlineShots.reset();onlineTools.reset();onlineId='';onlineEventId=-1;world.endOnline();onlineLobby.hidden=true;updateOnlineControls(false);homeOpen=true;home.hidden=false;document.body.classList.add('at-home');manualPaused=false;pausePanel.hidden=true;closeMenu();document.querySelector<HTMLElement>('#help')!.hidden=true;picker.hidden=true;setComparison(false);input.setEnabled(false);world.setPreview(true,true);document.querySelector<HTMLButtonElement>('#home-start')!.focus();};
   document.querySelector('#online-back')!.addEventListener('click',openHome);
   document.querySelector('#home-open')!.addEventListener('click',openHome);
   document.querySelector('#setup-home')!.addEventListener('click',openHome);
@@ -644,10 +648,10 @@ async function start() {
     if(uiTick)refreshEquipment();
     playtest.frame(elapsed,onlineActive?'online':world.duelState().active?'bot':'practice',canPlay,onlineActive?online.network.rttMs:null);
     if(graphicsMode==='auto'){
-      const density=budget.sample(elapsed,canPlay);
+      const density=budget.sample(elapsed,canPlay,preferences.value.fps);
       if(density!==null){engine.setHardwareScalingLevel(1/density);engine.resize();world.resize();}
       world.setPerformanceLow?.(budget.density<=.85);
-      const detailed=!mobile&&budget.density>=Math.min(densityCap(),1.1);
+      const detailed=!mobile&&budget.density>=1.1;
       if(detailed!==qualityHigh){qualityHigh=detailed;world.setQuality(detailed);}
     }
     const resultAudio=!document.querySelector<HTMLElement>('#match-results')!.hidden&&!document.hidden&&document.hasFocus();
@@ -658,8 +662,9 @@ async function start() {
       const command:Omit<Command,'seq'>={x:canPlay?input.move.x:0,y:canPlay?input.move.y:0,yaw:input.look.yaw,pitch:input.look.pitch,fire:canPlay&&input.firing,shot:false,reload:false,jump:false,sprint:canPlay&&input.sprintingRequested,scope:world.practiceState().scoped};
       inputPump.pump(!!(input.actionsPending||pendingDoor||pendingSlot!==undefined||pendingTake||pendingEquipment));command.jump=canPlay&&predictionJump;command.dash=canPlay&&predictionDash;predictionJump=predictionDash=false;
       const predictedPosition=onlineMotion.advance(elapsed,command,online.connected);
-      world.renderOnline(onlineState,onlineId,input.look,Math.min(elapsed,.1),predictedPosition,remoteMotion.sampleAll(performance.now(),online.network.rttMs));
-      for(const event of onlineState.events)if(event.id>onlineEventId){onlineEventId=event.id;if(event.hit&&event.player===onlineId){impactTime=.2;feedbackTime=.35;shotFeedback.textContent=event.killed?'상대 처치':'명중';document.querySelector('#impact-marker')!.classList.toggle('kill',event.killed);}}
+      const frameState={...onlineState,events:onlineShots.drain(),toolEvents:onlineTools.drain()};
+      world.renderOnline(frameState,onlineId,input.look,Math.min(elapsed,.1),predictedPosition,remoteMotion.sampleAll(performance.now(),online.network.rttMs));
+      for(const event of frameState.events)if(event.id>onlineEventId){onlineEventId=event.id;if(event.hit&&event.player===onlineId){impactTime=.2;feedbackTime=.35;shotFeedback.textContent=event.killed?'상대 처치':'명중';document.querySelector('#impact-marker')!.classList.toggle('kill',event.killed);}}
     } else if (canPlay) {
       for(const step of simulationSteps(elapsed)){
         const queued=input.consumeShots(),reloadRequested=input.consumeReloads();

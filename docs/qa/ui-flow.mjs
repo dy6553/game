@@ -3,7 +3,9 @@ import {createNetworkGame} from '../../src/network-game.ts';
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import test from 'node:test';
 // Optional DOM-only smoke check. No browser, WebGL or device performance assertions.
+// Add --online-event-loss to run the known failing snapshot/feedback regressions.
 const { parseHTML } = await import(process.env.HARBOR_DOM_MODULE ?? 'linkedom');
 const coarse=process.argv.includes('--mobile');let uiNow=0;Object.defineProperty(performance,'now',{value:()=>uiNow,configurable:true});
 const {window,document}=parseHTML('<html><body><div id="app"></div></body></html>');
@@ -23,7 +25,7 @@ let difficulty='easy';let mode='duel',weaponId='pistol',ammo=12,scoped=false,rel
 let battle;
 const resetBattle=()=>{battle={difficulty:difficulty==='auto'?'normal':difficulty,automatic:difficulty==='auto',adaptiveStage:difficulty==='auto'?5:0,mode:mode==='survival'?'survival':mode==='ffa'?'ffa':'duel',wave:1,totalWaves:{easy:10,normal:20,hard:30,auto:20}[difficulty],lives:3,phase:'preparing',prepareRemaining:5,total:3,remaining:3,bots:mode==='ffa'?[1,2,3].map(i=>({id:'bot-'+i,name:'봇 '+i,kills:0,health:100,dead:0})):[],winnerName:'',active:mode!=='practice',playerKills:0,botKills:0,playerHealth:100,botHealth:100,damageVersion:0,position:{x:0,z:18},playerDead:0,botDead:0,winner:'',aim:0,respawnVersion:0,locked:null};};resetBattle();
 const calls={updates:[],sounds:[],lock:0,shot:0};
-const world={inventoryState(){return {inventory:{active:0,slots:[{id:weaponId,weapon:{ammo,reloadRemaining},cooldown:0}]},pickups:[]};},switchWeapon(slot){calls.slot=slot;return true;},pickup(){return 'unavailable';},scene:{whenReadyAsync:async()=>{},render(){}},characterType:'robot',endOnline(){},setQuality(){},setShake(value){calls.shake=value;},setMode(value,level=difficulty){difficulty=level;mode=value;resetBattle();},resize(){},setPreview(...args){calls.preview=args;},setLobbyWeapon(id){calls.lobbyWeapon=id;},setLobbyMotion(){},rotateLobby(){},resetLobbyRotation(){},setReference(){},selectCharacter(value){this.characterType=value;},selectWeapon(value){weaponId=value;ammo=specifications[value].magazineSize;},update(p,dt,look,paused=false){calls.updates.push({p:{...p},look:{...look},dt,paused});reloadRemaining=Math.max(0,reloadRemaining-(paused?0:dt));},practiceState(){return {weaponId,weaponName:specifications[weaponId].name,...specifications[weaponId],ammo,reloadRemaining,automatic:weaponId==='machinegun',cooldown:0,scoped,targetHealth:[100,100,100],hits:0,destroyed:0,grounded:true,complete:false};},duelState:()=>({...battle}),consumeSounds:()=>[],resetJump(){},resetPractice(){resetBattle();ammo=specifications[weaponId].magazineSize;scoped=false;},jump:()=>true,reload(){reloadRemaining=1.5;return true;},toggleScope(){scoped=!scoped;return true;},shoot(){calls.shot++;ammo--;return {fired:true,hit:false};}};
+const world={get scoped(){return scoped;},inventoryState(){return {inventory:{active:0,slots:[{id:weaponId,weapon:{ammo,reloadRemaining},cooldown:0}]},pickups:[]};},switchWeapon(slot){calls.slot=slot;return true;},pickup(){return 'unavailable';},scene:{whenReadyAsync:async()=>{},render(){}},characterType:'robot',endOnline(){},setQuality(){},setShake(value){calls.shake=value;},setMode(value,level=difficulty){difficulty=level;mode=value;resetBattle();},resize(){},setPreview(...args){calls.preview=args;},setLobbyWeapon(id){calls.lobbyWeapon=id;},setLobbyMotion(){},rotateLobby(){},resetLobbyRotation(){},setReference(){},selectCharacter(value){this.characterType=value;},selectWeapon(value){weaponId=value;ammo=specifications[value].magazineSize;},update(p,dt,look,paused=false){calls.updates.push({p:{...p},look:{...look},dt,paused});reloadRemaining=Math.max(0,reloadRemaining-(paused?0:dt));},practiceState(){return {weaponId,weaponName:specifications[weaponId].name,...specifications[weaponId],ammo,reloadRemaining,automatic:weaponId==='machinegun',cooldown:0,scoped,targetHealth:[100,100,100],hits:0,destroyed:0,grounded:true,complete:false};},duelState:()=>({...battle}),consumeSounds:()=>[],resetJump(){},resetPractice(){resetBattle();ammo=specifications[weaponId].magazineSize;scoped=false;},jump:()=>true,reload(){reloadRemaining=1.5;return true;},toggleScope(){scoped=!scoped;return true;},shoot(){calls.shot++;ammo--;return {fired:true,hit:false};}};
 const audio={settings:{master:.7,effects:.85,environment:.16,muted:false},unlock:async()=>{},configure(){},setInterfaceActive(){},playInterface(kind){calls.sounds.push('menu-'+kind);},pause(value){calls.audioPaused=value;},play(kind){calls.sounds.push(kind);},available:true};
 let render,delta=100;
 class Engine{static IsSupported=true;constructor(){}setHardwareScalingLevel(value){calls.scaling=value;}resize(){}runRenderLoop(fn){render=fn;}getDeltaTime(){return delta;}getRenderWidth(){return 1280;}getRenderHeight(){return 720;}}
@@ -175,3 +177,51 @@ click('home-online');click('home-start');click('online-create');await new Promis
 
 // Recommended presets are explicit actions and preserve unrelated preferences and records.
 click('home-settings');choose('frame-target','120');choose('graphics-quality','high');el('mouse-sensitivity').value='150';el('mouse-sensitivity').dispatchEvent(new window.Event('input',{bubbles:true}));const keptResults=storage.get('harbor-match-results-v1');document.querySelector('#environment-low-preset')?.dispatchEvent(new window.Event('click',{bubbles:true}));assert.equal(el('frame-target').value,'30','one-click low-end preset applies30FPS');assert.equal(el('graphics-quality').value,'low');assert.equal(el('shadows-enabled').checked,false);assert.equal(el('shot-effects').value,'low');assert.equal(el('screen-shake').value,'off');assert.equal(el('mouse-sensitivity').value,'150');assert.equal(storage.get('harbor-match-results-v1'),keptResults);click('environment-close');click('home-practice');click('home-start');frame(300);frame();assert.equal(el('combat-map').hidden,false);click('environment-open');click('settings-tab-interface');const mapToggle=document.querySelector('#minimap-enabled');if(mapToggle){mapToggle.checked=false;mapToggle.dispatchEvent(new window.Event('change',{bubbles:true}));}click('environment-close');frame();assert.equal(el('combat-map').hidden,true,'minimap preference hides the map while playing');assert.equal(el('combat-vitals').hidden,false,'hiding map never hides health');assert.equal(el('combat-hp').textContent,'100');click('environment-open');click('environment-reset');click('environment-close');frame();assert.equal(el('combat-map').hidden,false,'reset restores map');assert.equal(el('frame-target').value,'60');console.log('PASS: low-end one-click preset, unrelated preferences/records preserved, minimap hide and reset keep health visible');
+
+// Opt-in Red tests: real main.ts state callbacks/render loop, mocked DOM and renderer.
+// No live server, account, GPU, or production writes are involved.
+if(process.argv.includes('--online-event-loss')){
+ const prepare=()=>{
+  click('home-open');
+  const game=createNetworkGame();game.join('me');game.join('foe');
+  qa.emitOnline(structuredClone(game.state),'me');frame(350);
+  for(let i=0;i<5;i++)frame(100);
+  assert.equal(el('shot-feedback').hidden,true,'previous feedback has expired');
+  const rendered=[];
+  world.renderOnline=state=>rendered.push(structuredClone(state));
+  return {game,rendered};
+ };
+ const fire=game=>{
+  game.input('me',{seq:0,x:0,y:0,yaw:0,pitch:0,fire:false,shot:true,reload:false,jump:false,sprint:false,scope:false});
+  game.step();
+  const shot=structuredClone(game.state);
+  assert.equal(shot.players[0].weapon.ammo,11,'the authoritative server consumed one bullet');
+  assert.equal(shot.players[1].health,75,'the authoritative server applied the hit');
+  assert.equal(shot.events.length,1,'the server emitted a shot event');
+  assert.equal(shot.events[0].hit,true);
+  return shot;
+ };
+ await test('control: a shot snapshot rendered immediately reaches the renderer and hit HUD',()=>{
+  const {game,rendered}=prepare(),shot=fire(game);
+  qa.emitOnline(shot,'me');frame(100);
+  assert.ok(rendered.some(s=>s.events.some(e=>e.id===shot.events[0].id)));
+  assert.equal(el('shot-feedback').textContent,'명중');
+  assert.equal(el('shot-feedback').hidden,false);
+ });
+ await test('a shot followed by an empty snapshot before rendering still reaches the renderer',()=>{
+  const {game,rendered}=prepare(),shot=fire(game);
+  qa.emitOnline(shot,'me');game.step();
+  const latest=structuredClone(game.state);assert.equal(latest.events.length,0);
+  qa.emitOnline(latest,'me');frame(100);
+  assert.equal(rendered.at(-1).tick,latest.tick,'rendering uses the newest authoritative state');
+  assert.equal(rendered.at(-1).players[1].health,75,'damage is preserved independently of effects');
+  assert.ok(rendered.some(s=>s.events.some(e=>e.id===shot.events[0].id)),
+   'the confirmed shot must reach the renderer even when two snapshots arrive between draws');
+ });
+ await test('a confirmed hit followed by an empty snapshot before rendering still updates the hit HUD',()=>{
+  const {game}=prepare(),shot=fire(game);
+  qa.emitOnline(shot,'me');game.step();qa.emitOnline(structuredClone(game.state),'me');frame(100);
+  assert.equal(el('shot-feedback').textContent,'명중','the confirmed hit feedback must survive until a draw');
+  assert.equal(el('shot-feedback').hidden,false,'the confirmed hit feedback must be visible');
+ });
+}
