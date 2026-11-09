@@ -1,0 +1,6 @@
+import type {MatchState,Player} from './network-game.ts';
+/** Share public actor data once; ammo, input ACK and inventory are private to their owner. */
+type Own=Pick<Player,'weapon'|'gear'|'gearCooldown'|'healing'|'flash'|'seq'|'dash'|'protection'>;
+export function statePacket(state:MatchState){return JSON.stringify({type:'state',state:{...state,players:state.players.map(p=>({...p,inventory:undefined,startWeapon:undefined,totalKills:undefined,weapon:undefined,gear:undefined,gearCooldown:undefined,healing:undefined,flash:undefined,seq:undefined,dash:undefined,protection:undefined}))}});}
+export function privatePacket(packet:string,state:MatchState,id:string){const p=state.players.find(p=>p.id===id);const own:Partial<Own>=p?{weapon:p.weapon,gear:p.gear,gearCooldown:p.gearCooldown,healing:p.healing,flash:p.flash,seq:p.seq,dash:p.dash,protection:p.protection}:{};return packet.slice(0,-1)+',"ownInventory":'+JSON.stringify(p?.inventory??null)+',"ownState":'+JSON.stringify(own)+'}';}
+export function readState(message:{state:MatchState;ownInventory?:Player['inventory'];ownState?:Own;id?:string},id?:string){const me=message.state.players.find(p=>p.id===(id??message.id));if(me){if(message.ownInventory)me.inventory=message.ownInventory;if(message.ownState)Object.assign(me,message.ownState);}return message.state;}

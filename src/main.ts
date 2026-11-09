@@ -1,3 +1,4 @@
+import {createOnlinePump} from './online-pump.ts';
 import {installMobileBrowser} from './mobile-browser.ts';
 import {ENVIRONMENT_MARKUP,createEnvironmentPanel} from './environment-panel.ts';
 import {createEnvironmentPreferences,type EnvironmentPreferences} from './environment-preferences.ts';
@@ -135,7 +136,7 @@ async function start() {
   let settingsStorage:Storage|null=null;try{settingsStorage=localStorage;}catch{}const preferences=createEnvironmentPreferences(settingsStorage),frameLimit=createFrameLimit(preferences.value.fps);
   const savePreference=(value:Partial<EnvironmentPreferences>)=>{const next=preferences.patch(value);document.querySelector('#environment-save-status')!.textContent=preferences.saved?'설정은 이 브라우저에 자동 저장됩니다.':'저장할 수 없어 이번 접속에만 적용됩니다.';return next;};
   let graphicsMode=preferences.value.graphics;
-  const densityCap=()=>Math.min(window.devicePixelRatio||1,graphicsMode==='high'?2:graphicsMode==='balanced'?1:graphicsMode==='low'?.75:mobile?1.5:1.75);
+  const densityCap=()=>Math.min(window.devicePixelRatio||1,graphicsMode==='high'?2:graphicsMode==='balanced'?1:graphicsMode==='low'?.6:mobile?1:1.75);
   let budget=createRenderBudget(densityCap()),qualityHigh=graphicsMode==='high'||graphicsMode==='auto'&&!mobile;
   engine.setHardwareScalingLevel(1/budget.density);
   const playtest=createPlaytest();
@@ -144,6 +145,7 @@ async function start() {
   const nearbyDoor=(p:Point,doors:Parameters<typeof world.geometry.nearbyDoor>[1])=>(world.geometry??harborWorld).nearbyDoor(p,doors);
   const indoorAt=(p:Point)=>(world.geometry??harborWorld).indoorAt(p);
   world.setQuality(qualityHigh);world.setShadows?.(preferences.value.shadows);document.querySelector<HTMLSelectElement>('#graphics-quality')!.value=graphicsMode;
+  world.setPerformanceLow?.(graphicsMode==='low');
   world.setMode('duel');
   const shake=document.querySelector<HTMLSelectElement>('#screen-shake')!;
   const setShake=(value:string)=>{const level=value==='off'||value==='normal'?value:'low';shake.value=level;world.setShake(level);return level;};
@@ -152,7 +154,7 @@ async function start() {
   document.querySelector<HTMLSelectElement>('#graphics-quality')!.addEventListener('change',event=>{
     graphicsMode=savePreference({graphics:(event.currentTarget as HTMLSelectElement).value as EnvironmentPreferences['graphics']}).graphics;budget=createRenderBudget(densityCap());
     engine.setHardwareScalingLevel(1/budget.density);qualityHigh=graphicsMode==='high'||(graphicsMode==='auto'&&!mobile);
-    world.setQuality(qualityHigh);engine.resize();world.resize();
+    world.setQuality(qualityHigh);world.setPerformanceLow?.(graphicsMode==='low');engine.resize();world.resize();
   });
   const effectsSetting=document.querySelector<HTMLSelectElement>('#shot-effects')!;let reducedShots=mobile;try{const saved=localStorage.getItem('harbor-shot-effects');if(saved)reducedShots=saved==='low';}catch{}effectsSetting.value=reducedShots?'low':'full';world.setReducedShots?.(reducedShots);effectsSetting.addEventListener('change',()=>{reducedShots=effectsSetting.value==='low';world.setReducedShots?.(reducedShots);try{localStorage.setItem('harbor-shot-effects',effectsSetting.value);}catch{}});
   const input = createInput(canvas);
@@ -169,7 +171,7 @@ async function start() {
   setSensitivity(savedSensitivity);
   sensitivity.addEventListener('input',()=>{const next=setSensitivity(Number(sensitivity.value)/100);try{localStorage.setItem('harbor-touch-sensitivity',String(next));}catch{}});
   const journal=createResultJournal({getItem:key=>localStorage.getItem(key),setItem:(key,value)=>localStorage.setItem(key,value)}),resultTracker=createResultTracker();
-  let shownResult='';let localDash=createDash(),pendingDash=false;
+  let shownResult='';let localDash=createDash(),predictionDash=false,predictionJump=false;
   const audio=createGameAudio();const reducedLobbyMotion=matchMedia('(prefers-reduced-motion: reduce)');
   const lobbyCue=(kind:'ui'|'deploy')=>{void audio.unlock().then(()=>{if(!document.hidden&&document.hasFocus())audio.playInterface(kind);});};
   document.addEventListener('pointerdown',()=>{void audio.unlock();});
@@ -185,7 +187,7 @@ async function start() {
     const code=(event.currentTarget as HTMLSelectElement).value;
     if(code==='Space'||code==='KeyJ'){input.reset();input.setJumpKey(code);savePreference({jump:code});if(!settingsView.isOpen)canvas.focus();}
   });
-  let onlineState:MatchState|null=null,onlineId='',onlineActive=false,onlineSendTime=0,onlineEventId=-1;
+  let onlineState:MatchState|null=null,onlineId='',onlineActive=false,onlineEventId=-1;
   let onlineStatus='',onlineCode='';let resultOnlineTick:number|null=null,resultOnlineReady=false;const onlineMotion=createOnlineMotion(m=>playtest.correction(m)),remoteMotion=createRemoteMotion();
   const onlineLobby=document.querySelector<HTMLElement>('#online-lobby')!;
   let currentGrowth=growth(0),growthLoggedIn=false;
@@ -210,7 +212,7 @@ async function start() {
     if(me?.guest&&!normalizeNickname(me.nickname)&&online.connected&&!guestPromptPending){guestPromptPending=true;void nicknameDialog.open(false).then(name=>{if(!onlineActive)return;if(!name){openHome();return;}online.control('nickname',name);});}else if(me?.nickname)guestPromptPending=false;
     for(const cue of onlineAudio.update(state,id,input.look.yaw,canUseInventory()&&online.connected))audio.play(cue.kind,cue.pan,cue.volume);
     observeOnlineResult(state,id);
-  },status=>{if(status!=='대전 중'&&status!=='경기 종료')resultOnlineReady=false;onlineStatus=status;document.querySelector('#online-message')!.textContent=status;document.querySelector('#waiting-status')!.textContent=status;if(status.startsWith('연결 복구 중')||status.startsWith('방 연결 종료')){for(const p of onlineState?.players??[])if(p.guest)delete p.nickname;nameplates.clear();document.querySelector('#online-player-list')!.replaceChildren();document.querySelector('#roster-lines')!.replaceChildren();nicknameDialog.cancel();guestPromptPending=false;if(onlineState&&roomWaiting)waitingView.show(onlineState,onlineId,onlineCode,false);}},session=>{onlineToolEventId=-1;onlineAudio.reset();pendingDash=false;onlineCode=session.code;resultTracker.start();shownResult='';resultOnlineTick=null;resultOnlineReady=false;resultView.hide();},()=>accountView.token());
+  },status=>{if(status!=='대전 중'&&status!=='경기 종료')resultOnlineReady=false;onlineStatus=status;document.querySelector('#online-message')!.textContent=status;document.querySelector('#waiting-status')!.textContent=status;if(status.startsWith('연결 복구 중')||status.startsWith('방 연결 종료')){for(const p of onlineState?.players??[])if(p.guest)delete p.nickname;nameplates.clear();document.querySelector('#online-player-list')!.replaceChildren();document.querySelector('#roster-lines')!.replaceChildren();nicknameDialog.cancel();guestPromptPending=false;if(onlineState&&roomWaiting)waitingView.show(onlineState,onlineId,onlineCode,false);}},session=>{onlineToolEventId=-1;onlineAudio.reset();predictionDash=predictionJump=false;onlineCode=session.code;resultTracker.start();shownResult='';resultOnlineTick=null;resultOnlineReady=false;resultView.hide();},()=>accountView.token());
   let pendingDoor:string|undefined;
   let pendingEquipment:EquipmentId|undefined;let onlineToolEventId=-1;
   let onlineBoardKey='';const onlineBoard=document.querySelector<HTMLDetailsElement>('#online-scoreboard')!;onlineBoard.addEventListener('toggle',()=>{if(onlineBoard.open){onlineBoardKey='';input.reset();}});
@@ -333,7 +335,7 @@ async function start() {
   const refreshCharacter = () => choices.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.character === world.characterType)));
   const openPicker = () => { setComparison(false);input.setEnabled(false);document.querySelector<HTMLSelectElement>('#start-mode')!.value=document.querySelector<HTMLSelectElement>('#game-mode')!.value;document.querySelector<HTMLSelectElement>('#start-difficulty')!.value=document.querySelector<HTMLSelectElement>('#bot-difficulty')!.value;document.querySelector<HTMLSelectElement>('#start-weapon')!.value=document.querySelector<HTMLSelectElement>('#weapon-select')!.value; input.reset(); if (document.pointerLockElement) document.exitPointerLock(); world.setPreview(true); refreshCharacter(); picker.hidden = false; choices[0]!.focus(); };
   const home=document.querySelector<HTMLElement>('#home-screen')!;
-  const openHome=()=>{settingsView.close();roomWaiting=false;guestPromptPending=false;nicknameDialog.cancel();waitingView.hide();nameplates.clear();document.querySelector('#online-player-list')!.replaceChildren();document.querySelector('#roster-lines')!.replaceChildren();document.body.classList.remove('in-waiting-room');onlineBoard.open=false;pendingEquipment=undefined;onlineToolEventId=-1;void accountView.refreshGrowth().catch(()=>{});pendingDash=false;localDash=cancelDash(localDash);lobbyPolish.cancelDeploy();lobbyPolish.cancelDrag();gameChoices.close();syncHomeSelection();resultTracker.cancel();resultView.hide();online.leave();onlineMotion.reset();remoteMotion.reset();onlineAudio.reset();pendingDoor=undefined;pendingSlot=undefined;pendingTake=undefined;choosePickupId=undefined;onlineActive=false;onlineState=null;onlineId='';onlineEventId=-1;world.endOnline();onlineLobby.hidden=true;updateOnlineControls(false);homeOpen=true;home.hidden=false;document.body.classList.add('at-home');manualPaused=false;pausePanel.hidden=true;closeMenu();document.querySelector<HTMLElement>('#help')!.hidden=true;picker.hidden=true;setComparison(false);input.setEnabled(false);world.setPreview(true,true);document.querySelector<HTMLButtonElement>('#home-start')!.focus();};
+  const openHome=()=>{settingsView.close();roomWaiting=false;guestPromptPending=false;nicknameDialog.cancel();waitingView.hide();nameplates.clear();document.querySelector('#online-player-list')!.replaceChildren();document.querySelector('#roster-lines')!.replaceChildren();document.body.classList.remove('in-waiting-room');onlineBoard.open=false;pendingEquipment=undefined;onlineToolEventId=-1;void accountView.refreshGrowth().catch(()=>{});predictionDash=predictionJump=false;localDash=cancelDash(localDash);lobbyPolish.cancelDeploy();lobbyPolish.cancelDrag();gameChoices.close();syncHomeSelection();resultTracker.cancel();resultView.hide();online.leave();onlineMotion.reset();remoteMotion.reset();onlineAudio.reset();pendingDoor=undefined;pendingSlot=undefined;pendingTake=undefined;choosePickupId=undefined;onlineActive=false;onlineState=null;onlineId='';onlineEventId=-1;world.endOnline();onlineLobby.hidden=true;updateOnlineControls(false);homeOpen=true;home.hidden=false;document.body.classList.add('at-home');manualPaused=false;pausePanel.hidden=true;closeMenu();document.querySelector<HTMLElement>('#help')!.hidden=true;picker.hidden=true;setComparison(false);input.setEnabled(false);world.setPreview(true,true);document.querySelector<HTMLButtonElement>('#home-start')!.focus();};
   document.querySelector('#online-back')!.addEventListener('click',openHome);
   document.querySelector('#home-open')!.addEventListener('click',openHome);
   document.querySelector('#setup-home')!.addEventListener('click',openHome);
@@ -368,7 +370,7 @@ async function start() {
   };
   startButton.addEventListener('click',()=>beginGame(false));
   startLocked.addEventListener('click',()=>beginGame(true));
-  function switchMap(map:MapId,type=world.characterType){if(map===selectedMap)return;world.scene.dispose();world=createHarborScene(engine,{map});selectedMap=map;world.selectCharacter(type);world.setQuality(qualityHigh);world.setShadows?.(preferences.value.shadows);world.setReducedShots?.(reducedShots);world.setShake(shake.value==='off'||shake.value==='normal'?shake.value:'low');world.setPreview(true,true);}
+  function switchMap(map:MapId,type=world.characterType){if(map===selectedMap)return;world.scene.dispose();world=createHarborScene(engine,{map});selectedMap=map;world.selectCharacter(type);world.setQuality(qualityHigh);world.setShadows?.(preferences.value.shadows);world.setPerformanceLow?.(graphicsMode==='low'||graphicsMode==='auto'&&budget.density<=.85);world.setReducedShots?.(reducedShots);world.setShake(shake.value==='off'||shake.value==='normal'?shake.value:'low');world.setPreview(true,true);}
   const homeView=createHomeScreen({
     selectCharacter(type){world.selectCharacter(type);refreshCharacter();lobbyCue('ui');if(!reducedLobbyMotion.matches)document.querySelector('#home-character-name')?.animate?.([{opacity:.3},{opacity:1}],{duration:180});},
     selectWeapon(id){world.setLobbyWeapon(id);lobbyCue('ui');if(!reducedLobbyMotion.matches)document.querySelector('#home-equipped-art')?.animate?.([{opacity:.3,transform:'translateX(-6px)'},{opacity:1,transform:'translateX(0)'}],{duration:180});},
@@ -509,7 +511,7 @@ async function start() {
   }
   const reset = () => { position = { ...PROTOTYPE.spawn }; input.resetLook();world.resetJump(); };
   document.querySelector('#reset')!.addEventListener('click', reset);
-  const restart=()=>{world.setUpgradeTier?.(growthLoggedIn?currentGrowth.tier:0);const b=world.duelState();growthTicket=accountView.startGrowth(b.active?b.mode:'practice',b.mode==='survival'&&b.automatic?'auto':b.difficulty);localDash=createDash();pendingDash=false;resultView.hide();resultTracker.start();shownResult='';reset();world.resetPractice();lastReload=0;lastGrounded=true;lastPlayerHealth=100;lastRespawn=0;footDistance=0;footAlternating=false;emptyAt=0;lastHudKey='';noticeTime=0;hitTime=0;shotTime=0;feedbackTime=0;damageTime=0;impactTime=0;previousDamage=0;refreshHud();};
+  const restart=()=>{world.setUpgradeTier?.(growthLoggedIn?currentGrowth.tier:0);const b=world.duelState();growthTicket=accountView.startGrowth(b.active?b.mode:'practice',b.mode==='survival'&&b.automatic?'auto':b.difficulty);localDash=createDash();predictionDash=predictionJump=false;resultView.hide();resultTracker.start();shownResult='';reset();world.resetPractice();lastReload=0;lastGrounded=true;lastPlayerHealth=100;lastRespawn=0;footDistance=0;footAlternating=false;emptyAt=0;lastHudKey='';noticeTime=0;hitTime=0;shotTime=0;feedbackTime=0;damageTime=0;impactTime=0;previousDamage=0;refreshHud();};
   document.querySelector('#practice-reset')!.addEventListener('click',restart);
   document.querySelector('#practice-again')!.addEventListener('click',restart);
   document.querySelector<HTMLSelectElement>('#bot-difficulty')!.addEventListener('change',event=>{const level=(event.currentTarget as HTMLSelectElement).value;if(onlineActive||!isSurvivalDifficulty(level))return;world.setMode(readMode(document.querySelector<HTMLSelectElement>('#game-mode')!.value),level);restart();canvas.focus();});
@@ -597,12 +599,31 @@ async function start() {
   loading.hidden = true;
   openHome();
   const invited=new URLSearchParams(window.location?.search??'').get('room');if(invited&&/^[0-9A-F]{8}$/.test(invited.toUpperCase())){document.querySelector<HTMLInputElement>('#online-code')!.value=invited.toUpperCase();openOnlineLobby();}
+  function onlineCanPlay(){return !settingsView.isOpen&&!roomWaiting&&!nicknameDialog.isOpen&&!onlineBoard.open&&!lobbyPolish.deploying&&!gameChoices.isOpen&&!resultView.isOpen&&!homeOpen&&!manualPaused&&!document.hidden&&!matchMedia('(pointer: coarse) and (orientation: portrait)').matches&&picker.hidden&&!comparing&&!menuOpen&&help.hidden&&document.hasFocus();}
+  let retained:Partial<Command>={};
+  const inputPump=createOnlinePump(()=>{
+    if(!onlineActive||!onlineState||roomWaiting){retained={};return;}
+    if(!online.connected){retained={};input.reset();return;}
+    const can=onlineCanPlay();
+    if(!can)retained={};
+    const command:Omit<Command,'seq'>={x:can?input.move.x:0,y:can?input.move.y:0,yaw:input.look.yaw,pitch:input.look.pitch,fire:can&&input.firing,shot:can&&(input.consumeShots()>0||!!retained.shot),reload:can&&(input.consumeReloads()>0||!!retained.reload),jump:can&&(input.consumeJumps()>0||!!retained.jump),sprint:can&&input.sprintingRequested,scope:world.practiceState().scoped,dash:can&&(input.consumeDashes()>0||!!retained.dash)};
+    if(can){command.door=pendingDoor??retained.door;command.slot=pendingSlot??retained.slot;command.pickup=pendingTake?.pickup??retained.pickup;command.replace=pendingTake?.replace??retained.replace;command.equipment=pendingEquipment??retained.equipment;}
+    const seq=online.send(command);
+    if(seq!==null){onlineMotion.sent(seq,command);predictionDash ||=!!command.dash;predictionJump ||=command.jump;retained={};pendingDoor=undefined;pendingSlot=undefined;pendingTake=undefined;pendingEquipment=undefined;}else retained={...command};
+  });
+  let networkTimer:ReturnType<typeof setInterval>|null=null;
+  const startNetworkTimer=()=>{if(networkTimer===null)networkTimer=setInterval(()=>inputPump.pump(),25);};startNetworkTimer();
+  window.addEventListener('pageshow',startNetworkTimer);
+  for(const type of ['pointerdown','pointerup','pointercancel','keydown','keyup','click'])window.addEventListener(type,()=>{if(onlineActive)queueMicrotask(()=>inputPump.pump(true));},{capture:true});
+  window.addEventListener('pagehide',()=>{if(networkTimer!==null)clearInterval(networkTimer);networkTimer=null;retained={};});
+  let uiRefreshAt=-Infinity;
   let resetClock=true;
   document.addEventListener('visibilitychange',()=>{resetClock=true;frameLimit.reset();});
   window.addEventListener('focus',()=>{resetClock=true;frameLimit.reset();});
   engine.runRenderLoop(() => {
     const elapsed=resetClock?0:Math.max(0,engine.getDeltaTime()/1000);resetClock=false;
     const dt = Math.min(elapsed, 0.05);
+    const uiTick=performance.now()-uiRefreshAt>=50;if(uiTick)uiRefreshAt=performance.now();
     const portraitTouch = matchMedia('(pointer: coarse) and (orientation: portrait)').matches;
     lobbyPolish.update();world.setLobbyMotion(!reducedLobbyMotion.matches&&!settingsView.isOpen&&!document.hidden&&document.hasFocus()&&!gameChoices.isOpen&&!resultView.isOpen);audio.setInterfaceActive(!document.hidden&&document.hasFocus());
     const canPlay=!settingsView.isOpen&&!roomWaiting&&!nicknameDialog.isOpen&&!onlineBoard.open&&!lobbyPolish.deploying&&!gameChoices.isOpen&&!resultView.isOpen&&!homeOpen&&!manualPaused&&!document.hidden&&!portraitTouch&&picker.hidden&&!comparing&&!menuOpen&&help.hidden&&document.hasFocus();
@@ -610,11 +631,12 @@ async function start() {
     document.querySelector<HTMLElement>('#mouse-aim-hint')!.hidden=!canPlay||document.pointerLockElement===canvas;
     document.querySelector('#pause-description')!.textContent=onlineActive?'내 조작만 멈춥니다. 상대의 경기는 계속됩니다.':'전투와 이동이 멈췄습니다.';
     document.querySelector<HTMLElement>('#pause-indicator')!.hidden=manualPaused||!picker.hidden||comparing||portraitTouch||(!menuOpen&&help.hidden);
-    refreshEquipment();
+    if(uiTick)refreshEquipment();
     playtest.frame(elapsed,onlineActive?'online':world.duelState().active?'bot':'practice',canPlay,onlineActive?online.network.rttMs:null);
     if(graphicsMode==='auto'){
       const density=budget.sample(elapsed,canPlay);
       if(density!==null){engine.setHardwareScalingLevel(1/density);engine.resize();world.resize();}
+      world.setPerformanceLow?.(budget.density<=.85);
       const detailed=!mobile&&budget.density>=Math.min(densityCap(),1.1);
       if(detailed!==qualityHigh){qualityHigh=detailed;world.setQuality(detailed);}
     }
@@ -624,9 +646,7 @@ async function start() {
     if(onlineActive&&onlineState&&!roomWaiting){
       updateOnlineControls(true);
       const command:Omit<Command,'seq'>={x:canPlay?input.move.x:0,y:canPlay?input.move.y:0,yaw:input.look.yaw,pitch:input.look.pitch,fire:canPlay&&input.firing,shot:false,reload:false,jump:false,sprint:canPlay&&input.sprintingRequested,scope:world.practiceState().scoped};
-      if(canPlay&&input.consumeDashes()>0&&onlineState.players.find(p=>p.id===onlineId)?.dash)pendingDash=true;
-      onlineSendTime+=Math.min(elapsed,.1);
-      if(onlineSendTime>=.05||pendingDash){onlineSendTime%=.05;command.dash=canPlay&&pendingDash;command.shot=canPlay&&input.consumeShots()>0;command.reload=canPlay&&input.consumeReloads()>0;command.jump=canPlay&&input.consumeJumps()>0;if(canPlay){command.door=pendingDoor;command.slot=pendingSlot;command.pickup=pendingTake?.pickup;command.replace=pendingTake?.replace;command.equipment=pendingEquipment;}const seq=online.send(command);if(seq!==null){onlineMotion.sent(seq,command);pendingDoor=undefined;pendingSlot=undefined;pendingTake=undefined;pendingEquipment=undefined;pendingDash=false;}else command.dash=false;}
+      inputPump.pump(!!(input.actionsPending||pendingDoor||pendingSlot!==undefined||pendingTake||pendingEquipment));command.jump=canPlay&&predictionJump;command.dash=canPlay&&predictionDash;predictionJump=predictionDash=false;
       const predictedPosition=onlineMotion.advance(elapsed,command,online.connected);
       world.renderOnline(onlineState,onlineId,input.look,Math.min(elapsed,.1),predictedPosition,remoteMotion.sampleAll(performance.now(),online.network.rttMs));
       for(const event of onlineState.events)if(event.id>onlineEventId){onlineEventId=event.id;if(event.hit&&event.player===onlineId){impactTime=.2;feedbackTime=.35;shotFeedback.textContent=event.killed?'상대 처치':'명중';document.querySelector('#impact-marker')!.classList.toggle('kill',event.killed);}}
@@ -683,11 +703,11 @@ async function start() {
     runButton.textContent=runningRequested?'달리기 켜짐':'달리기';
     const runBattle=world.duelState();runButton.disabled=runBattle.active&&(runBattle.playerHealth===0||!!runBattle.winner);
     damageTime=Math.max(0,damageTime-elapsed);impactTime=Math.max(0,impactTime-elapsed);document.querySelector<HTMLElement>('#impact-marker')!.hidden=impactTime<=0||!picker.hidden||comparing;
-    syncDifficultyOptions();
+    if(uiTick){syncDifficultyOptions();
     document.querySelector<HTMLElement>('#bot-difficulty-setting')!.hidden=onlineActive||document.querySelector<HTMLSelectElement>('#game-mode')!.value==='practice';document.querySelector<HTMLElement>('#start-difficulty-setting')!.hidden=document.querySelector<HTMLSelectElement>('#start-mode')!.value==='practice';
     document.querySelector<HTMLElement>('#ffa-mode-note')!.hidden=document.querySelector<HTMLSelectElement>('#start-mode')!.value!=='ffa';document.querySelector<HTMLElement>('#survival-mode-note')!.hidden=document.querySelector<HTMLSelectElement>('#start-mode')!.value!=='survival';
-    gameChoices.refresh();
-    noticeTime=Math.max(0,noticeTime-elapsed);refreshHud();refreshInventory();refreshCombatHud();
+    gameChoices.refresh();}
+    noticeTime=Math.max(0,noticeTime-elapsed);refreshHud();if(uiTick)refreshInventory();refreshCombatHud();
     hitTime = Math.max(0, hitTime - elapsed);
     shotTime=Math.max(0,shotTime-elapsed);feedbackTime=Math.max(0,feedbackTime-elapsed);
     crosshair.classList.toggle('hit', hitTime > 0);

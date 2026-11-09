@@ -13,7 +13,7 @@ export type Player = GearActor & {nickname?:string;guest?:boolean;participated?:
 export type Command={seq:number;x:number;y:number;yaw:number;pitch:number;fire:boolean;shot:boolean;reload:boolean;jump:boolean;sprint:boolean;scope:boolean;door?:string;dash?:boolean;slot?:number;pickup?:string;replace?:number;equipment?:EquipmentId};
 export type ShotEvent={id:number;player:string;weapon:WeaponId;from:{x:number;y:number;z:number};to:{x:number;y:number;z:number};hit:boolean;killed:boolean;target?:string};
 export type OnlineMode='duel'|'ffa'|'team';
-export type NetworkOptions={waitingRoom?:boolean;mode?:OnlineMode;randomPickups?:boolean};
+export type NetworkOptions={clock?:()=>number;waitingRoom?:boolean;mode?:OnlineMode;randomPickups?:boolean};
 export type MatchState={phase?:'waiting'|'playing';hostId?:string;mode?:OnlineMode;capacity?:number;started?:boolean;winningIds?:string[];teamScores?:number[];projectiles?:Projectile[];toolEvents?:ToolEvent[];map?:MapId;doors?:Doors;players:Player[];winner:string;tick:number;events:ShotEvent[];pickups:Pickup[]};
 const empty=():Command=>({seq:-1,x:0,y:0,yaw:0,pitch:0,fire:false,shot:false,reload:false,jump:false,sprint:false,scope:false});
 export function parseCommand(v:unknown):Command|null{
@@ -90,13 +90,14 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
   setGuestNickname(playerId:string,value:unknown){const p=state.players.find(p=>p.id===playerId),name=normalizeNickname(value);if(!p?.connected||!p.guest||!name)return false;p.nickname=name;if(!state.hostId)state.hostId=p.id;return true;},
   disconnect(playerId:string){const p=state.players.find(p=>p.id===playerId);if(p){p.connected=false;if(p.guest)delete p.nickname;if(state.phase==='waiting'&&state.hostId===p.id)state.hostId=state.players.find(o=>o!==p&&o.connected&&!o.abandoned)?.id;p.healing=0;p.weapon=cancelBurst(p.weapon);p.dash=cancelDash(p.dash??createDash());}inputs.delete(playerId);},
   abandon(playerId:string){const p=state.players.find(p=>p.id===playerId);if(p){p.abandoned=true;p.connected=false;if(p.guest)delete p.nickname;p.healing=0;}inputs.delete(playerId);},
-  input(playerId:string,raw:unknown){const c=parseCommand(raw),p=state.players.find(p=>p.id===playerId);if(!c||!p?.connected||p.abandoned||state.phase==='waiting'||p.playing===false||p.guest&&!normalizeNickname(p.nickname)||c.seq<=p.seq)return false;p.seq=c.seq;const old=inputs.get(playerId)?.command;c.shot ||=old?.shot??false;c.reload ||=old?.reload??false;c.jump ||=old?.jump??false;c.dash ||=old?.dash??false;c.door??=old?.door;c.slot??=old?.slot;if(c.pickup===undefined){c.pickup=old?.pickup;c.replace=old?.replace;}c.equipment??=old?.equipment;inputs.set(playerId,{command:c,at:now});return true;},
-  step(){const dt=.05;now+=dt;state.tick++;state.events=[];state.toolEvents=[];
+  input(playerId:string,raw:unknown){const c=parseCommand(raw),p=state.players.find(p=>p.id===playerId);if(!c||!p?.connected||p.abandoned||state.phase==='waiting'||p.playing===false||p.guest&&!normalizeNickname(p.nickname)||c.seq<=Math.max(p.seq,inputs.get(playerId)?.command.seq??-1))return false;const old=inputs.get(playerId)?.command;c.shot ||=old?.shot??false;c.reload ||=old?.reload??false;c.jump ||=old?.jump??false;c.dash ||=old?.dash??false;c.door??=old?.door;c.slot??=old?.slot;if(c.pickup===undefined){c.pickup=old?.pickup;c.replace=old?.replace;}c.equipment??=old?.equipment;inputs.set(playerId,{command:c,at:options.clock?options.clock()/1000:now});return true;},
+  step(){const dt=.05;now+=dt;const inputTime=options.clock?options.clock()/1000:now;state.tick++;state.events=[];state.toolEvents=[];
    if(!onlinePlaying(state)){inputs.clear();return;}state.started=true;tickPickups(state.pickups,dt);
    for(const [index,p] of state.players.entries()){
-    if(!availablePlayer(p))continue;const entry=inputs.get(p.id),c=entry&&now-entry.at<.3?entry.command:empty();
-    if(p.health===0){p.dead=Math.max(0,p.dead-dt);if(p.dead<1e-8)spawn(p,index,true);continue;}p.protection=Math.max(0,(p.protection??0)-dt);
-    if(c.door)world.toggleDoor(state.doors!,c.door,p,state.players.filter(o=>o.health>0&&o.playing!==false));if(entry&&now-entry.at<.3){p.yaw=c.yaw;p.pitch=c.pitch;}
+    if(!availablePlayer(p))continue;const entry=inputs.get(p.id),c=entry&&inputTime-entry.at<.3?entry.command:empty();
+    if(entry)p.seq=entry.command.seq;
+    if(p.health===0){inputs.delete(p.id);p.dead=Math.max(0,p.dead-dt);if(p.dead<1e-8)spawn(p,index,true);continue;}p.protection=Math.max(0,(p.protection??0)-dt);
+    if(c.door)world.toggleDoor(state.doors!,c.door,p,state.players.filter(o=>o.health>0&&o.playing!==false));if(entry&&inputTime-entry.at<.3){p.yaw=c.yaw;p.pitch=c.pitch;}
     syncSlot(p.inventory,p.weapon,p.cooldown);advanceStowed(p.inventory,dt,true);if(c.slot!==undefined)switchSlot(p.inventory,c.slot);if(c.pickup){const pickup=state.pickups.find(x=>x.id===c.pickup);if(pickup?.equipmentId)takeEquipmentPickup(p.gear,p,state.pickups,c.pickup);else takePickup(p.inventory,p,state.pickups,c.pickup,c.replace);}
     const slot=p.inventory.slots[p.inventory.active]!;p.weaponId=slot.id;p.weapon=slot.weapon;p.cooldown=slot.cooldown;const spec=WEAPONS[p.weaponId];if(c.reload){const next=beginReload(p.weapon,spec);if(next!==p.weapon)p.weapon=cancelBurst(next);}if(c.equipment)useEquipment(p,c.equipment,state.projectiles!,id());
     const sequence=advanceBurst(p.weapon,dt);p.weapon=sequence.state;Object.assign(p,advancePlayerMotion(p,c,dt,state.doors,world));

@@ -1,4 +1,4 @@
-import {unobstructed} from './combat-geometry.ts';
+import {unobstructed,boxHit} from './combat-geometry.ts';
 import {playerName} from './nickname.ts';
 import type {Sound} from './audio.ts';
 import {createMatchPickups} from './match-pickups.ts';
@@ -45,6 +45,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
   const {PROTOTYPE,BUILDINGS,COVERS,buildingWalls,interiorFurniture,indoorAt,DOOR_WIDTH,createDoors,worldSolids,moveWithCollisions,doorRect,toggleDoor,randomOutdoorSpawn,shotBoxes}=geometry;
   const {createDuel,createBotMatch,createSurvivalMatch}=createBotRules(geometry);
   const scene = new Scene(engine);
+  scene.skipPointerMovePicking=true;scene.skipPointerDownPicking=true;scene.skipPointerUpPicking=true;
   scene.clearColor = new Color4(0.035, 0.065, 0.115, 1);
   scene.imageProcessingConfiguration.toneMappingEnabled=true;
   scene.imageProcessingConfiguration.toneMappingType=1;
@@ -581,17 +582,18 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
       updateBattle(dt,p,(point:Point,botId?:string)=>{
         if((botFlashes.get(botId??'bot-1')??0)>.05)return false;
         const from=new Vector3(point.x,1.8+(point.y??0),point.z),to=new Vector3(p.x,1.95+(p.y??0)+jumpState.height,p.z);
-        const direction=to.subtract(from),distance=direction.length();
-        const obstruction=scene.pickWithRay(new Ray(from,direction.scale(1/distance),Math.max(0,distance-0.25)),mesh=>mesh.isPickable&&mesh.isEnabled()&&!mesh.metadata?.opponent);
-        return !obstruction?.hit;
+        return unobstructed(geometry,doors,from,to);
       },(point,target)=>{
         const start=new Vector3(point.x,1.8+(point.y??0),point.z),end=new Vector3(target.x,1.8+(target.y??0),target.z);
-        const delta=end.subtract(start),distance=delta.length();
-        const wall=scene.pickWithRay(new Ray(start,delta.scale(1/distance),distance),mesh=>mesh.isPickable&&mesh.isEnabled()&&!mesh.metadata?.opponent);
-        const impact=wall?.pickedPoint??end;
+        const delta=end.subtract(start);
+        let nearest:{t:number;axis:number}|null=null;
+        for(const box of geometry.shotBoxes(doors)){const hit=boxHit(start,end,box);if(hit&&(!nearest||hit.t<nearest.t))nearest=hit;}
+        const clear=!nearest,impact=nearest?start.add(delta.scale(nearest.t)):end;
+        const normal=delta.normalize().scale(-1);
+        if(nearest){normal.set(0,0,0);if(nearest.axis===0)normal.x=delta.x>0?-1:1;else if(nearest.axis===1)normal.y=delta.y>0?-1:1;else normal.z=delta.z>0?-1:1;}
         if(soundEvents.length<16)soundEvents.push({kind:'pistol',x:point.x,z:point.z});
-        botEffects.emit(start,impact,wall?.getNormal(true)??delta.normalize().scale(-1),!!wall?.hit,false);
-        return !wall?.hit;
+        botEffects.emit(start,impact,normal,!clear,false);
+        return clear;
       });
       const state=battleState();
       if(state.mode==='survival'&&state.ammoRefreshVersion!==seenResupply){seenResupply=state.ammoRefreshVersion;syncSlot(inventory,weapon,cooldown);for(const slot of inventory.slots)slot.weapon=createWeapon(WEAPONS[slot.id]);weapon=inventory.slots[inventory.active]!.weapon;}
@@ -706,6 +708,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
   let lastNetworkEvent=-1,onlineQualityHigh=true,networkJumpTick=-1,networkJumpAge=0;
   function removeRemote(id:string){const r=remotes.get(id);if(!r)return;for(const mesh of r.model.meshes)shadows.removeShadowCaster(mesh);r.fx.dispose();r.parent.dispose();remotes.delete(id);}
   function endOnline(preserveJump=false){toolVisuals.clear();for(const key of [...remotes.keys()])removeRemote(key);remoteParent.setEnabled(false);lastNetworkEvent=-1;if(!preserveJump){networkJumpTick=-1;networkJumpAge=0;}effects.clear();botEffects.clear();recoil.clear();}
+  let lowPerformance=false,requestedShadows=true;
   function renderOnline(state:MatchState,id:string,look:Look,dt:number,predictedPosition?:Point,remotePosition?:(Point&{id:string})|Array<Point&{id:string}>){
     const me=state.players.find(p=>p.id===id);if(!me)return;remoteParent.setEnabled(true);doors=state.doors??{};environment.doors=doors;
     duelMode=false;ffaMode=false;survivalMode=false;preview=false;reference=false;lobbyWeapons.show(lobbyWeaponId,false);character.poseLobby(false);if(weaponId!==me.weaponId||me.health===0)scoped=false;weaponId=me.weaponId;spec=WEAPONS[weaponId];weapon={...me.weapon};cooldown=me.cooldown;if(networkJumpTick!==state.tick){networkJumpTick=state.tick;networkJumpAge=0;}else networkJumpAge=Math.min(.15,networkJumpAge+dt);jumpState=advanceJump(me.jump,networkJumpAge);inventory=me.inventory??createInventory(me.weaponId);pickups=state.pickups??[];
@@ -752,7 +755,8 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     impactState:()=>({...robotImpact.stats(),recoil:recoil.read()}),
     setReducedShots(value:boolean){reducedShots=value;effects.setReduced(value);botEffects.setReduced(value);},
     setShake(level:ShakeLevel){recoil.setShake(level);},
-    setShadows(enabled:boolean){scene.shadowsEnabled=enabled;},
+    setShadows(enabled:boolean){requestedShadows=enabled;scene.shadowsEnabled=enabled&&!lowPerformance;},
+    setPerformanceLow(enabled:boolean){lowPerformance=enabled;scene.shadowsEnabled=requestedShadows&&!enabled;atmosphere.setLow(enabled);},
     setQuality(high:boolean){
       onlineQualityHigh=high;for(const r of remotes.values())r.fx.setQuality(high);atmosphere.setQuality(high);robotImpact.setQuality(high);for(const rig of botRigs.slice(1))rig.fx.setQuality(high);
       const mapSize=high?2048:1024;if(shadows.mapSize!==mapSize)shadows.mapSize=mapSize;

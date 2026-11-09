@@ -154,6 +154,7 @@ export function createInput(canvas: HTMLCanvasElement, options: {requestMouseLoc
     resetLook() { look = { yaw: 0, pitch: 0 }; reset(); },
     get sprintingRequested(){return sprintToggle||keys.has('ShiftLeft')||keys.has('ShiftRight');},
     get firing(){return firePointer!==null||mouseHeld;},
+    get actionsPending(){return shots>0||reloads>0||jumps>0||dashes>0;},
     consumeShots() { const count = shots; shots = 0; return count; },
     consumeReloads() { const count=reloads;reloads=0;return count; },
     consumeDashes(){const count=dashes;dashes=0;return count;},

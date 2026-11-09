@@ -1,3 +1,5 @@
+import {createServerClock} from '../src/server-clock.ts';
+import {statePacket,privatePacket} from '../src/network-wire.ts';
 import {captureOfficialResult,createResultOutbox} from '../server/official-records.js';
 import {createIdentityVerifier} from '../server/account-auth.js';
 import test from 'node:test';
@@ -12,7 +14,7 @@ async function runtime(saved?:unknown){
  const source=readFileSync(new URL('../server/worker.js',import.meta.url),'utf8').split('export class Lobby')[0]!.replace(/^import .*;\n/gm,'').replace('export class Room','class Room');
  const ctx={storage:{async get(k:string){return storage.get(k);},async put(k:string,v:unknown){storage.set(k,structuredClone(v));},async setAlarm(){},async delete(k:string){storage.delete(k);},async deleteAll(){storage.clear();}},blockConcurrencyWhile:async(f:()=>unknown)=>f(),waitUntil:(p:Promise<unknown>)=>p};
  class Socket {handlers:any={};messages:any[]=[];closed=false;accept(){}send(s:string){this.messages.push(JSON.parse(s));}close(){this.closed=true;this.handlers.close?.();}addEventListener(n:string,f:any){this.handlers[n]=f;}hello(token:string){this.handlers.message({data:JSON.stringify({type:'hello',token})});}}
- const sandbox:any={createNetworkGame,onlinePlaying,normalizeNickname,captureOfficialResult,createResultOutbox,createIdentityVerifier,Date:{now:()=>now},crypto:{randomUUID:()=>String(Math.random())},URL,Response:class{constructor(body:any,options:any){}},DurableObject:class{},setTimeout:()=>1,clearTimeout(){},setInterval:(f:()=>void)=>{intervals.add(f);return f;},clearInterval:(f:()=>void)=>intervals.delete(f),WebSocketPair:class{0=new Socket();1=new Socket();constructor(){pairs.push(this);}}};
+ const sandbox:any={createServerClock,statePacket,privatePacket,createNetworkGame,onlinePlaying,normalizeNickname,captureOfficialResult,createResultOutbox,createIdentityVerifier,Date:{now:()=>now},crypto:{randomUUID:()=>String(Math.random())},URL,Response:class{constructor(body:any,options:any){}},DurableObject:class{},setTimeout:()=>1,clearTimeout(){},setInterval:(f:()=>void)=>{intervals.add(f);return f;},clearInterval:(f:()=>void)=>intervals.delete(f),WebSocketPair:class{0=new Socket();1=new Socket();constructor(){pairs.push(this);}}};
  vm.runInNewContext(source+'\nglobalThis.Room=Room;',sandbox);
  const room=new sandbox.Room(ctx,{});await Promise.resolve();await Promise.resolve();
  async function connect(token:string){await room.fetch(new Request('https://room/ws',{headers:{Upgrade:'websocket'}}));const socket=pairs.at(-1)[1];socket.hello(token);return socket;}
@@ -43,7 +45,7 @@ test('storage alarm independently closes disconnected rooms without incoming pac
 
 test('new rooms receive a trusted player-region placement hint and ignore spoofed client hints',async()=>{
  const source=readFileSync(new URL('../server/worker.js',import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replaceAll('export class ','class ').replace('export default ','globalThis.worker=');
- const sandbox:any={createNetworkGame,onlinePlaying,normalizeNickname,captureOfficialResult,createResultOutbox,createIdentityVerifier,Date,crypto,URL,Headers,Request,Response,DurableObject:class{ctx:any;env:any;constructor(ctx:any,env:any){this.ctx=ctx;this.env=env;}}};
+ const sandbox:any={createServerClock,statePacket,privatePacket,createNetworkGame,onlinePlaying,normalizeNickname,captureOfficialResult,createResultOutbox,createIdentityVerifier,Date,crypto,URL,Headers,Request,Response,DurableObject:class{ctx:any;env:any;constructor(ctx:any,env:any){this.ctx=ctx;this.env=env;}}};
  vm.runInNewContext(source+'\nglobalThis.Lobby=Lobby;',sandbox);
  const storage=new Map(),hints:any[]=[];
  const ctx={blockConcurrencyWhile:async(f:()=>unknown)=>f(),storage:{get:async(k:string)=>storage.get(k),put:async(k:string,v:unknown)=>storage.set(k,v),delete:async(k:string)=>storage.delete(k),setAlarm:async()=>{}}};
@@ -63,3 +65,5 @@ test('twenty-player room keeps running when one leaves, expires reconnects indiv
 });
 
 test('real room controls enforce the host and save no guest names, including reconnect rename',async()=>{const r=await runtime();r.room.game=createNetworkGame(undefined,'harbor',{waitingRoom:true});r.room.game.join('a','pistol','robot',{nickname:'임시이름',guest:true});r.room.game.join('b','pistol','robot',{nickname:'저장이름',guest:false});r.room.sessions={a:'a',b:'b'};const a=await r.connect('a'),b=await r.connect('b');r.advance(50);b.handlers.message({data:JSON.stringify({type:'start',id:'a'})});assert.equal(r.room.game.state.phase,'waiting');a.handlers.message({data:JSON.stringify({type:'start'})});assert.equal(r.room.game.state.phase,'playing');await r.room.save();assert.equal(JSON.stringify(r.storage.get('checkpoint')).includes('임시이름'),false);assert.equal(JSON.stringify(r.storage.get('checkpoint')).includes('저장이름'),true);a.close();assert.equal(b.messages.at(-1).state.players[0].nickname,undefined);const returned=await r.connect('a');assert.equal(returned.messages[0].state.players[0].nickname,undefined);returned.handlers.message({data:JSON.stringify({type:'nickname',nickname:'다시이름'})});assert.equal(r.room.game.state.players[0].nickname,'다시이름');await r.room.save();assert.equal(JSON.stringify(r.storage.get('checkpoint')).includes('다시이름'),false);});
+
+test('late room timer catches up fixed ticks and broadcasts every shot event in that interval',async()=>{const r=await runtime();const a=r.room.game.join('a'),b=r.room.game.join('b');a.z=10;b.z=18;r.room.sessions={a:'a',b:'b'};const socket=await r.connect('a');await r.connect('b');r.room.game.input('a',{seq:1,x:0,y:0,yaw:0,pitch:0,shot:true,fire:false,reload:false,jump:false,sprint:false,scope:false});const tick=r.room.game.state.tick;r.advance(150);assert.equal(r.room.game.state.tick-tick,3);const packet=socket.messages.filter((m:any)=>m.type==='state').at(-1);assert.equal(packet.state.events.length,1);assert.equal(packet.state.players.find((p:any)=>p.id==='b').health,75);});

@@ -67,8 +67,8 @@ export function createAtmosphere(scene:Scene){
   const live=meshes.filter(mesh=>!mesh.isDisposed());
   const halos=live.filter(mesh=>mesh.name==='lantern-atmospheric-glow');
   for(const mesh of live)if(mesh.billboardMode===0)mesh.freezeWorldMatrix();
-  let highQuality=true,viewer:Point={x:0,z:-8},checkTime=0;
-  function cull(){for(const mesh of halos)mesh.setEnabled(highQuality&&Math.hypot(mesh.position.x-viewer.x,mesh.position.z-viewer.z)<38);}
+  let low=false,highQuality=true,viewer:Point={x:0,z:-8},checkTime=0;
+  function cull(){for(const mesh of halos)mesh.setEnabled(!low&&highQuality&&Math.hypot(mesh.position.x-viewer.x,mesh.position.z-viewer.z)<38);}
   let time=0;
-  return {update(dt:number,p:Point){time+=Math.min(dt,.1);viewer=p;checkTime+=dt;if(checkTime>.2){checkTime=0;cull();}ripple.vOffset=Math.sin(time*.6)*.018;},setQuality(high:boolean){highQuality=high;cull();},meshes:live};
+  return {update(dt:number,p:Point){time+=Math.min(dt,.1);viewer=p;checkTime+=dt;if(checkTime>.2){checkTime=0;cull();}ripple.vOffset=Math.sin(time*.6)*.018;},setQuality(high:boolean){highQuality=high;cull();},setLow(value:boolean){low=value;for(const mesh of live)if(!halos.includes(mesh))mesh.setEnabled(!value);cull();},meshes:live};
 }

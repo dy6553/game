@@ -1,3 +1,5 @@
+import {createServerClock} from '../src/server-clock.ts';
+import {statePacket,privatePacket} from '../src/network-wire.ts';
 import { DurableObject } from 'cloudflare:workers';
 import { createNetworkGame,onlinePlaying,normalizeNickname } from '../src/network-game.ts';
 import {createIdentityVerifier} from './account-auth.js';
@@ -9,8 +11,8 @@ const json=(body,status=200)=>Response.json(body,{status});
 const code=()=>crypto.randomUUID().replaceAll('-','').slice(0,8).toUpperCase();
 export class Room extends DurableObject {
  accounts={};matchId=crypto.randomUUID();officialQueued=false;recording=null;closing=null;
- game=createNetworkGame();sessions={};sockets=new Map();timer=null;last=Date.now();disconnectedAt=0;startedAt=0;finishedAt=0;matchStarted=false;packets=new WeakMap();disconnects={};idleSince=0;
- constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;ctx.blockConcurrencyWhile(async()=>{const saved=await ctx.storage.get('checkpoint');if(saved){this.game=createNetworkGame(saved.state);this.accounts=saved.accounts??{};this.disconnects=saved.disconnects??{};this.idleSince=saved.idleSince??0;this.matchId=saved.matchId??this.matchId;this.officialQueued=saved.officialQueued??false;this.sessions=saved.sessions;this.last=saved.last;this.startedAt=saved.startedAt??saved.last;this.finishedAt=saved.finishedAt??0;this.matchStarted=saved.matchStarted??saved.state.players.length===2;this.disconnectedAt=(this.game.state.mode??'duel')==='duel'&&this.game.state.phase!=='waiting'?(saved.disconnectedAt||saved.last):0;if(this.game.state.mode!=='duel'||this.game.state.phase==='waiting')for(const p of this.game.state.players)if(!p.abandoned)this.disconnects[p.id]??=saved.last;}});}
+ game=createNetworkGame(undefined,'harbor',{clock:()=>Date.now()});sessions={};sockets=new Map();timer=null;last=Date.now();disconnectedAt=0;startedAt=0;finishedAt=0;matchStarted=false;packets=new WeakMap();protocols=new WeakMap();disconnects={};idleSince=0;
+ constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;ctx.blockConcurrencyWhile(async()=>{const saved=await ctx.storage.get('checkpoint');if(saved){this.game=createNetworkGame(saved.state,'harbor',{clock:()=>Date.now()});this.accounts=saved.accounts??{};this.disconnects=saved.disconnects??{};this.idleSince=saved.idleSince??0;this.matchId=saved.matchId??this.matchId;this.officialQueued=saved.officialQueued??false;this.sessions=saved.sessions;this.last=saved.last;this.startedAt=saved.startedAt??saved.last;this.finishedAt=saved.finishedAt??0;this.matchStarted=saved.matchStarted??saved.state.players.length===2;this.disconnectedAt=(this.game.state.mode??'duel')==='duel'&&this.game.state.phase!=='waiting'?(saved.disconnectedAt||saved.last):0;if(this.game.state.mode!=='duel'||this.game.state.phase==='waiting')for(const p of this.game.state.players)if(!p.abandoned)this.disconnects[p.id]??=saved.last;}});}
  async save(){await this.ctx.storage.put('checkpoint',{state:this.game.checkpoint(),disconnects:this.disconnects,idleSince:this.idleSince,accounts:this.accounts,matchId:this.matchId,officialQueued:this.officialQueued,sessions:this.sessions,last:this.last,startedAt:this.startedAt,finishedAt:this.finishedAt,matchStarted:this.matchStarted,disconnectedAt:this.disconnectedAt});}
  outbox(){return createResultOutbox(this.ctx.storage,event=>createRecordStore(this.env).write(event));}
  async queueResult(){
@@ -21,7 +23,7 @@ export class Room extends DurableObject {
   try{await this.recording;}finally{this.recording=null;}
  }
  async deliver(){await this.outbox().flush();if(await this.outbox().pending())await this.ctx.storage.setAlarm(Date.now()+60000);}
- reset(){this.disconnects={};this.idleSince=0;this.game=createNetworkGame();this.sessions={};this.accounts={};this.matchId=crypto.randomUUID();this.officialQueued=false;this.startedAt=0;this.finishedAt=0;this.matchStarted=false;this.disconnectedAt=0;}
+ reset(){this.disconnects={};this.idleSince=0;this.game=createNetworkGame(undefined,'harbor',{clock:()=>Date.now()});this.sessions={};this.accounts={};this.matchId=crypto.randomUUID();this.officialQueued=false;this.startedAt=0;this.finishedAt=0;this.matchStarted=false;this.disconnectedAt=0;}
  async fetch(request){const url=new URL(request.url);
   if(url.pathname==='/reserve')return this.ctx.blockConcurrencyWhile(async()=>{
    if(this.closing)await this.closing;
@@ -30,7 +32,7 @@ export class Room extends DurableObject {
    const input=await request.json(),id=crypto.randomUUID(),token=crypto.randomUUID();
    const map=this.game.state.players.length?this.game.state.map:(input.map==='factory'?'factory':'harbor');
    if(map==='factory'&&(!input.accountSubject||!(input.accountLevel>=3)))return json({error:'폐공장은 로그인 후 Lv3에 해금됩니다.'},403);
-   if(!this.game.state.players.length)this.game=createNetworkGame(undefined,map,{mode:input.mode??'duel',randomPickups:true,waitingRoom:true});
+   if(!this.game.state.players.length)this.game=createNetworkGame(undefined,map,{mode:input.mode??'duel',randomPickups:true,waitingRoom:true,clock:()=>Date.now()});
    if(input.accountSubject&&Object.values(this.accounts).includes(input.accountSubject))return json({error:'같은 계정으로 양쪽에 입장할 수 없습니다.'},409);
    const p=this.game.join(id,input.weapon,input.character,{nickname:normalizeNickname(input.nickname)??'대원',guest:!input.accountSubject});if(input.accountSubject)this.accounts[id]=input.accountSubject;p.connected=false;this.disconnects[id]=Date.now();this.sessions[token]=id;this.last=Date.now();await this.save();await this.ctx.storage.setAlarm(Date.now()+120000);return json({id,token,mode:this.game.state.mode,players:this.game.state.players.length,capacity:this.game.state.capacity,phase:this.game.state.phase,accepting:this.game.state.players.length<this.game.state.capacity});
   });
@@ -44,7 +46,7 @@ export class Room extends DurableObject {
     if(!id){this.expirePlayers();if(msg.type!=='hello'||typeof msg.token!=='string'||!this.sessions[msg.token]){server.close(1008,'잘못된 입장 정보');return;}
      if((this.game.state.mode??'duel')==='duel'&&this.disconnectedAt&&Date.now()-this.disconnectedAt>30000){server.close(1008,'재접속 시간이 지났습니다.');this.closeRoom('상대 연결을 복구하지 못해 경기를 종료했습니다.');return;}
      id=this.sessions[msg.token];for(const [socket,other] of this.sockets)if(other===id){this.sockets.delete(socket);socket.close(1000,'새 연결로 복귀했습니다.');}
-     this.sockets.set(server,id);clearTimeout(timeout);delete this.disconnects[id];this.game.join(id);this.last=Date.now();if(this.game.state.players.every(p=>p.connected))this.disconnectedAt=0;
+     this.sockets.set(server,id);this.protocols.set(server,msg.protocol===2?2:1);clearTimeout(timeout);delete this.disconnects[id];this.game.join(id);this.last=Date.now();if(this.game.state.players.every(p=>p.connected))this.disconnectedAt=0;
      server.send(JSON.stringify({type:'welcome',id,state:this.game.state}));this.start();return;
     }
     const now=Date.now(),rate=this.packets.get(server)??{at:now,count:0};if(now-rate.at>1000){rate.at=now;rate.count=0;}if(++rate.count>80){server.close(1008,'전송 속도 초과');return;}this.packets.set(server,rate);
@@ -60,15 +62,17 @@ export class Room extends DurableObject {
   server.addEventListener('close',close);server.addEventListener('error',close);
   return new Response(null,{status:101,webSocket:client});
  }
- broadcast(){const packet=JSON.stringify({type:'state',state:this.game.state});for(const socket of this.sockets.keys())try{socket.send(packet);}catch{}}
+ broadcast(){const compact=statePacket(this.game.state);let legacy;for(const [socket,id] of this.sockets)try{socket.send(this.protocols.get(socket)===2?privatePacket(compact,this.game.state,id):(legacy??=JSON.stringify({type:'state',state:this.game.state})));}catch{}}
  expirePlayers(){for(const [id,at] of Object.entries(this.disconnects))if(Date.now()-at>=30000){if(this.game.state.phase==='waiting'){this.game.leaveWaiting(id);delete this.accounts[id];}else this.game.abandon(id);delete this.disconnects[id];for(const token of Object.keys(this.sessions))if(this.sessions[token]===id)delete this.sessions[token];}}
- start(){if(this.timer)return;if(!this.startedAt)this.startedAt=Date.now();let ticks=0;this.timer=setInterval(()=>{
+ start(){if(this.timer)return;if(!this.startedAt)this.startedAt=Date.now();let ticks=0;const clock=createServerClock(Date.now());this.timer=setInterval(()=>{
   if((this.game.state.mode??'duel')==='duel'&&this.disconnectedAt&&Date.now()-this.disconnectedAt>30000){this.closeRoom('상대 연결을 복구하지 못해 경기를 종료했습니다.');return;}
   if(this.game.state.winner){if(!this.finishedAt)this.finishedAt=Date.now();if(Date.now()-this.finishedAt>60000){this.closeRoom('경기가 종료되었습니다.');return;}}
   if(!this.matchStarted&&Date.now()-this.startedAt>((this.game.state.mode??'duel')==='duel'&&!this.game.state.phase?120000:600000)){this.closeRoom('대기 시간이 지나 방을 닫았습니다.');return;}
   this.expirePlayers();if((this.game.state.mode??'duel')==='duel'){if(this.game.state.phase)this.matchStarted=!!this.game.state.started;else if(this.game.state.players.length===2&&this.game.state.players.every(p=>p.connected))this.matchStarted=true;}else{this.expirePlayers();this.matchStarted=!!this.game.state.started;if(this.matchStarted&&!this.game.state.winner&&!onlinePlaying(this.game.state)){this.idleSince ||=Date.now();if(Date.now()-this.idleSince>120000){this.closeRoom('참가 인원이 부족해 경기를 종료했습니다.');return;}}else this.idleSince=0;}
-  this.game.step();if(this.game.state.winner)this.ctx.waitUntil(this.queueResult());this.last=Date.now();const packet=JSON.stringify({type:'state',state:this.game.state});
-  for(const socket of this.sockets.keys())try{socket.send(packet);}catch{socket.close();}
+  const steps=clock.steps(Date.now());if(!steps)return;const events=[],toolEvents=[];
+  for(let i=0;i<steps;i++){this.game.step();events.push(...this.game.state.events);toolEvents.push(...(this.game.state.toolEvents??[]));}
+  this.game.state.events=events;this.game.state.toolEvents=toolEvents;
+  if(this.game.state.winner)this.ctx.waitUntil(this.queueResult());this.last=Date.now();this.broadcast();
   if(++ticks%40===0)this.ctx.waitUntil(this.save());
   if(ticks%1200===0&&!this.disconnectedAt)this.ctx.waitUntil(this.ctx.storage.setAlarm(Date.now()+120000));
  },50);}

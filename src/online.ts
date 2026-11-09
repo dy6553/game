@@ -1,3 +1,4 @@
+import {readState} from './network-wire.ts';
 import { createNetworkTiming } from './network-timing.ts';
 import {onlinePlaying,type Command,type MatchState } from './network-game.ts';
 export type OnlineSession={code:string;id:string;token:string};
@@ -9,9 +10,9 @@ export function createOnlineClient(endpoint:string,onState:(state:MatchState,id:
   if(stopped||!session)return;
   const wsUrl=new URL(`${url}/room/${session.code}`);wsUrl.protocol=wsUrl.protocol==='https:'?'wss:':'ws:';
   const current=new WebSocket(wsUrl);socket=current;
-  current.onopen=()=>{if(current!==socket)return;current.send(JSON.stringify({type:'hello',token:session!.token}));};
+  current.onopen=()=>{if(current!==socket)return;current.send(JSON.stringify({type:'hello',token:session!.token,protocol:2}));};
   current.onmessage=event=>{if(current!==socket)return;try{const message=JSON.parse(event.data);
-   if(message.type==='welcome'||message.type==='state'){attempt=0;const state=message.state as MatchState;const me=state.players.find(p=>p.id===session!.id);if(me){seq=Math.max(seq,me.seq+1);timing.received(me.seq);}onState(state,session!.id);onStatus(state.winner?'경기 종료':state.phase==='waiting'?'방장이 경기 시작을 누르면 입장합니다.':onlinePlaying(state,session!.id)?'대전 중':me?.playing===false?'대기방에서 경기 참가를 눌러주세요.':'참가자 연결을 기다리는 중');}
+   if(message.type==='welcome'||message.type==='state'){attempt=0;const state=readState(message,session!.id);const me=state.players.find(p=>p.id===session!.id);if(me){seq=Math.max(seq,me.seq+1);timing.received(me.seq);}onState(state,session!.id);onStatus(state.winner?'경기 종료':state.phase==='waiting'?'방장이 경기 시작을 누르면 입장합니다.':onlinePlaying(state,session!.id)?'대전 중':me?.playing===false?'대기방에서 경기 참가를 눌러주세요.':'참가자 연결을 기다리는 중');}
    else if(message.type==='room-error')onStatus(message.reason);
    else if(message.type==='closed'){stopped=true;onStatus('방 연결 종료 · '+message.reason);current.close();}
   }catch{onStatus('서버 메시지를 읽지 못했습니다.');}};
