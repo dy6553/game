@@ -4,10 +4,22 @@ import {createGear,advanceEquipment,useEquipment,type GearActor,type Projectile}
 import {createWorld} from '../src/world.ts';import {captureOfficialResult} from '../server/official-records.js';
 const command=(seq:number,extra={})=>({seq,x:0,y:0,yaw:0,pitch:0,fire:false,shot:false,reload:false,jump:false,sprint:false,scope:false,...extra});
 const actor=(id:string,x=0):GearActor=>({id,x,y:0,z:0,yaw:Math.PI,pitch:0,health:100,gear:createGear(),flash:0,healing:0,gearCooldown:0});
-test('grenade fuse, self damage, wall shielding, ally immunity and protection are authoritative',()=>{
+test('grenade damages allies and owner while respecting walls and spawn protection',()=>{
  const world={...createWorld(),shotBoxes:()=>[{x:2,z:0,width:.2,depth:12,yMin:0,yMax:5}]},a=actor('owner'),b=actor('enemy',3),ally={...actor('ally',1),team:0},protectedActor={...actor('shield',1),protection:1};
  const ps:Projectile[]=[{id:1,owner:a.id,team:0,kind:'grenade',x:0,y:.2,z:0,vx:0,vy:0,vz:0,remaining:.1}],hits:string[]=[];
- const hurt=(p:GearActor,n:number)=>{p.health-=n;hits.push(p.id);};advanceEquipment([a,b,ally,protectedActor],ps,.05,world,{},hurt,()=>2);assert.equal(hits.length,0);advanceEquipment([a,b,ally,protectedActor],ps,.05,world,{},hurt,()=>3);assert.equal(ps.length,0);assert.deepEqual(hits,['owner']);assert.ok(a.health<10);assert.equal(b.health,100);
+ const hurt=(p:GearActor,n:number)=>{p.health-=n;hits.push(p.id);};advanceEquipment([a,b,ally,protectedActor],ps,.05,world,{},hurt,()=>2);assert.equal(hits.length,0);advanceEquipment([a,b,ally,protectedActor],ps,.05,world,{},hurt,()=>3);assert.equal(ps.length,0);assert.deepEqual(hits,['owner','ally']);assert.ok(a.health<10);assert.equal(b.health,100);
+});
+test('an allied grenade kill does not award a kill or team point',()=>{
+ const g=createNetworkGame(undefined,'harbor',{mode:'team'}),owner=g.join('owner'),enemy=g.join('enemy'),ally=g.join('ally');
+ owner.x=20;owner.z=0;enemy.x=-20;enemy.z=0;ally.x=0;ally.z=0;
+ for(const p of g.state.players)p.protection=0;
+ g.state.projectiles!.push({id:1,owner:owner.id,team:owner.team,kind:'grenade',x:0,y:.2,z:0,vx:0,vy:0,vz:0,remaining:.01});
+ g.step();assert.equal(ally.health,0);assert.equal(ally.deaths,1);assert.equal(owner.kills,0);assert.deepEqual(g.state.teamScores,[0,0]);
+});
+test('bazooka explosion deals meaningful damage at five and a half metres',()=>{
+ const world={...createWorld(),shotBoxes:()=>[]},target=actor('target',5.5),projectiles:Projectile[]=[{id:1,owner:'owner',kind:'rocket',damage:120,x:0,y:.2,z:0,vx:0,vy:0,vz:0,remaining:.01}];
+ advanceEquipment([target],projectiles,.05,world,{},(p,n)=>{p.health-=n;},()=>2);
+ assert.ok(target.health<100);
 });
 test('flash is blocked by walls, attenuates when looking away and throwing uses jump height',()=>{
  const world={...createWorld(),shotBoxes:()=>[{x:2,z:0,width:.2,depth:12,yMin:0,yMax:5}]},front=actor('front'),back={...actor('back'),yaw:0},blocked=actor('blocked',3);

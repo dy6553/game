@@ -1,3 +1,4 @@
+import {stanceStats} from './stance.ts';
 import {createOnlineEvents} from './online-events.ts';
 import type {ShotEvent} from './network-game.ts';
 import type {ToolEvent} from './equipment.ts';
@@ -69,7 +70,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   </header>
   <div class="location"><span class="live-dot"></span><span id="zone">중앙 광장</span><span class="location-divider"></span><span>해안 지구</span></div>
   <section class="help" id="help" hidden>
-    <button id="help-close" class="panel-close" aria-label="도움말 닫기">닫기</button><h2>조작과 게임 안내</h2><p>수류탄 G · 섬광탄 B · 회복키트 H 또는 장비 버튼. 각 2개까지 소지하며 상자에서 얻습니다. 회복은 2초 후 50 회복하며 사격/피격 시 취소됩니다. 무기·장비 상자는 매판 야외와 건물 1·2층의 다른 위치에 놓입니다.</p><p>초록 입구와 ‘출입 가능’ 표지가 있는 건물은 1층·2층·옥상에 갈 수 있습니다. 입구에서 E 또는 문 버튼으로 문을 열고 닫습니다. 보급 상자가 가까우면 E는 획득을 우선합니다. 서쪽 계단으로 2층, 동쪽 계단으로 옥상에 오릅니다. 몹도 문과 계단으로 추격합니다. 몹은 건물 밖 지상에서만 생성됩니다. 부활 후 3초 동안 보호되며 사격하면 해제됩니다.</p><p>대시: PC F키 또는 대시 버튼. 이동 방향(멈췄다면 보는 방향)으로 4m를 0.2초에 이동하며 사용 시점부터 3초 뒤 다시 사용할 수 있습니다. 지상에서만 시작하고 대시 중 점프는 불가합니다. 사격·재장전은 가능하며 무적이나 벽 관통은 없습니다.</p><p>생존 자동 난이도는 9단계이며 보통에 해당하는 5단계에서 시작합니다. 총 20웨이브입니다. 체력 50 이상으로 2웨이브 연속 클리어하면 한 단계 상승하고, 사망 후 재도전할 때 한 단계 내려갑니다. 조준·경고 시간과 이동·좌우 이동 속도가 조금씩 변하며 전투 중에는 유지됩니다.</p><p>생존: 생명 3개, 쉬움 10·보통 20·어려움 30웨이브. 동시 최대 3명이며 첫 적 4명에서 2웨이브마다 1명씩 늘어 최대 12명입니다. 적 부활·증원 대기는 1.5초입니다. 준비 시간은 5초이며 체력·탄창을 회복합니다. 사망 시 3초 후 현재 웨이브의 적·상자와 소지 무기를 초기화해 시작 총으로 재도전합니다.</p><p>봇 3명 개인전에서는 봇끼리 싸우지 않고 나만 공격합니다. 나와 각 봇의 점수를 따로 기록하며 먼저 10킬이면 승리합니다. 사망하면 3초 후 다른 캐릭터들과 먼 지점에서 시작 총으로 부활합니다.</p><p>봇 대전은 쉬움·보통·어려움 중 선택합니다. 보통·어려움은 더 빨리 조준하고 좌우로 움직이며, 발사 경고 중에는 멈춥니다. 난이도를 변경하면 새 경기를 시작합니다.</p><p>보급 상자 근처에서 E키 또는 획득 버튼으로 무기를 줍습니다. 최대 3개를 소지하며 숫자 1~3 또는 아래 슬롯 버튼으로 바꿉니다. 가득 차면 버릴 총을 선택하세요. 상자는 20초 후 다시 나오며, 사망하면 시작 총만 남습니다.</p>
+    <button id="help-close" class="panel-close" aria-label="도움말 닫기">닫기</button><h2>조작과 게임 안내</h2><p>수류탄 G · 섬광탄 B · 회복키트 H 또는 장비 버튼. 각 2개까지 소지하며 상자에서 얻습니다. 회복은 2초 후 50 회복하며 사격/피격 시 취소됩니다. 무기·장비 상자는 매판 야외와 건물 1·2층의 다른 위치에 놓입니다.</p><p>초록 입구와 ‘출입 가능’ 표지가 있는 건물은 1층·2층·옥상에 갈 수 있습니다. 입구에서 E 또는 문 버튼으로 문을 열고 닫습니다. 보급 상자가 가까우면 E는 획득을 우선합니다. 서쪽 계단으로 2층, 동쪽 계단으로 옥상에 오릅니다. 2층·옥상의 중앙 출구로 발코니에 나가 가장자리에서 뛰어내릴 수 있습니다. 고층 사격 시 상대 지도에 4초간 위치가 표시됩니다. C는 앉기, Z는 엎드리기이며 같은 키를 다시 누르면 일어납니다. 몹도 문과 계단으로 추격합니다. 몹은 건물 밖 지상에서만 생성됩니다. 부활 후 3초 동안 보호되며 사격하면 해제됩니다.</p><p>대시: PC F키 또는 대시 버튼. 이동 방향(멈췄다면 보는 방향)으로 4m를 0.2초에 이동하며 사용 시점부터 3초 뒤 다시 사용할 수 있습니다. 지상에서만 시작하고 대시 중 점프는 불가합니다. 사격·재장전은 가능하며 무적이나 벽 관통은 없습니다.</p><p>생존 자동 난이도는 9단계이며 보통에 해당하는 5단계에서 시작합니다. 총 20웨이브입니다. 체력 50 이상으로 2웨이브 연속 클리어하면 한 단계 상승하고, 사망 후 재도전할 때 한 단계 내려갑니다. 조준·경고 시간과 이동·좌우 이동 속도가 조금씩 변하며 전투 중에는 유지됩니다.</p><p>생존: 생명 3개, 쉬움 10·보통 20·어려움 30웨이브. 동시 최대 3명이며 첫 적 4명에서 2웨이브마다 1명씩 늘어 최대 12명입니다. 적 부활·증원 대기는 1.5초입니다. 준비 시간은 5초이며 체력·탄창을 회복합니다. 사망 시 3초 후 현재 웨이브의 적·상자와 소지 무기를 초기화해 시작 총으로 재도전합니다.</p><p>봇 3명 개인전에서는 봇끼리 싸우지 않고 나만 공격합니다. 나와 각 봇의 점수를 따로 기록하며 먼저 10킬이면 승리합니다. 사망하면 3초 후 다른 캐릭터들과 먼 지점에서 시작 총으로 부활합니다.</p><p>봇 대전은 쉬움·보통·어려움 중 선택합니다. 보통·어려움은 더 빨리 조준하고 좌우로 움직이며, 발사 경고 중에는 멈춥니다. 난이도를 변경하면 새 경기를 시작합니다.</p><p>보급 상자 근처에서 E키 또는 획득 버튼으로 무기를 줍습니다. 최대 3개를 소지하며 숫자 1~3 또는 아래 슬롯 버튼으로 바꿉니다. 가득 차면 버릴 총을 선택하세요. 상자는 20초 후 다시 나오며, 사망하면 시작 총만 남습니다.</p>
     <p>로봇의 눈높이에서 거리를 탐색합니다. 화면 중앙의 조준점이 바라보는 방향입니다.</p>
     <p><strong>PC</strong> WASD 이동 · Shift 달리기 · 마우스를 움직여 시점 변경 · 클릭하지 않아도 게임 화면 위의 마우스 이동으로 조준합니다. 화면 가장자리 제한 없이 조준하려면 메뉴의 마우스 고정을 사용하세요. Esc를 누르면 고정을 해제하고 일시정지합니다.</p>
     <p><strong>휴대폰</strong> 왼쪽 스틱 이동 · 화면 빈 공간을 좌우·위아래로 드래그해 시점 변경</p>
@@ -96,8 +97,8 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <button id="dash" class="dash-button" aria-label="대시 · F키 · 재사용 대기 3초">대시</button>
     <button id="jump" class="jump-button" aria-label="점프">점프</button>
   </div>
-  <section id="inventory-ui" aria-label="무기 소지와 획득"><div id="pickup-panel" hidden><span id="pickup-label"></span><button id="pickup-action">획득 · E</button><button id="pickup-cancel" hidden>취소</button></div><div id="door-panel" hidden><span>출입 가능 · 2층 / 옥상</span><button id="door-action">문 열기 · E</button></div><div id="equipment-slots"><button data-equipment="grenade" aria-label="수류탄"><span>수류탄</span><b>0</b><small>G</small></button><button data-equipment="flash" aria-label="섬광탄"><span>섬광탄</span><b>0</b><small>B</small></button><button data-equipment="medkit" aria-label="회복키트"><span>회복키트</span><b>0</b><small>H</small></button></div><p id="equipment-status" role="status"></p><progress id="heal-progress" max="2" value="0" hidden aria-label="회복키트 사용 진행"></progress><div id="weapon-slots"><button data-slot="0" aria-label="무기 슬롯 1">1</button><button data-slot="1" aria-label="무기 슬롯 2">2</button><button data-slot="2" aria-label="무기 슬롯 3">3</button></div></section>
-  ${COMBAT_HUD_MARKUP}<div id="spawn-protection" role="status" hidden></div><div id="scope-overlay" hidden aria-hidden="true"><i></i></div>
+  <section id="inventory-ui" aria-label="무기 소지와 획득"><div id="pickup-panel" hidden><span id="pickup-label"></span><button id="pickup-action">획득 · E</button><button id="pickup-cancel" hidden>취소</button></div><div id="door-panel" hidden><span>출입 가능 · 2층 / 옥상</span><button id="door-action">문 열기 · E</button></div><div id="posture-controls"><button id="crouch">앉기 · C</button><button id="prone">엎드리기 · Z</button></div><div id="equipment-slots"><button data-equipment="grenade" aria-label="수류탄"><span>수류탄</span><b>0</b><small>G</small></button><button data-equipment="flash" aria-label="섬광탄"><span>섬광탄</span><b>0</b><small>B</small></button><button data-equipment="medkit" aria-label="회복키트"><span>회복키트</span><b>0</b><small>H</small></button></div><p id="equipment-status" role="status"></p><progress id="heal-progress" max="2" value="0" hidden aria-label="회복키트 사용 진행"></progress><div id="weapon-slots"><button data-slot="0" aria-label="무기 슬롯 1">1</button><button data-slot="1" aria-label="무기 슬롯 2">2</button><button data-slot="2" aria-label="무기 슬롯 3">3</button></div></section>
+  ${COMBAT_HUD_MARKUP}<p id="elevated-alert" role="status" hidden></p><div id="spawn-protection" role="status" hidden></div><div id="scope-overlay" hidden aria-hidden="true"><i></i></div>
   <aside id="match-roster" aria-label="온라인 실시간 현황" hidden><strong id="roster-title"></strong><div id="roster-lines"></div></aside><div id="flash-overlay" aria-hidden="true"></div><details id="online-scoreboard" hidden><summary>온라인 순위표 <span id="online-population"></span></summary><ol id="online-player-list"></ol></details><div id="damage-overlay" aria-hidden="true"><i id="damage-direction"></i></div><div id="impact-marker" aria-hidden="true">×</div>
   <div class="crosshair" aria-hidden="true"><i></i><b></b></div>
   <div id="shot-feedback" class="shot-feedback" role="status" hidden></div>
@@ -139,7 +140,7 @@ async function start() {
   let settingsStorage:Storage|null=null;try{settingsStorage=localStorage;}catch{}const preferences=createEnvironmentPreferences(settingsStorage),frameLimit=createFrameLimit(preferences.value.fps);
   const savePreference=(value:Partial<EnvironmentPreferences>)=>{const next=preferences.patch(value);document.querySelector('#environment-save-status')!.textContent=preferences.saved?'설정은 이 브라우저에 자동 저장됩니다.':'저장할 수 없어 이번 접속에만 적용됩니다.';return next;};
   let graphicsMode=preferences.value.graphics;
-  const densityCap=()=>Math.min(window.devicePixelRatio||1,graphicsMode==='high'?2:graphicsMode==='balanced'?1:graphicsMode==='low'?.45:1);
+  const densityCap=()=>Math.min(window.devicePixelRatio||1,graphicsMode==='high'?2:graphicsMode==='balanced'?1:graphicsMode==='low'?.7:1);
   let budget=createRenderBudget(densityCap()),qualityHigh=graphicsMode==='high';
   engine.setHardwareScalingLevel(1/budget.density);
   const playtest=createPlaytest();
@@ -191,6 +192,7 @@ async function start() {
     if(code==='Space'||code==='KeyJ'){input.reset();input.setJumpKey(code);savePreference({jump:code});if(!settingsView.isOpen)canvas.focus();}
   });
   const onlineShots=createOnlineEvents<ShotEvent>(),onlineTools=createOnlineEvents<ToolEvent>();
+  let elevatedAlertUntil=0,lastRevealEvent=-1;
   let onlineState:MatchState|null=null,onlineId='',onlineActive=false,onlineEventId=-1;
   let onlineStatus='',onlineCode='';let resultOnlineTick:number|null=null,resultOnlineReady=false;const onlineMotion=createOnlineMotion(m=>playtest.correction(m)),remoteMotion=createRemoteMotion();
   const onlineLobby=document.querySelector<HTMLElement>('#online-lobby')!;
@@ -207,6 +209,7 @@ async function start() {
   const onlineAudio=createOnlineAudio();
   const online=createOnlineClient(import.meta.env?.VITE_ONLINE_URL??(import.meta.env?.DEV?'http://127.0.0.1:8787':''),(state,id)=>{
     playtest.packet();document.querySelector<HTMLSelectElement>('#online-mode')!.value=state.mode??'duel';onlineShots.receive(state.events);onlineTools.receive(state.toolEvents??[]);if(settingsView.isOpen||document.hidden){onlineShots.drain();onlineTools.drain();}onlineState=state;onlineId=id;onlineMotion.receive(state,id);remoteMotion.receive(state,id,performance.now());
+    if(!onlineActive)lastRevealEvent=-1;for(const event of state.events)if(event.id>lastRevealEvent){lastRevealEvent=event.id;const shooter=state.players.find(p=>p.id===event.player),self=state.players.find(p=>p.id===id);if(event.elevated&&(event.player===id||self?.team===undefined||shooter?.team!==self.team)){const alert=document.querySelector<HTMLElement>('#elevated-alert')!;alert.textContent=event.player===id?'고층 사격 · 내 위치가 4초간 노출됩니다':'고층 사격 감지 · 미니맵에 4초간 표시';elevatedAlertUntil=performance.now()+4000;combatHudAt=-Infinity;}}
     const me=state.players.find(p=>p.id===id),wasActive=onlineActive,wasWaiting=roomWaiting;
     roomWaiting=needsWaiting(state,id)||!!me?.guest&&!normalizeNickname(me.nickname);
     if(!onlineActive){onlineActive=true;homeOpen=false;home.hidden=true;onlineLobby.hidden=true;picker.hidden=true;manualPaused=false;pausePanel.hidden=true;document.body.classList.remove('at-home');gameChoices.close();}
@@ -507,8 +510,8 @@ async function start() {
     document.querySelector('#combat-hp')!.textContent=String(Math.ceil(health));document.querySelector<HTMLProgressElement>('#combat-hp-bar')!.value=health;document.querySelector('#combat-vitals')!.classList.toggle('critical',health<=25);
     document.querySelector('#combat-life')!.textContent=health===0?'쓰러짐 · 부활 대기':(me?.protection??battle.protection??0)>0?'부활 보호 중':battle.active&&battle.mode==='survival'?`남은 생명 ${battle.lives}`:'피격 시 엄폐 · H 회복';
     let actors:Contact[]=[];
-    if(onlineActive&&onlineState)actors=onlineState.players.filter(a=>a.id!==onlineId).map((a,i)=>({...a,name:playerName(a,a.team!==undefined&&a.team===me?.team?'아군':`적 대원 ${i+1}`),ally:me?.team!==undefined&&a.team===me.team,active:a.connected&&!a.abandoned}));
-    else if(battle.active)actors=battle.mode==='duel'?[{...battle.position,id:'bot-1',name:'적 봇',health:battle.botHealth}]:battle.bots.map(b=>({...b.position,id:b.id,name:b.name,health:b.health,active:!!b.position}));
+    if(onlineActive&&onlineState)actors=onlineState.players.filter(a=>a.id!==onlineId).map((a,i)=>({...a,revealed:(a.revealedUntil??0)>onlineState!.tick,name:playerName(a,a.team!==undefined&&a.team===me?.team?'아군':`적 대원 ${i+1}`),ally:me?.team!==undefined&&a.team===me.team,active:a.connected&&!a.abandoned}));
+    else if(battle.active)actors=battle.mode==='duel'?[{...battle.position,id:'bot-1',revealed:world.isBotRevealed?.('bot-1'),name:'적 봇',health:battle.botHealth}]:battle.bots.map(b=>({...b.position,id:b.id,revealed:world.isBotRevealed?.(b.id),name:b.name,health:b.health,active:!!b.position}));
     else actors=world.targetContacts?.()??[];
     const view=combatContacts(geometry,doors,p,input.look.yaw,input.look.pitch,actors),target=health>0?view.target:undefined;card.hidden=!target;if(target){document.querySelector('#target-name')!.textContent=target.name;document.querySelector('#target-hp')!.textContent=String(Math.ceil(target.health));document.querySelector<HTMLProgressElement>('#target-hp-bar')!.value=target.health;}
     if(showMinimap)drawCombatMap(document.querySelector<HTMLCanvasElement>('#minimap')!,geometry,p,input.look.yaw,view.radar);
@@ -620,7 +623,7 @@ async function start() {
     if(!online.connected){retained={};input.reset();return;}
     const can=onlineCanPlay();
     if(!can)retained={};
-    const command:Omit<Command,'seq'>={x:can?input.move.x:0,y:can?input.move.y:0,yaw:input.look.yaw,pitch:input.look.pitch,fire:can&&input.firing,shot:can&&(input.consumeShots()>0||!!retained.shot),reload:can&&(input.consumeReloads()>0||!!retained.reload),jump:can&&(input.consumeJumps()>0||!!retained.jump),sprint:can&&input.sprintingRequested,scope:world.practiceState().scoped,dash:can&&(input.consumeDashes()>0||!!retained.dash)};
+    const command:Omit<Command,'seq'>={stance:input.stance,x:can?input.move.x:0,y:can?input.move.y:0,yaw:input.look.yaw,pitch:input.look.pitch,fire:can&&input.firing,shot:can&&(input.consumeShots()>0||!!retained.shot),reload:can&&(input.consumeReloads()>0||!!retained.reload),jump:can&&(input.consumeJumps()>0||!!retained.jump),sprint:can&&input.sprintingRequested,scope:world.practiceState().scoped,dash:can&&(input.consumeDashes()>0||!!retained.dash)};
     if(can){command.door=pendingDoor??retained.door;command.slot=pendingSlot??retained.slot;command.pickup=pendingTake?.pickup??retained.pickup;command.replace=pendingTake?.replace??retained.replace;command.equipment=pendingEquipment??retained.equipment;}
     const seq=online.send(command);
     if(seq!==null){onlineMotion.sent(seq,command);predictionDash ||=!!command.dash;predictionJump ||=command.jump;retained={};pendingDoor=undefined;pendingSlot=undefined;pendingTake=undefined;pendingEquipment=undefined;}else retained={...command};
@@ -637,6 +640,7 @@ async function start() {
   engine.runRenderLoop(() => {
     const elapsed=resetClock?0:Math.max(0,engine.getDeltaTime()/1000);resetClock=false;
     const dt = Math.min(elapsed, 0.05);
+    world.setStance?.(input.stance);for(const posture of ['crouch','prone'])document.querySelector('#'+posture)?.setAttribute('aria-pressed',String(input.stance===posture));
     const drawFrame=!roomWaiting&&!settingsView.isOpen&&frameLimit.shouldRender(performance.now());
     if(!onlineActive||!onlineState||roomWaiting)onlineVisualTime=0;
     const uiTick=performance.now()-uiRefreshAt>=50;if(uiTick)uiRefreshAt=performance.now();
@@ -668,14 +672,14 @@ async function start() {
     document.querySelector('#audio-status')!.textContent=audio.settings.muted?'음소거 중':audio.available?'사운드 활성화 · 좌우 방향음':'화면을 눌러 소리 켜기';
     if(onlineActive&&onlineState&&!roomWaiting){
       updateOnlineControls(true);
-      const command:Omit<Command,'seq'>={x:canPlay?input.move.x:0,y:canPlay?input.move.y:0,yaw:input.look.yaw,pitch:input.look.pitch,fire:canPlay&&input.firing,shot:false,reload:false,jump:false,sprint:canPlay&&input.sprintingRequested,scope:world.practiceState().scoped};
+      const command:Omit<Command,'seq'>={stance:input.stance,x:canPlay?input.move.x:0,y:canPlay?input.move.y:0,yaw:input.look.yaw,pitch:input.look.pitch,fire:canPlay&&input.firing,shot:false,reload:false,jump:false,sprint:canPlay&&input.sprintingRequested,scope:world.practiceState().scoped};
       inputPump.pump(!!(input.actionsPending||pendingDoor||pendingSlot!==undefined||pendingTake||pendingEquipment));command.jump=canPlay&&predictionJump;command.dash=canPlay&&predictionDash;predictionJump=predictionDash=false;
       const predictedPosition=onlineMotion.advance(elapsed,command,online.connected);
       onlineVisualTime=Math.min(.25,onlineVisualTime+elapsed);
       if(drawFrame){
         const frameState={...onlineState,events:onlineShots.drain(),toolEvents:onlineTools.drain()};
         world.renderOnline(frameState,onlineId,input.look,Math.min(onlineVisualTime,.1),predictedPosition,remoteMotion.sampleAll(performance.now(),online.network.rttMs));
-        for(const event of frameState.events)if(event.id>onlineEventId){onlineEventId=event.id;if(event.hit&&event.player===onlineId){impactTime=.2;feedbackTime=.35;shotFeedback.textContent=event.killed?'상대 처치':'명중';document.querySelector('#impact-marker')!.classList.toggle('kill',event.killed);}}
+        for(const event of frameState.events)if(event.id>onlineEventId){onlineEventId=event.id;if(event.hit&&event.player===onlineId){impactTime=.2;feedbackTime=.35;shotFeedback.textContent=event.headshot?(event.killed?'헤드샷 · 처치':'헤드샷'):(event.killed?'상대 처치':'명중');document.querySelector('#impact-marker')!.classList.toggle('kill',event.killed);}}
         onlineVisualTime=0;
       }
     } else if (canPlay) {
@@ -684,7 +688,7 @@ async function start() {
         const before=world.practiceState();
         const movement = viewMovement(input.look.yaw, input.move.x, input.move.y);
         const duel=world.duelState(),canAct=duel.playerHealth>0&&!duel.winner;
-        const runScale=sprintMultiplier({requested:input.sprintingRequested,forward:input.move.y,canAct,firing:queued>0||input.firing||before.cooldown>0||shotTime>0,reloading:before.reloadRemaining>0||reloadRequested>0,scoped:before.scoped},1.5);
+        const runScale=stanceStats(input.stance).speed*sprintMultiplier({requested:input.sprintingRequested,forward:input.move.y,canAct,firing:queued>0||input.firing||before.cooldown>0||shotTime>0,reloading:before.reloadRemaining>0||reloadRequested>0,scoped:before.scoped},1.5);
         const oldPosition={...position};
         const dashRequested=input.consumeDashes()>0;
         if(!canAct)localDash=cancelDash(localDash);
@@ -735,6 +739,8 @@ async function start() {
     document.querySelector<HTMLElement>('#bot-difficulty-setting')!.hidden=onlineActive||document.querySelector<HTMLSelectElement>('#game-mode')!.value==='practice';document.querySelector<HTMLElement>('#start-difficulty-setting')!.hidden=document.querySelector<HTMLSelectElement>('#start-mode')!.value==='practice';
     document.querySelector<HTMLElement>('#ffa-mode-note')!.hidden=document.querySelector<HTMLSelectElement>('#start-mode')!.value!=='ffa';document.querySelector<HTMLElement>('#survival-mode-note')!.hidden=document.querySelector<HTMLSelectElement>('#start-mode')!.value!=='survival';
     gameChoices.refresh();}
+    for(const message of (world.consumeHighShots?.()??[])){document.querySelector('#elevated-alert')!.textContent=message;elevatedAlertUntil=performance.now()+4000;combatHudAt=-Infinity;}document.querySelector<HTMLElement>('#posture-controls')!.hidden=!canPlay;
+    document.querySelector<HTMLElement>('#elevated-alert')!.hidden=!canPlay||performance.now()>=elevatedAlertUntil;
     noticeTime=Math.max(0,noticeTime-elapsed);refreshHud();if(uiTick)refreshInventory();refreshCombatHud();
     hitTime = Math.max(0, hitTime - elapsed);
     shotTime=Math.max(0,shotTime-elapsed);feedbackTime=Math.max(0,feedbackTime-elapsed);

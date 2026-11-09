@@ -11,13 +11,13 @@ test('approved pistol rules drive actual target damage, reload gating, pauses an
     const pose={yaw:0,pitch:0};
     world.update(PROTOTYPE.spawn,0,pose);world.scene.render();
     for(let shot=1;shot<=4;shot++) {
-      const hit=world.shoot();assert.equal(hit.hit,true);
+      if(shot>1)world.update(PROTOTYPE.spawn,.25,pose);const hit=world.shoot();assert.equal(hit.hit,true);
       assert.equal(world.practiceState().targetHealth[0],100-shot*25);
       assert.equal(world.practiceState().ammo,12-shot);
       assert.equal(hit.eliminated,shot===4);
     }
     assert.equal(world.practiceState().destroyed,1);
-    assert.equal(world.shoot().hit,false,'destroyed target cannot be hit again');
+    world.update(PROTOTYPE.spawn,.25,pose);assert.equal(world.shoot().hit,false,'destroyed target cannot be hit again');
     assert.equal(world.practiceState().ammo,7,'miss consumes ammunition');
     assert.equal(world.reload(),true);assert.equal(world.reload(),false,'repeated reload does not restart');
     const emitted=world.effectsState().emitted;
@@ -27,7 +27,7 @@ test('approved pistol rules drive actual target damage, reload gating, pauses an
     world.update(PROTOTYPE.spawn,5,pose,true);assert.equal(world.practiceState().reloadRemaining,1,'paused game cannot finish reload');
     world.update(PROTOTYPE.spawn,1,pose);assert.equal(world.practiceState().ammo,12);
     world.selectCharacter('robot-cat');assert.equal(world.practiceState().destroyed,1);
-    for(let i=0;i<12;i++)world.shoot();
+    for(let i=0;i<12;i++){world.update(PROTOTYPE.spawn,.25,pose);world.shoot();}
     assert.equal(world.practiceState().ammo,0);
     const shots=world.practiceState().shots,visualShots=world.effectsState().emitted;
     assert.equal(world.shoot().fired,false);assert.equal(world.practiceState().shots,shots);assert.equal(world.effectsState().emitted,visualShots);
@@ -37,7 +37,7 @@ test('approved pistol rules drive actual target damage, reload gating, pauses an
     assert.equal(world.scene.getTransformNodeByName('target-root-0')!.isEnabled(),true);
     for(const p of [{x:0,z:27},{x:-25,z:7},{x:25,z:7}]) {
       world.update(p,0,pose);world.scene.render();
-      for(let i=0;i<4;i++)assert.equal(world.shoot().hit,true);
+      for(let i=0;i<4;i++){world.update(p,.25,pose);world.scene.render();assert.equal(world.shoot().hit,true);}
     }
     assert.equal(world.practiceState().complete,true);assert.equal(world.practiceState().destroyed,3);
     assert.equal(world.practiceState().ammo,0);

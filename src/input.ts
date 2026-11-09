@@ -1,8 +1,10 @@
+import {type Stance} from './stance.ts';
 import { normalized } from './world.ts';
 import { turnView } from './view.ts';
 
 export function createInput(canvas: HTMLCanvasElement, options: {requestMouseLock?:()=>boolean;mouseScale?:()=>number} = {}) {
-  let enabled = true;
+  let enabled = true;let stance:Stance='stand';const toggleStance=(next:Stance)=>{if(enabled)stance=stance===next?'stand':next;};
+  for(const [id,next] of [['crouch','crouch'],['prone','prone']] as const)document.querySelector('#'+id)?.addEventListener('click',()=>toggleStance(next));
   let touchSensitivity = 1,mouseSensitivity=1;
   const mouseRate=()=>.0025*mouseSensitivity*(options.mouseScale?.()??1);
   const keys = new Set<string>();
@@ -43,6 +45,7 @@ export function createInput(canvas: HTMLCanvasElement, options: {requestMouseLoc
     if (!enabled) return;
     const tag=(event.target as HTMLElement|null)?.tagName;
     if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'||(tag==='BUTTON'&&event.code==='Space'))return;
+    if((event.code==='KeyC'||event.code==='KeyZ')&&!event.ctrlKey&&!event.metaKey&&!event.altKey){event.preventDefault();if(!event.repeat)toggleStance(event.code==='KeyC'?'crouch':'prone');return;}
     if(event.code==='KeyF'&&!event.ctrlKey&&!event.metaKey&&!event.altKey){event.preventDefault();if(!event.repeat)dashes++;return;}
     if(event.code==='ShiftLeft'||event.code==='ShiftRight'){event.preventDefault();keys.add(event.code);return;}
     if(jumpKey&&event.code===jumpKey){event.preventDefault();if(!event.repeat)jumps++;return;}
@@ -148,6 +151,7 @@ export function createInput(canvas: HTMLCanvasElement, options: {requestMouseLoc
     setMouseSensitivity(value:number){if(Number.isFinite(value))mouseSensitivity=Math.max(.1,Math.min(3,value));},
     setTouchSensitivity(value: number) { if (Number.isFinite(value)) touchSensitivity = Math.max(.25, Math.min(2, value)); },
     reset,
+    get stance(){return stance;},
     get move() {
       return normalized(stick.x + Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft')),
         stick.y + Number(keys.has('KeyW') || keys.has('ArrowUp')) - Number(keys.has('KeyS') || keys.has('ArrowDown')));
@@ -155,13 +159,13 @@ export function createInput(canvas: HTMLCanvasElement, options: {requestMouseLoc
     get look() { return look; },
     setLook(yaw:number,pitch:number){look={yaw,pitch};},
     resetLook() { look = { yaw: 0, pitch: 0 }; reset(); },
-    get sprintingRequested(){return sprintToggle||keys.has('ShiftLeft')||keys.has('ShiftRight');},
+    get sprintingRequested(){return stance==='stand'&&(sprintToggle||keys.has('ShiftLeft')||keys.has('ShiftRight'));},
     get firing(){return firePointer!==null||mouseHeld;},
     get actionsPending(){return shots>0||reloads>0||jumps>0||dashes>0;},
     consumeShots() { const count = shots; shots = 0; return count; },
     consumeReloads() { const count=reloads;reloads=0;return count; },
-    consumeDashes(){const count=dashes;dashes=0;return count;},
-    consumeJumps() { const count=jumps;jumps=0;return count; },
+    consumeDashes(){const count=dashes;dashes=0;return stance==='stand'?count:0;},
+    consumeJumps() { const count=jumps;jumps=0;return stance==='stand'?count:0; },
     setJumpKey(code:'Space'|'KeyJ') {jumpKey=code;},
   };
 }

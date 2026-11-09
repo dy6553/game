@@ -25,7 +25,7 @@ test('FPS camera follows eyes, hides own body, previews and switches both robots
   assert.equal(world.shoot().hit,true,'screen center ray hits the target straight ahead');
   const wall=MeshBuilder.CreateBox('test-shot-wall',{width:4,height:4,depth:0.5},world.scene);
   wall.position.set(0,2,4);world.scene.render();
-  const blocked=world.shoot();
+  world.update(PROTOTYPE.spawn,.25,{yaw:0,pitch:0});const blocked=world.shoot();
   assert.equal(blocked.hit,false,'opaque geometry blocks the same centered target');
   assert.ok(blocked.point && blocked.point.z<5,'ray stops at the wall');
   wall.dispose();

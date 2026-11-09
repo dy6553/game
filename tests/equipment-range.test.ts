@@ -11,7 +11,7 @@ function run(kind:Projectile['kind'],x:number,y=1,direct?:string,blocked=false){
  return {queries,damage,flash:actor.flash};
 }
 test('out-of-range explosions skip occlusion queries including elevated flash distance',()=>{
- for(const [kind,x,y] of [['grenade',6,1],['rocket',5,1],['flash',8,1],['flash',0,10]] as const){
+ for(const [kind,x,y] of [['grenade',6,1],['rocket',6,1],['flash',8,1],['flash',0,10]] as const){
   const r=run(kind,x,y);assert.equal(r.damage,0);assert.equal(r.flash,0);assert.equal(r.queries,1,kind);
  }
 });

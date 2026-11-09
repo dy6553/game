@@ -108,7 +108,7 @@ function createDuel(difficulty:BotDifficulty='easy',spawnPoint:Point=BOT_SPAWN,o
     if(winner)return;protection=Math.max(0,protection-dt);playerPosition={...player};
     if(playerHealth===0){playerDead=Math.max(0,playerDead-dt);if(playerDead===0){playerHealth=100;protection=3;playerPosition=distantSpawn([position]);respawnVersion++;aim=0;cooldown=1;locked=null;warning=0;}return;}
     if(botHealth===0){botDead=Math.max(0,botDead-dt);if(botDead<1e-8){botDead=0;botHealth=100;position=environment?.randomSpawns&&!spawnScheduled?randomOutdoorSpawn([player]):{...respawnPoint};spawnScheduled=false;botWeapon=createWeapon(PRACTICE_RULES);aim=0;cooldown=0;repath=0;}return;}
-    botWeapon=advanceWeapon(botWeapon,dt,PRACTICE_RULES);cooldown=Math.max(0,cooldown-dt);
+    position=world.advanceFall(position,Math.min(dt,.05));botWeapon=advanceWeapon(botWeapon,dt,PRACTICE_RULES);cooldown=Math.max(0,cooldown-dt);
     if(!hasTarget){aim=0;locked=null;warning=0;route=[];repath=0;return;}
     if(environment){const door=nearbyDoor(position,environment.doors);if(door&&!environment.doors[door.id])toggleDoor(environment.doors,door.id,position,[]);}
     const sees=visible(position),distance=Math.hypot(player.x-position.x,player.z-position.z);
