@@ -206,7 +206,7 @@ async function start() {
   const nicknameDialog=createNicknameDialog(),waitingView=createWaitingRoom(),nameplates=createNameplates();let roomWaiting=false,guestPromptPending=false;
   const onlineAudio=createOnlineAudio();
   const online=createOnlineClient(import.meta.env?.VITE_ONLINE_URL??(import.meta.env?.DEV?'http://127.0.0.1:8787':''),(state,id)=>{
-    playtest.packet();document.querySelector<HTMLSelectElement>('#online-mode')!.value=state.mode??'duel';onlineShots.receive(state.events);onlineTools.receive(state.toolEvents??[]);onlineState=state;onlineId=id;onlineMotion.receive(state,id);remoteMotion.receive(state,id,performance.now());
+    playtest.packet();document.querySelector<HTMLSelectElement>('#online-mode')!.value=state.mode??'duel';onlineShots.receive(state.events);onlineTools.receive(state.toolEvents??[]);if(settingsView.isOpen||document.hidden){onlineShots.drain();onlineTools.drain();}onlineState=state;onlineId=id;onlineMotion.receive(state,id);remoteMotion.receive(state,id,performance.now());
     const me=state.players.find(p=>p.id===id),wasActive=onlineActive,wasWaiting=roomWaiting;
     roomWaiting=needsWaiting(state,id)||!!me?.guest&&!normalizeNickname(me.nickname);
     if(!onlineActive){onlineActive=true;homeOpen=false;home.hidden=true;onlineLobby.hidden=true;picker.hidden=true;manualPaused=false;pausePanel.hidden=true;document.body.classList.remove('at-home');gameChoices.close();}
@@ -630,13 +630,15 @@ async function start() {
   window.addEventListener('pageshow',startNetworkTimer);
   for(const type of ['pointerdown','pointerup','pointercancel','keydown','keyup','click'])window.addEventListener(type,()=>{if(onlineActive)queueMicrotask(()=>inputPump.pump(true));},{capture:true});
   window.addEventListener('pagehide',()=>{if(networkTimer!==null)clearInterval(networkTimer);networkTimer=null;retained={};});
-  let uiRefreshAt=-Infinity;
+  let uiRefreshAt=-Infinity,onlineVisualTime=0,playFrameTime=0;
   let resetClock=true;
   document.addEventListener('visibilitychange',()=>{resetClock=true;frameLimit.reset();});
   window.addEventListener('focus',()=>{resetClock=true;frameLimit.reset();});
   engine.runRenderLoop(() => {
     const elapsed=resetClock?0:Math.max(0,engine.getDeltaTime()/1000);resetClock=false;
     const dt = Math.min(elapsed, 0.05);
+    const drawFrame=!roomWaiting&&!settingsView.isOpen&&frameLimit.shouldRender(performance.now());
+    if(!onlineActive||!onlineState||roomWaiting)onlineVisualTime=0;
     const uiTick=performance.now()-uiRefreshAt>=50;if(uiTick)uiRefreshAt=performance.now();
     const portraitTouch = matchMedia('(pointer: coarse) and (orientation: portrait)').matches;
     lobbyPolish.update();world.setLobbyMotion(!reducedLobbyMotion.matches&&!settingsView.isOpen&&!document.hidden&&document.hasFocus()&&!gameChoices.isOpen&&!resultView.isOpen);audio.setInterfaceActive(!document.hidden&&document.hasFocus());
@@ -646,10 +648,17 @@ async function start() {
     document.querySelector('#pause-description')!.textContent=onlineActive?'내 조작만 멈춥니다. 상대의 경기는 계속됩니다.':'전투와 이동이 멈췄습니다.';
     document.querySelector<HTMLElement>('#pause-indicator')!.hidden=manualPaused||!picker.hidden||comparing||portraitTouch||(!menuOpen&&help.hidden);
     if(uiTick)refreshEquipment();
-    playtest.frame(elapsed,onlineActive?'online':world.duelState().active?'bot':'practice',canPlay,onlineActive?online.network.rttMs:null);
+    // Count drawn frames, not the extra callbacks skipped by the FPS cap.
+    playFrameTime=canPlay?playFrameTime+elapsed:0;
+    if(drawFrame||!canPlay){
+      playtest.frame(playFrameTime,onlineActive?'online':world.duelState().active?'bot':'practice',canPlay,onlineActive?online.network.rttMs:null);
+      if(graphicsMode==='auto'){
+        const density=budget.sample(playFrameTime,canPlay,preferences.value.fps);
+        if(density!==null){engine.setHardwareScalingLevel(1/density);engine.resize();world.resize();}
+      }
+      playFrameTime=0;
+    }
     if(graphicsMode==='auto'){
-      const density=budget.sample(elapsed,canPlay,preferences.value.fps);
-      if(density!==null){engine.setHardwareScalingLevel(1/density);engine.resize();world.resize();}
       world.setPerformanceLow?.(budget.density<=.85);
       const detailed=!mobile&&budget.density>=1.1;
       if(detailed!==qualityHigh){qualityHigh=detailed;world.setQuality(detailed);}
@@ -662,9 +671,13 @@ async function start() {
       const command:Omit<Command,'seq'>={x:canPlay?input.move.x:0,y:canPlay?input.move.y:0,yaw:input.look.yaw,pitch:input.look.pitch,fire:canPlay&&input.firing,shot:false,reload:false,jump:false,sprint:canPlay&&input.sprintingRequested,scope:world.practiceState().scoped};
       inputPump.pump(!!(input.actionsPending||pendingDoor||pendingSlot!==undefined||pendingTake||pendingEquipment));command.jump=canPlay&&predictionJump;command.dash=canPlay&&predictionDash;predictionJump=predictionDash=false;
       const predictedPosition=onlineMotion.advance(elapsed,command,online.connected);
-      const frameState={...onlineState,events:onlineShots.drain(),toolEvents:onlineTools.drain()};
-      world.renderOnline(frameState,onlineId,input.look,Math.min(elapsed,.1),predictedPosition,remoteMotion.sampleAll(performance.now(),online.network.rttMs));
-      for(const event of frameState.events)if(event.id>onlineEventId){onlineEventId=event.id;if(event.hit&&event.player===onlineId){impactTime=.2;feedbackTime=.35;shotFeedback.textContent=event.killed?'상대 처치':'명중';document.querySelector('#impact-marker')!.classList.toggle('kill',event.killed);}}
+      onlineVisualTime=Math.min(.25,onlineVisualTime+elapsed);
+      if(drawFrame){
+        const frameState={...onlineState,events:onlineShots.drain(),toolEvents:onlineTools.drain()};
+        world.renderOnline(frameState,onlineId,input.look,Math.min(onlineVisualTime,.1),predictedPosition,remoteMotion.sampleAll(performance.now(),online.network.rttMs));
+        for(const event of frameState.events)if(event.id>onlineEventId){onlineEventId=event.id;if(event.hit&&event.player===onlineId){impactTime=.2;feedbackTime=.35;shotFeedback.textContent=event.killed?'상대 처치':'명중';document.querySelector('#impact-marker')!.classList.toggle('kill',event.killed);}}
+        onlineVisualTime=0;
+      }
     } else if (canPlay) {
       for(const step of simulationSteps(elapsed)){
         const queued=input.consumeShots(),reloadRequested=input.consumeReloads();
@@ -727,7 +740,7 @@ async function start() {
     shotTime=Math.max(0,shotTime-elapsed);feedbackTime=Math.max(0,feedbackTime-elapsed);
     crosshair.classList.toggle('hit', hitTime > 0);
     crosshair.classList.toggle('firing',shotTime>0);shotFeedback.hidden=feedbackTime<=0||!picker.hidden||comparing;
-    if(!roomWaiting&&!settingsView.isOpen&&frameLimit.shouldRender(performance.now()))world.scene.render();
+    if(drawFrame)world.scene.render();
   });
   window.addEventListener('pagehide', () => { input.reset();audio.pause(true);online.leave();nameplates.clear();nicknameDialog.cancel();for(const p of onlineState?.players??[])if(p.guest)delete p.nickname; });window.addEventListener('pageshow',event=>{if(event.persisted)openHome();});
 }

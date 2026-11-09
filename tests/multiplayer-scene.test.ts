@@ -19,3 +19,15 @@ test('balanced multiplayer limits distant shadow work while retaining all remote
   assert.ok(remoteCasters().length>0,'returning to balanced restores nearby shadows');
  }finally{w.scene.dispose();e.dispose();}
 });
+
+test('twenty-player bodies batch colors into at most three surfaces and reuse geometry for identical robots',()=>{
+ const e=new NullEngine(),w=createHarborScene(e,{randomSpawns:false});try{
+  const g=createNetworkGame(undefined,'harbor',{mode:'ffa'});for(let i=0;i<20;i++)g.join('p'+i);
+  w.setMode('practice');w.renderOnline(g.state,'p0',{yaw:0,pitch:0},.05);
+  const bodies=w.scene.meshes.filter(m=>m.name.startsWith('remote-body-'));
+  assert.ok(bodies.length<=19*3,`19 robots require ${bodies.length} body draws before shadows`);
+  assert.equal(w.scene.transformNodes.filter(n=>n.name.startsWith('online-player-')&&n.isEnabled()).length,19);
+  assert.ok(bodies.every(m=>m.isVerticesDataPresent('color')),'all armor palette colors remain in vertex data');
+  assert.ok(new Set(bodies.map(m=>(m as any).geometry)).size<=3,'identical robots share GPU geometry instead of rebuilding every part on join');
+ }finally{w.scene.dispose();e.dispose();}
+});

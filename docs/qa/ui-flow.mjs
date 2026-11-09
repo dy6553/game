@@ -30,9 +30,10 @@ const audio={settings:{master:.7,effects:.85,environment:.16,muted:false},unlock
 let render,delta=100;
 class Engine{static IsSupported=true;constructor(){}setHardwareScalingLevel(value){calls.scaling=value;}resize(){}runRenderLoop(fn){render=fn;}getDeltaTime(){return delta;}getRenderWidth(){return 1280;}getRenderHeight(){return 720;}}
 world.renderOnline=()=>{};world.setShadows=value=>calls.shadows=value;const originalRender=world.scene.render;world.scene.render=()=>{calls.draws=(calls.draws??0)+1;originalRender();};
-globalThis.qa={Engine,world,audio};
+globalThis.qa={Engine,world,audio,metricFrames:[]};
 qa.makeOnline=(endpoint,onState,onStatus,onSession)=>{qa.emitOnline=onState;qa.emitOnlineStatus=onStatus;return {available:true,connected:true,network:{rttMs:0},leave(){},send(command){calls.networkCommands??=[];calls.networkCommands.push({...command});return calls.returnSeq??null;},async enter(){onSession({code:'TESTCODE',id:'me',token:'should-not-persist'});}};};
 const hooks=registerHooks({load(url,context,next){
+ if(url.endsWith('/src/playtest.ts'))return {format:'module',shortCircuit:true,source:'export const createPlaytest=()=>({frame:(dt,mode,active)=>globalThis.qa.metricFrames.push({dt,mode,active}),packet(){},correction(){}});'};
  if(url.endsWith('/src/online.ts'))return {format:'module',shortCircuit:true,source:'export const createOnlineClient=(...args)=>globalThis.qa.makeOnline(...args);'};
  if(url.endsWith('/src/scene.ts'))return {format:'module',shortCircuit:true,source:'export const createHarborScene=()=>globalThis.qa.world;'};
  if(url.endsWith('/src/audio.ts'))return {format:'module',shortCircuit:true,source:'export const createGameAudio=()=>globalThis.qa.audio; export const spatialSound=()=>({pan:0,gain:1});'};
@@ -223,5 +224,41 @@ if(process.argv.includes('--online-event-loss')){
   qa.emitOnline(shot,'me');game.step();qa.emitOnline(structuredClone(game.state),'me');frame(100);
   assert.equal(el('shot-feedback').textContent,'명중','the confirmed hit feedback must survive until a draw');
   assert.equal(el('shot-feedback').hidden,false,'the confirmed hit feedback must be visible');
+ });
+}
+
+if(process.argv.includes('--frame-pacing')){
+ await test('30FPS drawing updates remote visuals at30Hz while preserving20Hz network commands',()=>{
+  click('home-open');click('home-settings');click('settings-tab-graphics');choose('frame-target','30');click('environment-close');
+  const game=createNetworkGame();game.join('me');game.join('foe');qa.emitOnline(structuredClone(game.state),'me');frame(350);frame(100);
+  let visualUpdates=0;world.renderOnline=()=>visualUpdates++;
+  const sent=calls.networkCommands.length,draws=calls.draws;
+  for(let i=0;i<60;i++)frame(1000/60);
+  const actualDraws=calls.draws-draws,commands=calls.networkCommands.length-sent;
+  assert.ok(actualDraws>=29&&actualDraws<=31,`expected30 draws, got ${actualDraws}`);
+  assert.ok(commands>=19&&commands<=21,`network still needs20Hz, got ${commands}`);
+  assert.equal(visualUpdates,actualDraws,'skipped drawings must not repeat all remote mesh and effect updates');
+ });
+ await test('hidden settings do not replay an old burst of shots when drawing resumes',()=>{
+  click('home-open');const game=createNetworkGame();game.join('me');game.join('foe');
+  qa.emitOnline(structuredClone(game.state),'me');frame(350);frame(100);
+  click('environment-open');
+  game.input('me',{seq:0,x:0,y:0,yaw:0,pitch:0,fire:false,shot:true,reload:false,jump:false,sprint:false,scope:false});game.step();
+  assert.equal(game.state.events.length,1);qa.emitOnline(structuredClone(game.state),'me');
+  game.step();qa.emitOnline(structuredClone(game.state),'me');for(let i=0;i<6;i++)frame(100);
+  let rendered;world.renderOnline=state=>rendered=state;
+  click('environment-close');frame(100);
+  assert.equal(rendered.players[0].weapon.ammo,11,'newest authoritative state survives settings');
+  assert.equal(rendered.players[1].health,75);
+  assert.equal(rendered.events.length,0,'expired hidden effects must not burst on resume');
+ });
+ await test('automatic quality measures presented frames rather than fast callbacks that skip drawing',()=>{
+  click('home-open');click('home-settings');click('settings-tab-graphics');choose('frame-target','60');choose('graphics-quality','auto');click('environment-close');
+  const game=createNetworkGame();game.join('me');game.join('foe');qa.emitOnline(structuredClone(game.state),'me');frame(350);frame(100);
+  assert.equal(calls.scaling,1);const before=calls.draws;qa.metricFrames=[];
+  for(let i=0;i<100;i++){frame(1);frame(24);}
+  assert.ok(calls.draws-before<=110,'the scene draws around40Hz although callbacks arrive80Hz');
+  assert.ok(calls.scaling>1,'automatic quality must react to the actual slow drawn frames');
+  assert.equal(qa.metricFrames.filter(f=>f.active).length,calls.draws-before,'diagnostic FPS must count actual draws, not skipped callbacks');
  });
 }

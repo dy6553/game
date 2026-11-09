@@ -21,3 +21,17 @@ test('unchanged low performance profile does not rewrite decoration visibility e
   assert.equal(writes,0,'stable profile must not traverse/write decorations60 times');
  }finally{w.scene.dispose();e.dispose();}
 });
+
+test('low profile removes normal-map texture work while preserving diffuse textures, light fill and high-quality restoration',()=>{
+ const e=new NullEngine(),w=createHarborScene(e,{randomSpawns:false});try{
+  const surfaces=w.scene.materials.filter(m=>(m as any).bumpTexture).map(m=>({material:m as any,bump:(m as any).bumpTexture,diffuse:(m as any).diffuseTexture}));
+  assert.ok(surfaces.length>0);
+  w.setPerformanceLow(true);w.setQuality(true);
+  for(const s of surfaces){assert.ok(s.material.bumpTexture===null,'low profile avoids per-pixel normal-map sampling');assert.equal(s.material.diffuseTexture,s.diffuse,'authored color textures remain');}
+  assert.ok(w.scene.textures.every(t=>t.anisotropicFilteringLevel<=2));
+  assert.ok(w.scene.getLightByName('sky')!.intensity>=.6,'readability does not get darker');
+  w.setPerformanceLow(false);
+  for(const s of surfaces)assert.equal(s.material.bumpTexture,s.bump);
+  assert.ok(w.scene.textures.every(t=>t.anisotropicFilteringLevel===8),'manual high-quality filtering restores');
+ }finally{w.scene.dispose();e.dispose();}
+});
