@@ -5,12 +5,12 @@ export type WeaponSpec=CombatRules&{name:string;interval:number;automatic:boolea
 export const WEAPONS:Record<WeaponId,Readonly<WeaponSpec>>={
  pistol:{...PRACTICE_RULES,damage:22,name:'권총',interval:.25,automatic:false,pellets:1,spread:0},
  machinegun:{maxHealth:100,damage:11,magazineSize:30,reloadSeconds:2,name:'기관총',interval:1/8,automatic:true,pellets:1,spread:0},
- shotgun:{maxHealth:100,damage:15,magazineSize:6,reloadSeconds:2.5,name:'산탄총',interval:.9,automatic:false,pellets:6,spread:.04},
- sniper:{maxHealth:100,damage:70,magazineSize:5,reloadSeconds:2.5,name:'저격총',interval:1.5,automatic:false,pellets:1,spread:0},
+ shotgun:{maxHealth:100,damage:9,magazineSize:6,reloadSeconds:2.5,name:'산탄총',interval:.9,automatic:false,pellets:6,spread:.04},
+ sniper:{maxHealth:100,damage:55,magazineSize:5,reloadSeconds:2.5,name:'저격총',interval:1.5,automatic:false,pellets:1,spread:0},
  smg:{maxHealth:100,damage:8,magazineSize:40,reloadSeconds:1.8,name:'기관단총',interval:1/12,automatic:true,pellets:1,spread:.035},
  burst:{maxHealth:100,damage:17,magazineSize:24,reloadSeconds:2,name:'3점사 소총',interval:.65,automatic:false,pellets:1,spread:0,burstCount:3,burstInterval:.08},
  quad:{maxHealth:100,damage:16,magazineSize:32,reloadSeconds:2.2,name:'4점사 소총',interval:.75,automatic:false,pellets:1,spread:0,burstCount:4,burstInterval:.08},
- bazooka:{maxHealth:100,damage:110,magazineSize:1,reloadSeconds:3,name:'바주카',interval:1,automatic:false,pellets:1,spread:0},
+ bazooka:{maxHealth:100,damage:80,magazineSize:1,reloadSeconds:3,name:'바주카',interval:1,automatic:false,pellets:1,spread:0},
  dmr:{maxHealth:100,damage:42,magazineSize:10,reloadSeconds:2.2,name:'반자동 소총',interval:.5,automatic:false,pellets:1,spread:0},
 };
 export function isWeaponId(v:unknown):v is WeaponId{return WEAPON_IDS.some(id=>id===v);}

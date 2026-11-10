@@ -12,7 +12,7 @@ test('airborne dash is rejected and dash prevents jumping while retaining weapon
 });
 test('server dashes cannot cross buildings; death has no invulnerability and resets on respawn',()=>{
  const g=game(),a=g.state.players[0];a.x=9;a.z=-19;g.input('a',command(0,{dash:true,yaw:Math.PI/2}));for(let i=0;i<4;i++)g.step();assert.ok(a.x<10.5);
- const h=createNetworkGame();const p=h.join('a'),b=h.join('b','sniper');assert.ok(p.dash);h.input('a',command(0,{dash:true}));h.input('b',command(0,{shot:true,yaw:Math.PI}));h.step();assert.equal(p.health,0);assert.equal(p.dash.remaining,0);for(let i=0;i<61;i++)h.step();assert.equal(p.health,100);assert.equal(p.dash.cooldown,0);
+ const h=createNetworkGame();const p=h.join('a'),b=h.join('b','sniper');assert.ok(p.dash);p.health=80;h.input('a',command(0,{dash:true}));h.input('b',command(0,{shot:true,yaw:Math.PI}));h.step();assert.equal(p.health,0);assert.equal(p.dash.remaining,0);for(let i=0;i<61;i++)h.step();assert.equal(p.health,100);assert.equal(p.dash.cooldown,0);
 });
 test('disconnect and server restore preserve cooldown but cancel a dash in progress',()=>{
  const g=game();g.input('a',command(0,{dash:true}));g.step();const cooldown=g.state.players[0].dash.cooldown;g.disconnect('a');assert.equal(g.state.players[0].dash.remaining,0);const restored=createNetworkGame(g.state);assert.equal(restored.state.players[0].dash.cooldown,cooldown);restored.join('a');restored.join('b');assert.equal(restored.state.players[0].dash.cooldown,cooldown);

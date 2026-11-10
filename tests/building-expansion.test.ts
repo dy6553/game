@@ -64,7 +64,7 @@ test('server floors block cross-storey bullets while same-storey hits remain aut
  a.x=house.x;a.z=house.z;a.y=0;b.x=house.x;b.z=house.z+3;b.y=3.4;
  const command=(seq:number,pitch:number)=>({seq,x:0,y:0,yaw:0,pitch,fire:false,shot:true,reload:false,jump:false,sprint:false,scope:false});
  game.input('a',command(1,-Math.atan2(3.4,3)));game.step();assert.equal(b.health,100,'second-floor slab intercepts the rising bullet');
- a.y=3.4;a.cooldown=0;game.input('a',command(2,0));game.step();assert.equal(b.health,0,'same-floor sniper hit is valid');
+ a.y=3.4;a.cooldown=0;game.input('a',command(2,0));game.step();assert.equal(b.health,17.5,'same-floor sniper headshot damages without one-shot elimination');
 });
 test('actual doors stay dynamic after batching and rooftop scenery matches collision height',async()=>{
  const {NullEngine}=await import('@babylonjs/core/Engines/nullEngine.js');const {createHarborScene}=await import('../src/scene.ts');const e=new NullEngine();try{

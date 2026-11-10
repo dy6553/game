@@ -11,13 +11,13 @@ test('server rejects invalid/replayed inputs and bounds movement independently o
  game.disconnect('b');const paused=a.z;game.input('a',command(2,{y:1}));game.step();assert.equal(a.z,paused);assert.equal(b.connected,false);
 });
 test('server verifies shots, ammo, walls, kill goal and respawn without trusting reported health',()=>{
- const game=createNetworkGame();const a=game.join('a','sniper'),b=game.join('b','pistol');a.z=10;
+ const game=createNetworkGame();const a=game.join('a','sniper'),b=game.join('b','pistol');a.z=10;b.health=80;
  game.input('a',{...command(1,{shot:true}),damage:99999,health:99999});game.step();assert.equal(b.health,0);assert.equal(a.kills,1);assert.equal(a.health,100);assert.equal(a.weapon.ammo,4);
  game.input('a',command(2,{shot:true}));game.step();assert.equal(a.weapon.ammo,4,'cooldown is enforced');
  for(let i=0;i<61;i++)game.step();assert.equal(b.health,100);assert.equal(b.weapon.ammo,12);
  game.input('a',command(3,{yaw:Math.PI,shot:true}));game.step();assert.equal(b.health,100,'opposite direction misses');
  a.x=-40;a.z=-19;b.x=-25;b.z=-19;a.cooldown=0;game.input('a',command(4,{yaw:Math.PI/2,shot:true}));game.step();assert.equal(b.health,100,'building occludes shot');
- a.x=0;a.z=10;b.x=0;b.z=18;a.kills=9;a.cooldown=0;b.protection=0;game.input('a',command(5,{shot:true}));game.step();assert.equal(game.state.winner,'a');
+ a.x=0;a.z=10;b.x=0;b.z=18;a.kills=9;a.cooldown=0;b.protection=0;b.health=80;game.input('a',command(5,{shot:true}));game.step();assert.equal(game.state.winner,'a');
  const ammo=a.weapon.ammo;game.input('a',command(6,{shot:true}));game.step();assert.equal(a.weapon.ammo,ammo,'finished match cannot continue firing');
 });
 test('rooms cap players and restore paused state for token-based reconnect',()=>{

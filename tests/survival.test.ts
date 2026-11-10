@@ -35,9 +35,9 @@ test('all wave quotas scale to twelve, active enemies stay capped and hard wins 
 test('real wave clear heals and refills every held gun while keeping the acquired inventory',()=>{
  const e=new NullEngine({renderWidth:640,renderHeight:360,textureSize:512,deterministicLockstep:false,lockstepMaxSteps:4});try{
   const world=createHarborScene(e,{randomSpawns:false});world.setMode('survival','easy');world.selectWeapon('sniper');const p={x:0,z:-4};world.update(p,0);assert.equal(world.pickup(p,'crate-machinegun'),'added');world.switchWeapon(0);world.update(p,5);assert.equal(world.duelState().phase,'combat');
-  p.z=10;world.update(p,0,{yaw:0,pitch:0});world.scene.render();assert.equal(world.shoot().eliminated,true);
-  p.z=0;for(const id of ['bot-2','bot-3']){world.update(p,1.6);const target=world.duelState().bots.find(b=>b.id===id);world.update(p,0,{yaw:Math.atan2(target.position.x-p.x,target.position.z-p.z),pitch:0});world.scene.render();assert.equal(world.shoot().eliminated,true);}
-  world.update(p,1.6);const reinforcement=world.duelState().bots.find(b=>b.health>0)!;p.x=reinforcement.position.x;p.z=reinforcement.position.z-5;world.update(p,0,{yaw:0,pitch:0});world.scene.render();assert.equal(world.shoot().eliminated,true);
+  p.z=10;world.update(p,0,{yaw:0,pitch:0});world.scene.render();finishTarget(world,p);
+  p.z=0;for(const id of ['bot-2','bot-3']){world.update(p,1.6);const target=world.duelState().bots.find(b=>b.id===id);world.update(p,0,{yaw:Math.atan2(target.position.x-p.x,target.position.z-p.z),pitch:0});world.scene.render();finishTarget(world,p);}
+  world.update(p,1.6);const reinforcement=world.duelState().bots.find(b=>b.health>0)!;p.x=reinforcement.position.x;p.z=reinforcement.position.z-5;world.update(p,0,{yaw:0,pitch:0});world.scene.render();finishTarget(world,p);
   world.update(p,0);assert.equal(world.duelState().wave,2);assert.equal(world.duelState().phase,'preparing');assert.equal(world.duelState().playerHealth,100);const bag=world.inventoryState();assert.deepEqual(bag.inventory.slots.map(s=>s.id),['sniper','machinegun']);assert.deepEqual(bag.inventory.slots.map(s=>s.weapon.ammo),[5,30]);assert.ok(bag.pickups.find(c=>c.id==='crate-machinegun').remaining>0,'normal wave progression preserves supply timers');
   world.scene.dispose();
  }finally{e.dispose();}
@@ -51,3 +51,5 @@ test('real survival death spends one life and resets the current wave, supply ca
 test('moving onto a spawn point during preparation never creates an enemy inside the player',()=>{
  const match=battle();match.update(5,{x:0,z:18},()=>false,()=>false);assert.equal(match.state().phase,'combat');assert.ok(match.state().bots.every(b=>Math.hypot(b.position.x,b.position.z-18)>=1.1),'preparation movement must not overlap an enemy spawn');
 });
+
+function finishTarget(world:any,p:{x:number;z:number}){const target=world.duelState().bots.filter((b:any)=>b.health>0).sort((a:any,b:any)=>Math.abs(Math.atan2(a.position.x-p.x,a.position.z-p.z)-world.camera.rotation.y)-Math.abs(Math.atan2(b.position.x-p.x,b.position.z-p.z)-world.camera.rotation.y))[0];if(world.practiceState().ammo<2){world.reload();world.update(p,2.5);}for(let i=0;i<2;i++){if(i)world.update(p,1.5);const t=world.duelState().bots.find((b:any)=>b.id===target.id);world.update(p,0,{yaw:Math.atan2(t.position.x-p.x,t.position.z-p.z),pitch:0});world.scene.render();assert.equal(world.shoot().eliminated,i===1);}}
