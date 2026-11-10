@@ -38,8 +38,10 @@ export function moveNetworkPlayer(p:Pick<Player,'x'|'z'|'y'|'health'|'weapon'|'c
  return moveWithCollisions(p,{x:m.x*PROTOTYPE.speed*stanceStats(c.stance).speed*(running&&(!c.stance||c.stance==='stand')?1.5:1)*dt,z:m.z*PROTOTYPE.speed*stanceStats(c.stance).speed*(running&&(!c.stance||c.stance==='stand')?1.5:1)*dt},worldSolids(doors),PROTOTYPE.radius,stairLift);
 }
 // Shared with prediction: only a server snapshot with dash state enables the feature.
-export function advancePlayerMotion(p:Pick<Player,'x'|'z'|'y'|'health'|'weapon'|'cooldown'>&Partial<Pick<Player,'dash'|'jump'|'fallSpeed'>>,c:Omit<Command,'seq'>,dt:number,doors?:Doors,world:World=harborWorld){
+export function advancePlayerMotion(p:Pick<Player,'x'|'z'|'y'|'health'|'weapon'|'cooldown'>&Partial<Pick<Player,'dash'|'jump'|'fallSpeed'|'stance'>>,c:Omit<Command,'seq'>,dt:number,doors?:Doors,world:World=harborWorld){
  const {moveWithCollisions,worldSolids}=world;
+ // Missing input stops actions, but posture persists until explicitly changed.
+ c={...c,stance:c.stance??p.stance??'stand'};
  let dash=p.dash,jump=p.jump??createJump();
  if(p.health<=0)return {x:p.x,z:p.z,y:p.y,jump,dash:dash?cancelDash(dash):undefined};
  if(dash&&c.dash&&(!c.stance||c.stance==='stand'))dash=beginDash(dash,{x:c.x,y:c.y,yaw:c.yaw,grounded:jump.height===0&&jump.velocity===0&&!(p.fallSpeed&&p.fallSpeed>0),canAct:true});
@@ -108,7 +110,7 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
     if(c.door)world.toggleDoor(state.doors!,c.door,p,state.players.filter(o=>o.health>0&&o.playing!==false));if(entry&&inputTime-entry.at<.3){p.yaw=c.yaw;p.pitch=c.pitch;}
     syncSlot(p.inventory,p.weapon,p.cooldown);advanceStowed(p.inventory,dt,true);if(c.slot!==undefined)switchSlot(p.inventory,c.slot);if(c.pickup){const pickup=state.pickups.find(x=>x.id===c.pickup);if(pickup?.equipmentId)takeEquipmentPickup(p.gear,p,state.pickups,c.pickup);else takePickup(p.inventory,p,state.pickups,c.pickup,c.replace);}
     const slot=p.inventory.slots[p.inventory.active]!;p.weaponId=slot.id;p.weapon=slot.weapon;p.cooldown=slot.cooldown;const spec=WEAPONS[p.weaponId];if(c.reload){const next=beginReload(p.weapon,spec);if(next!==p.weapon)p.weapon=cancelBurst(next);}if(c.equipment)useEquipment(p,c.equipment,state.projectiles!,id());
-    p.stance=c.stance??'stand';const sequence=advanceBurst(p.weapon,dt);p.weapon=sequence.state;Object.assign(p,advancePlayerMotion(p,c,dt,state.doors,world));
+    c.stance??=p.stance??'stand';p.stance=c.stance;const sequence=advanceBurst(p.weapon,dt);p.weapon=sequence.state;Object.assign(p,advancePlayerMotion(p,c,dt,state.doors,world));
     if(sequence.due>0||((c.shot||(c.fire&&spec.automatic))&&p.cooldown<1e-8)){const attempt=tryFire(p.weapon);p.weapon=attempt.state;if(attempt.fired){if((p.y??0)>=3.35)p.revealedUntil=state.tick+80;p.healing=0;p.protection=0;if(!sequence.due){p.cooldown=Math.max(0,spec.interval-(p.weaponId==='smg'?(p.weapon.cadenceCarry??0):0));p.weapon=startBurst(p.weapon,spec);}const origin=[p.x,(stanceStats(p.stance).eye-(p.character==='robot-cat'?.05:0))+(p.y??0)+p.jump.height,p.z];
      if(p.weaponId==='bazooka'){launchRocket(p,state.projectiles!,id(),spec.damage);state.events.push({elevated:(p.y??0)>=3.35,id:id(),player:p.id,weapon:p.weaponId,from:{x:origin[0]!,y:origin[1]!,z:origin[2]!},to:{x:p.x+Math.sin(p.yaw)*2,y:origin[1]!-Math.sin(p.pitch)*2,z:p.z+Math.cos(p.yaw)*2},hit:false,killed:false});}else for(const offset of pelletOffsets(spec)){const sy=Math.sin(p.yaw),cy=Math.cos(p.yaw),sp=Math.sin(p.pitch),cp=Math.cos(p.pitch);let d=[sy*cp+cy*offset.x+sy*sp*offset.y,-sp+cp*offset.y,cy*cp-sy*offset.x+cy*sp*offset.y];const len=Math.hypot(...d);d=d.map(v=>v/len);const wall=wallDistance(origin,d,state.doors,world);let target:Player|undefined,range=wall;
       for(const foe of state.players){if(foe===p||foe.health<=0||!availablePlayer(foe))continue;const t=actorHit(origin,d,foe);if(t<range){range=t;target=foe;}}
