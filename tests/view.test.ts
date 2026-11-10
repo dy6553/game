@@ -1,7 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { turnView, viewMovement } from '../src/view.ts';
+import { createLookMotion, turnView, viewMovement } from '../src/view.ts';
 import { createInput } from '../src/input.ts';
+
+test('short aim smoothing is independent of refresh rate and preserves long turns',()=>{
+ const a=createLookMotion(true),b=createLookMotion(true);
+ for(const look of [a,b]){
+  look.set({yaw:3.1,pitch:0});
+  look.turn(4,2,1);
+ }
+ a.advance(1/30);
+ b.advance(1/60);b.advance(1/60);
+ assert.ok(Math.abs(a.look.yaw-b.look.yaw)<1e-8);
+ assert.ok(Math.abs(a.look.pitch-b.look.pitch)<1e-8);
+ a.advance(.5);
+ assert.ok(Math.abs(a.look.yaw-turnView({yaw:3.1,pitch:0},4,2,1).yaw)<1e-8);
+ assert.equal(a.look.pitch,1.2);
+ const settled=a.look;
+ a.turn(1,-.5,1);a.discardPending();a.advance(.05);
+ assert.deepEqual(a.look,settled);
+});
 
 test('right swipe turns right and vertical view clamps before inversion', () => {
   assert.ok(turnView({yaw:0,pitch:0},40,0).yaw>0);

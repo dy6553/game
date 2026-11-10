@@ -1,8 +1,8 @@
 import {type Stance} from './stance.ts';
 import { normalized } from './world.ts';
-import { turnView } from './view.ts';
+import { createLookMotion } from './view.ts';
 
-export function createInput(canvas: HTMLCanvasElement, options: {requestMouseLock?:()=>boolean;mouseScale?:()=>number} = {}) {
+export function createInput(canvas: HTMLCanvasElement, options: {requestMouseLock?:()=>boolean;mouseScale?:()=>number;smoothLook?:boolean} = {}) {
   let enabled = true;let stance:Stance='stand';const toggleStance=(next:Stance)=>{if(enabled)stance=stance===next?'stand':next;};
   for(const [id,next] of [['crouch','crouch'],['prone','prone']] as const)document.querySelector('#'+id)?.addEventListener('click',()=>toggleStance(next));
   let touchSensitivity = 1,mouseSensitivity=1;
@@ -21,8 +21,8 @@ export function createInput(canvas: HTMLCanvasElement, options: {requestMouseLoc
   let stick = { x: 0, y: 0 };
   let lookPointer: number | null = null;
   let last = { x: 0, y: 0 };
-  let look = { yaw: 0, pitch: 0 },invertY=false;
-  const turn=(dx:number,dy:number,sensitivity:number)=>{look=turnView(look,dx,invertY?-dy:dy,sensitivity);};
+  const lookMotion=createLookMotion(options.smoothLook??false);let invertY=false;
+  const turn=(dx:number,dy:number,sensitivity:number)=>{lookMotion.turn(dx,invertY?-dy:dy,sensitivity);};
   let firePointer:number|null=null,mouseHeld=false;
   let shots = 0;
   let reloads = 0;
@@ -33,6 +33,7 @@ export function createInput(canvas: HTMLCanvasElement, options: {requestMouseLoc
   let hoverPoint:{x:number;y:number}|null=null;
 
   const reset = () => {
+    lookMotion.discardPending();
     hoverPoint=null;sprintToggle=false;firePointer=null;mouseHeld=false;
     keys.clear(); stickPointer = null; stick = { x: 0, y: 0 };
     thumb.style.transform = 'translate(0, 0)';
@@ -156,9 +157,10 @@ export function createInput(canvas: HTMLCanvasElement, options: {requestMouseLoc
       return normalized(stick.x + Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft')),
         stick.y + Number(keys.has('KeyW') || keys.has('ArrowUp')) - Number(keys.has('KeyS') || keys.has('ArrowDown')));
     },
-    get look() { return look; },
-    setLook(yaw:number,pitch:number){look={yaw,pitch};},
-    resetLook() { look = { yaw: 0, pitch: 0 }; reset(); },
+    get look() { return lookMotion.look; },
+    advanceLook(dt:number){if(enabled)lookMotion.advance(dt);},
+    setLook(yaw:number,pitch:number){lookMotion.set({yaw,pitch});},
+    resetLook() { lookMotion.set({yaw:0,pitch:0});reset(); },
     get sprintingRequested(){return stance==='stand'&&(sprintToggle||keys.has('ShiftLeft')||keys.has('ShiftRight'));},
     get firing(){return firePointer!==null||mouseHeld;},
     get actionsPending(){return shots>0||reloads>0||jumps>0||dashes>0;},

@@ -8,7 +8,7 @@ import {createInventory,createPickups,takeEquipmentPickup,syncSlot,advanceStowed
 import {harborWorld,createWorld,type World,type MapId,type Doors,type Point} from './world.ts';
 import { WEAPONS,pelletOffsets,isWeaponId,startBurst,advanceBurst,cancelBurst,type WeaponId } from './weapons.ts';
 import { createWeapon,beginReload,tryFire,type WeaponState } from './combat.ts';
-import { createJump,beginJump,advanceJump,type JumpState } from './jump.ts';
+import { createJump,beginJump,type JumpState } from './jump.ts';
 import { viewMovement } from './view.ts';
 export type Player = GearActor & {revealedUntil?:number;nickname?:string;guest?:boolean;participated?:boolean;deaths:number;totalKills:number;playing?:boolean;abandoned?:boolean;id:string;y?:number;fallSpeed?:number;protection?:number;x:number;z:number;yaw:number;pitch:number;health:number;kills:number;dead:number;weaponId:WeaponId;weapon:WeaponState;jump:JumpState;cooldown:number;connected:boolean;character:'robot'|'robot-cat'|'welder';seq:number;startWeapon:WeaponId;inventory:Inventory;dash?:DashState};
 export type Command={stance?:Stance;seq:number;x:number;y:number;yaw:number;pitch:number;fire:boolean;shot:boolean;reload:boolean;jump:boolean;sprint:boolean;scope:boolean;door?:string;dash?:boolean;slot?:number;pickup?:string;replace?:number;equipment?:EquipmentId};
@@ -31,23 +31,24 @@ export function parseCommand(v:unknown):Command|null{
  if(p.pickup!==undefined&&(typeof p.pickup!=='string'||p.pickup.length>40))return null;
  return p as unknown as Command;
 }
-export function moveNetworkPlayer(p:Pick<Player,'x'|'z'|'y'|'health'|'weapon'|'cooldown'>,c:Omit<Command,'seq'>,dt:number,doors?:Doors,world:World=harborWorld){
+export function moveNetworkPlayer(p:Pick<Player,'x'|'z'|'y'|'health'|'weapon'|'cooldown'>,c:Omit<Command,'seq'>,dt:number,doors?:Doors,world:World=harborWorld,stairLift=0){
  const {normalized,moveWithCollisions,PROTOTYPE,worldSolids}=world;
  if(p.health<=0)return {x:p.x,z:p.z,y:p.y};
  const n=normalized(c.x,c.y),m=viewMovement(c.yaw,n.x,n.y),running=c.sprint&&n.y>0&&!c.fire&&!c.shot&&!c.scope&&p.weapon.reloadRemaining===0&&p.cooldown===0;
- return moveWithCollisions(p,{x:m.x*PROTOTYPE.speed*stanceStats(c.stance).speed*(running&&(!c.stance||c.stance==='stand')?1.5:1)*dt,z:m.z*PROTOTYPE.speed*stanceStats(c.stance).speed*(running&&(!c.stance||c.stance==='stand')?1.5:1)*dt},worldSolids(doors));
+ return moveWithCollisions(p,{x:m.x*PROTOTYPE.speed*stanceStats(c.stance).speed*(running&&(!c.stance||c.stance==='stand')?1.5:1)*dt,z:m.z*PROTOTYPE.speed*stanceStats(c.stance).speed*(running&&(!c.stance||c.stance==='stand')?1.5:1)*dt},worldSolids(doors),PROTOTYPE.radius,stairLift);
 }
 // Shared with prediction: only a server snapshot with dash state enables the feature.
 export function advancePlayerMotion(p:Pick<Player,'x'|'z'|'y'|'health'|'weapon'|'cooldown'>&Partial<Pick<Player,'dash'|'jump'|'fallSpeed'>>,c:Omit<Command,'seq'>,dt:number,doors?:Doors,world:World=harborWorld){
  const {moveWithCollisions,worldSolids}=world;
  let dash=p.dash,jump=p.jump??createJump();
  if(p.health<=0)return {x:p.x,z:p.z,y:p.y,jump,dash:dash?cancelDash(dash):undefined};
- if(dash&&c.dash&&(!c.stance||c.stance==='stand'))dash=beginDash(dash,{x:c.x,y:c.y,yaw:c.yaw,grounded:jump.height===0&&jump.velocity===0,canAct:true});
- if((!c.stance||c.stance==='stand')&&c.jump&&(!dash||dash.remaining===0))jump=beginJump(jump);jump=advanceJump(jump,dt);
+ if(dash&&c.dash&&(!c.stance||c.stance==='stand'))dash=beginDash(dash,{x:c.x,y:c.y,yaw:c.yaw,grounded:jump.height===0&&jump.velocity===0&&!(p.fallSpeed&&p.fallSpeed>0),canAct:true});
+ if((!c.stance||c.stance==='stand')&&c.jump&&(!dash||dash.remaining===0)&&!(p.fallSpeed&&p.fallSpeed>0))jump=beginJump(jump);
  let position:Point={x:p.x,z:p.z,y:p.y,fallSpeed:p.fallSpeed,stance:c.stance},walkTime=dt;
  if(dash){const result=advanceDash(dash,dt);dash=result.state;position=moveWithCollisions(position,result.delta,worldSolids(doors));walkTime-=result.activeSeconds;}
- if(walkTime>1e-8)position=moveNetworkPlayer({...p,...position},c,walkTime,doors,world);
- return {...world.advanceFall(position,dt),jump,dash};
+ if(walkTime>1e-8)position=moveNetworkPlayer({...p,...position},c,walkTime,doors,world,jump.height);
+ const vertical=world.advanceJumpOnTerrain(position,jump,dt);
+ return {...vertical.position,jump:vertical.jump,dash};
 }
 function rayBox(o:number[],d:number[],min:number[],max:number[]):number{
  let near=0,far=150;for(let i=0;i<3;i++){if(Math.abs(d[i]!)<1e-9){if(o[i]!<min[i]!||o[i]!>max[i]!)return Infinity;continue;}

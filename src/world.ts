@@ -1,4 +1,5 @@
 import {stanceStats,type Stance} from './stance.ts';
+import {advanceJump,createJump,type JumpState} from './jump.ts';
 export type Point = { x: number; z: number; y?:number;fallSpeed?:number;stance?:Stance };
 export type Rect = { id: string; x: number; z: number; width: number; depth: number; height?:number; yMin?:number;yMax?:number;slope?:{start:Point&{y:number};end:Point&{y:number}} };
 export type Building = Rect & { height: number; palette: number; enterable?:boolean };
@@ -95,18 +96,22 @@ function circleOverlapsRect(p: Point, radius: number, rect: Rect): boolean {
   return (p.x - nx) ** 2 + (p.z - nz) ** 2 < radius ** 2 - 1e-8;
 }
 
-function canStand(p: Point, radius: number, solids: readonly Rect[] = SOLIDS, requireSupport=true): boolean {
+function canStand(p: Point, radius: number, solids: readonly Rect[] = SOLIDS, requireSupport=true, stairLift=0): boolean {
   if(!Number.isFinite(p.x)||!Number.isFinite(p.z)||
      !(Math.abs(p.x)<=PROTOTYPE.halfWidth-radius&&p.z>=-PROTOTYPE.halfDepth+radius&&p.z<=PROTOTYPE.maxZ-radius))return false;
   const feet=p.y??0,top=feet+stanceStats(p.stance).height;
   const candidates=solids===openSolids&&Math.abs(radius)<=PROTOTYPE.radius?nearbyOpenSolids(p,solids):solids;
-  return !candidates.some(rect => top>(rect.yMin??0)+.02&&feet<(rect.yMax??Infinity)-.02&&circleOverlapsRect(p, radius, rect)&&(!rect.slope||feet<rect.slope.start.y+Math.max(0,Math.min(1,(p.z-rect.slope.start.z)/(rect.slope.end.z-rect.slope.start.z)))*(rect.slope.end.y-rect.slope.start.y)-.05))
+  return !candidates.some(rect=>{
+    const lift=stairLift&&rect.slope?stairLift:0;
+    return top+lift>(rect.yMin??0)+.02&&feet+lift<(rect.yMax??Infinity)-.02&&circleOverlapsRect(p,radius,rect)
+      &&(!rect.slope||feet+lift<rampHeight(rect.slope,p.z)-.05);
+  })
     && (!requireSupport||upperFloorContains(p,radius)||BUILDINGS.every(b=>!b.enterable||Math.abs(p.x-b.x)>b.width/2-.4-radius||Math.abs(p.z-b.z)>b.depth/2-.4-radius));
 }
 
 function moveWithCollisions(
   position: Point, delta: Point, solids: readonly Rect[] = SOLIDS,
-  radius = PROTOTYPE.radius,
+  radius = PROTOTYPE.radius, stairLift=0,
 ): Point {
   if (![delta.x, delta.z, position.x, position.z].every(Number.isFinite)) return { ...position };
   // Substeps prevent tunneling on slow frames; axes separated to slide along walls.
@@ -118,9 +123,9 @@ function moveWithCollisions(
   let p:Point = {...position};
   for (let i = 0; i < steps; i++) {
     const nextX = elevatedStep(p,{ ...p,x: p.x + dx });
-    if (canStand(nextX, radius, solids,false)) p = nextX;
+    if (canStand(nextX,radius,solids,false,stairLift)) p = nextX;
     const nextZ = elevatedStep(p,{ ...p,z: p.z + dz });
-    if (canStand(nextZ, radius, solids,false)) p = nextZ;
+    if (canStand(nextZ,radius,solids,false,stairLift)) p = nextZ;
   }
   return p;
 }
@@ -132,6 +137,33 @@ function normalized(x: number, y: number): { x: number; y: number } {
 
 const SECOND_FLOOR=3.4;
 function balcony(b:Building,y:number):Rect{return {id:b.id+'-balcony',x:b.x,z:b.z+(b.z<0?1:-1)*(b.depth/2+1),width:DOOR_WIDTH,depth:3,yMin:y-.12,yMax:y};}
+function rampHeight(ramp:NonNullable<Rect['slope']>,z:number){
+ const along=Math.max(0,Math.min(1,(z-ramp.start.z)/(ramp.end.z-ramp.start.z)));
+ return ramp.start.y+along*(ramp.end.y-ramp.start.y);
+}
+function stairSupport(building:Building,p:Point,ceiling:number){
+ let floor=0;
+ for(const ramp of stairways(building)){
+  if(Math.abs(p.x-ramp.start.x)>ramp.width/2+PROTOTYPE.radius)continue;
+  const along=(p.z-ramp.start.z)/(ramp.end.z-ramp.start.z);
+  if(along<0||along>1)continue;
+  const height=rampHeight(ramp,p.z);
+  if(height<=ceiling)floor=Math.max(floor,height);
+ }
+ return floor;
+}
+function advanceJumpOnTerrain(p:Point,state:JumpState,dt:number){
+ const jump=advanceJump(state,dt),base=p.y??0;
+ if(state.height>0&&jump.velocity<=0&&jump.height<state.height){
+  let floor=base;
+  for(const building of ENTERABLE_BUILDINGS){
+   if(Math.abs(p.x-building.x)>building.width/2||Math.abs(p.z-building.z)>building.depth/2)continue;
+   floor=Math.max(floor,stairSupport(building,p,base+state.height+.05));
+  }
+  if(floor>base+.01&&base+jump.height<=floor)return {position:{...p,y:floor,fallSpeed:0},jump:createJump()};
+ }
+ return {position:jump.height>0||jump.velocity!==0?p:advanceFall(p,dt),jump};
+}
 function advanceFall(p:Point,dt:number):Point{
  const y=p.y??0;
  if(y<=0||dt<=0)return p;
@@ -144,13 +176,7 @@ function advanceFall(p:Point,dt:number):Point{
     if(Math.abs(p.x-panel.x)<=panel.width/2&&Math.abs(p.z-panel.z)<=panel.depth/2)floor=Math.max(floor,height);
    }
   }
-  for(const ramp of stairways(building)){
-   if(Math.abs(p.x-ramp.start.x)>ramp.width/2+PROTOTYPE.radius)continue;
-   const along=(p.z-ramp.start.z)/(ramp.end.z-ramp.start.z);
-   if(along<0||along>1)continue;
-   const height=ramp.start.y+along*(ramp.end.y-ramp.start.y);
-   if(height<=y+.05)floor=Math.max(floor,height);
-  }
+  floor=Math.max(floor,stairSupport(building,p,y+.05));
  }
  if(y<=floor+.05)return {...p,y:floor,fallSpeed:0};
  // Clamp the whole fall step to the highest surface below the actor.
@@ -230,7 +256,7 @@ function shotBoxes(doors?:Doors):Rect[]{
  const result=[...solids.filter(r=>!r.slope),...fixedShotGeometry];shotCache.set(solids,result);return result;
 }
 
-return {advanceFall,balcony,PROTOTYPE,BUILDINGS,DOOR_WIDTH,buildingWalls,interiorFurniture,indoorAt,COVERS,SOLIDS,circleOverlapsRect,canStand,moveWithCollisions,normalized,SECOND_FLOOR,doorRect,createDoors,worldSolids,nearbyDoor,toggleDoor,stairways,floorPanels,randomOutdoorSpawn,shotBoxes};
+return {advanceFall,advanceJumpOnTerrain,balcony,PROTOTYPE,BUILDINGS,DOOR_WIDTH,buildingWalls,interiorFurniture,indoorAt,COVERS,SOLIDS,circleOverlapsRect,canStand,moveWithCollisions,normalized,SECOND_FLOOR,doorRect,createDoors,worldSolids,nearbyDoor,toggleDoor,stairways,floorPanels,randomOutdoorSpawn,shotBoxes};
 }
 export const harborWorld=createWorld();
 export const {PROTOTYPE,BUILDINGS,DOOR_WIDTH,buildingWalls,interiorFurniture,indoorAt,COVERS,SOLIDS,circleOverlapsRect,canStand,moveWithCollisions,normalized,SECOND_FLOOR,doorRect,createDoors,worldSolids,nearbyDoor,toggleDoor,stairways,floorPanels,randomOutdoorSpawn,shotBoxes}=harborWorld;
