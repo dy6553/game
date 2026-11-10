@@ -1,12 +1,12 @@
 import {normalizeNickname} from './nickname.ts';
 import type {Growth} from './progression.ts';
 type AuthReply={data?:{user?:{id:string};session?:{token:string}}|null;error?:{message?:string}|null};
-export type AuthSDK={getSession():Promise<AuthReply>;signIn:{email(body:{email:string;password:string}):Promise<unknown>};signUp:{email(body:{email:string;password:string;name:string}):Promise<unknown>};signOut():Promise<unknown>};
+export type AuthSDK={getSession():Promise<AuthReply>;token?():Promise<{data?:{token?:string}|null;error?:{message?:string}|null}>;signIn:{email(body:{email:string;password:string}):Promise<unknown>};signUp:{email(body:{email:string;password:string;name:string}):Promise<unknown>};signOut():Promise<unknown>};
 export type OfficialProfile={nickname?:string;admin?:boolean;growth?:Growth;id:string;played:number;wins:number;recent:{mode?:'duel'|'ffa'|'team';endedAt:number;outcome:'win'|'loss';kills:number;deaths:number}[]};
 function checked(reply:unknown){if(reply&&typeof reply==='object'&&'error' in reply&&reply.error)throw Error('로그인 요청을 완료하지 못했습니다. 입력 내용과 연결을 확인하세요.');}
 export function createAccount(sdk:AuthSDK,fetcher:typeof fetch,endpoint:string){
  let profile:OfficialProfile|null=null,operation=0,signedOut=false;
- async function token(){if(signedOut)return null;const reply=await sdk.getSession();checked(reply);if(!reply.data?.user){profile=null;return null;}const jwt=reply.data.session?.token;if(!jwt||jwt.split('.').length!==3)throw Error('로그인 세션을 확인하지 못했습니다. 다시 로그인하세요.');return jwt;}
+ async function token(){if(signedOut)return null;const ticket=operation,reply=await sdk.getSession();checked(reply);if(signedOut||ticket!==operation)return null;if(!reply.data?.user){profile=null;return null;}const issued=sdk.token?await sdk.token():null;checked(issued);if(signedOut||ticket!==operation)return null;const jwt=issued?.data?.token??(!sdk.token?reply.data.session?.token:undefined);if(!jwt||jwt.split('.').length!==3)throw Error('로그인 세션을 확인하지 못했습니다. 다시 로그인하세요.');return jwt;}
  return {
   get profile(){return profile;},token,
   async setNickname(value:string){const nickname=normalizeNickname(value),owner=profile?.id,jwt=await token();if(!nickname)throw Error('닉네임을2~16자로 입력하세요.');if(!owner||!jwt)throw Error('로그인이 필요합니다.');const ticket=operation;const response=await fetcher(endpoint.replace(/\/$/,'')+'/account/nickname',{method:'POST',headers:{Authorization:'Bearer '+jwt,'Content-Type':'application/json'},body:JSON.stringify({nickname}),signal:AbortSignal.timeout(10000)});if(!response.ok)throw Error('닉네임을 저장하지 못했습니다. 다시 시도하세요.');const data=await response.json() as OfficialProfile;if(ticket===operation&&profile?.id===owner)profile=data;else throw Error('로그인 계정이 변경되었습니다.');},

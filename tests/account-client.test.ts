@@ -21,3 +21,9 @@ test('account deletion sends password to the verified server route, and failure 
 });
 
 test('nickname edits use the authenticated profile route and ignore responses after signout',async()=>{const sdk={getSession:async()=>({data:{user:{id:'u'},session:{token:'signed.jwt.value'}}}),signIn:{email:async()=>({})},signUp:{email:async()=>({})},signOut:async()=>({})};let done;const a=createAccount(sdk,async(url,options)=>{if(url.endsWith('/account/nickname')){assert.equal(options.method,'POST');assert.equal(options.headers.Authorization,'Bearer signed.jwt.value');assert.deepEqual(JSON.parse(options.body),{nickname:'회원대원'});return new Promise(resolve=>done=resolve);}return Response.json({id:'public',played:0,wins:0,recent:[]});},'https://game');await a.refresh();const saving=a.setNickname('회원대원');await new Promise(r=>setImmediate(r));await a.signOut();done(Response.json({id:'public',nickname:'회원대원',played:0,wins:0,recent:[]}));await assert.rejects(saving);assert.equal(a.profile,null);});
+
+test('signed-in opaque sessions obtain a JWT before profile, nickname save and online use',async()=>{
+ let name='',tokenRequests=0;const sdk={getSession:async()=>({data:{user:{id:'u'},session:{token:'opaque-session'}}}),token:async()=>{tokenRequests++;return {data:{token:'signed.jwt.value'}};},signIn:{email:async()=>({})},signUp:{email:async()=>({})},signOut:async()=>({})};
+ const a=createAccount(sdk,async(url,options)=>{assert.equal(options.headers.Authorization,'Bearer signed.jwt.value');if(url.endsWith('/account/nickname'))name=JSON.parse(options.body).nickname;return Response.json({id:'public',nickname:name,played:0,wins:0,recent:[]});},'https://game');
+ await a.signIn('test@example.com','password');await a.setNickname('대원닉네임');assert.equal(a.profile.nickname,'대원닉네임');assert.equal(await a.token(),'signed.jwt.value');assert.ok(tokenRequests>=3);
+});
