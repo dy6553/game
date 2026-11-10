@@ -821,7 +821,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     setReducedShots(value:boolean){reducedShots=value;effects.setReduced(value);botEffects.setReduced(value||lowPerformance);},
     setShake(level:ShakeLevel){recoil.setShake(level);},
     setShadows(enabled:boolean){requestedShadows=enabled;scene.shadowsEnabled=enabled&&!lowPerformance;},
-    setPerformanceLow(enabled:boolean){if(lowPerformance===enabled)return;lowPerformance=enabled;scene.shadowsEnabled=requestedShadows&&!enabled;botEffects.setReduced(reducedShots||enabled);atmosphere.setLow(enabled);mapArt?.setPerformanceLow(enabled);applySurfaceQuality();},
+    setPerformanceLow(enabled:boolean){if(lowPerformance===enabled)return;lowPerformance=enabled;scene.shadowsEnabled=requestedShadows&&!enabled;botEffects.setReduced(reducedShots||enabled);atmosphere.setLow(enabled);const loading=mapArt?.setPerformanceLow(enabled);applySurfaceQuality();return loading;},
     setQuality(high:boolean){
       onlineQualityHigh=high;for(const r of remotes.values())r.fx.setQuality(high);atmosphere.setQuality(high);robotImpact.setQuality(high);for(const rig of botRigs.slice(1))rig.fx.setQuality(high);
       if(mapArt)setHarborSky(high);

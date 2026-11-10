@@ -147,12 +147,15 @@ async function start() {
   engine.setHardwareScalingLevel(1/budget.density);
   const playtest=createPlaytest(import.meta.env?.VITE_ONLINE_URL);
   let selectedMap:MapId='harbor';
-  const harborArtSource=()=>'/maps/harbor-full-low.glb';
+  const harborArtSource=(profile:'low'|'balanced')=>'/maps/harbor-full-'+profile+'.glb';
   let world = createHarborScene(engine,{mapArtSource:harborArtSource});
   const nearbyDoor=(p:Point,doors:Parameters<typeof world.geometry.nearbyDoor>[1])=>(world.geometry??harborWorld).nearbyDoor(p,doors);
   const indoorAt=(p:Point)=>(world.geometry??harborWorld).indoorAt(p);
-  world.setQuality(qualityHigh);world.setShadows?.(preferences.value.shadows);document.querySelector<HTMLSelectElement>('#graphics-quality')!.value=graphicsMode;
-  world.setPerformanceLow?.(graphicsMode==='low');
+  function applyGraphicsProfile(high:boolean,low:boolean){
+    if(high){world.setQuality(true);world.setPerformanceLow?.(low);}
+    else{world.setPerformanceLow?.(low);world.setQuality(false);}
+  }
+  applyGraphicsProfile(qualityHigh,graphicsMode==='low');world.setShadows?.(preferences.value.shadows);document.querySelector<HTMLSelectElement>('#graphics-quality')!.value=graphicsMode;
   world.setMode('duel');
   const shake=document.querySelector<HTMLSelectElement>('#screen-shake')!;
   const setShake=(value:string)=>{const level=value==='off'||value==='normal'?value:'low';shake.value=level;world.setShake(level);return level;};
@@ -161,7 +164,7 @@ async function start() {
   document.querySelector<HTMLSelectElement>('#graphics-quality')!.addEventListener('change',event=>{
     graphicsMode=savePreference({graphics:(event.currentTarget as HTMLSelectElement).value as EnvironmentPreferences['graphics']}).graphics;budget=createRenderBudget(densityCap());
     engine.setHardwareScalingLevel(1/budget.density);qualityHigh=graphicsMode==='high';
-    world.setQuality(qualityHigh);world.setPerformanceLow?.(graphicsMode==='low');engine.resize();world.resize();
+    applyGraphicsProfile(qualityHigh,graphicsMode==='low');engine.resize();world.resize();
   });
   const effectsSetting=document.querySelector<HTMLSelectElement>('#shot-effects')!;let reducedShots=mobile;try{const saved=localStorage.getItem('harbor-shot-effects');if(saved)reducedShots=saved==='low';}catch{}effectsSetting.value=reducedShots?'low':'full';world.setReducedShots?.(reducedShots);effectsSetting.addEventListener('change',()=>{reducedShots=effectsSetting.value==='low';world.setReducedShots?.(reducedShots);try{localStorage.setItem('harbor-shot-effects',effectsSetting.value);}catch{}});
   const input = createInput(canvas,{mouseScale:()=>world.scoped?.3:1,requestMouseLock:()=>requestGameplayMouseLock(),smoothLook:true});
@@ -415,7 +418,7 @@ async function start() {
     mouseLockFallback=false;requestGameplayMouseLock();
   };
   startButton.addEventListener('click',beginGame);
-  function switchMap(map:MapId,type=world.characterType){if(map===selectedMap)return;world.scene.dispose();world=createHarborScene(engine,{map,mapArtSource:harborArtSource});selectedMap=map;world.selectCharacter(type);world.setQuality(qualityHigh);world.setShadows?.(preferences.value.shadows);world.setPerformanceLow?.(graphicsMode==='low'||graphicsMode==='auto'&&budget.density<=.85);world.setReducedShots?.(reducedShots);world.setShake(shake.value==='off'||shake.value==='normal'?shake.value:'low');world.setPreview(true,true);}
+  function switchMap(map:MapId,type=world.characterType){if(map===selectedMap)return;world.scene.dispose();world=createHarborScene(engine,{map,mapArtSource:harborArtSource});selectedMap=map;world.selectCharacter(type);applyGraphicsProfile(qualityHigh,graphicsMode==='low'||graphicsMode==='auto'&&budget.density<=.85);world.setShadows?.(preferences.value.shadows);world.setReducedShots?.(reducedShots);world.setShake(shake.value==='off'||shake.value==='normal'?shake.value:'low');world.setPreview(true,true);}
   const homeView=createHomeScreen({
     selectCharacter(type){world.selectCharacter(type);refreshCharacter();lobbyCue('ui');if(!reducedLobbyMotion.matches)document.querySelector('#home-character-name')?.animate?.([{opacity:.3},{opacity:1}],{duration:180});},
     selectWeapon(id){world.setLobbyWeapon(id);lobbyCue('ui');if(!reducedLobbyMotion.matches)document.querySelector('#home-equipped-art')?.animate?.([{opacity:.3,transform:'translateX(-6px)'},{opacity:1,transform:'translateX(0)'}],{duration:180});},
