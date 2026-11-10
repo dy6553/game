@@ -147,7 +147,8 @@ async function start() {
   engine.setHardwareScalingLevel(1/budget.density);
   const playtest=createPlaytest(import.meta.env?.VITE_ONLINE_URL);
   let selectedMap:MapId='harbor';
-  let world = createHarborScene(engine);
+  const harborArtSource=(high:boolean)=>'/maps/harbor-full-'+(high?'high':'low')+'.glb';
+  let world = createHarborScene(engine,{mapArtSource:harborArtSource});
   const nearbyDoor=(p:Point,doors:Parameters<typeof world.geometry.nearbyDoor>[1])=>(world.geometry??harborWorld).nearbyDoor(p,doors);
   const indoorAt=(p:Point)=>(world.geometry??harborWorld).indoorAt(p);
   world.setQuality(qualityHigh);world.setShadows?.(preferences.value.shadows);document.querySelector<HTMLSelectElement>('#graphics-quality')!.value=graphicsMode;
@@ -414,7 +415,7 @@ async function start() {
     mouseLockFallback=false;requestGameplayMouseLock();
   };
   startButton.addEventListener('click',beginGame);
-  function switchMap(map:MapId,type=world.characterType){if(map===selectedMap)return;world.scene.dispose();world=createHarborScene(engine,{map});selectedMap=map;world.selectCharacter(type);world.setQuality(qualityHigh);world.setShadows?.(preferences.value.shadows);world.setPerformanceLow?.(graphicsMode==='low'||graphicsMode==='auto'&&budget.density<=.85);world.setReducedShots?.(reducedShots);world.setShake(shake.value==='off'||shake.value==='normal'?shake.value:'low');world.setPreview(true,true);}
+  function switchMap(map:MapId,type=world.characterType){if(map===selectedMap)return;world.scene.dispose();world=createHarborScene(engine,{map,mapArtSource:harborArtSource});selectedMap=map;world.selectCharacter(type);world.setQuality(qualityHigh);world.setShadows?.(preferences.value.shadows);world.setPerformanceLow?.(graphicsMode==='low'||graphicsMode==='auto'&&budget.density<=.85);world.setReducedShots?.(reducedShots);world.setShake(shake.value==='off'||shake.value==='normal'?shake.value:'low');world.setPreview(true,true);}
   const homeView=createHomeScreen({
     selectCharacter(type){world.selectCharacter(type);refreshCharacter();lobbyCue('ui');if(!reducedLobbyMotion.matches)document.querySelector('#home-character-name')?.animate?.([{opacity:.3},{opacity:1}],{duration:180});},
     selectWeapon(id){world.setLobbyWeapon(id);lobbyCue('ui');if(!reducedLobbyMotion.matches)document.querySelector('#home-equipped-art')?.animate?.([{opacity:.3,transform:'translateX(-6px)'},{opacity:1,transform:'translateX(0)'}],{duration:180});},

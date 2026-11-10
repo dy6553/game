@@ -1,5 +1,6 @@
 import {stanceStats,type Stance} from './stance.ts';
 import {createRemoteModels,type RemoteModel} from './remote-models.ts';
+import {createHarborMapArt,type HarborArtSource} from './harbor-map-art.ts';
 import {unobstructed,firstShotBox} from './combat-geometry.ts';
 import {playerName} from './nickname.ts';
 import type {Sound} from './audio.ts';
@@ -42,7 +43,7 @@ import type { Point } from './world.ts';
 import { createCharacter } from './characters.ts';
 import type { CharacterType } from './characters.ts';
 
-export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;map?:MapId}={}) {
+export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;map?:MapId;mapArtSource?:HarborArtSource}={}) {
   const geometry=options.map==='factory'?createWorld('factory'):harborWorld;
   const {PROTOTYPE,BUILDINGS,COVERS,buildingWalls,interiorFurniture,indoorAt,DOOR_WIDTH,createDoors,worldSolids,moveWithCollisions,doorRect,toggleDoor,randomOutdoorSpawn,shotBoxes}=geometry;
   const {createDuel,createBotMatch,createSurvivalMatch}=createBotRules(geometry);
@@ -174,7 +175,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     const texture=new DynamicTexture('entry-sign-text',{width:512,height:128},scene,false);
     texture.drawText('출입 가능 · 2F / 옥상',null,78,'bold 36px sans-serif','#dcfff4','#084a3a',true,true);entrySignMat.diffuseTexture=texture;entrySignMat.emissiveTexture=texture;
   }else entrySignMat.diffuseColor=Color3.FromHexString('#23c992');
-  function syncDoors(){for(const b of BUILDINGS.filter(b=>b.enterable)){const mesh=doorMeshes.get(b.id)!;mesh.rotation.y=doors[b.id]?(b.z<0?1:-1)*Math.PI/2:0;mesh.isPickable=!doors[b.id];}}
+  function syncDoors(){for(const b of BUILDINGS.filter(b=>b.enterable)){const mesh=doorMeshes.get(b.id)!;mesh.rotation.y=doors[b.id]?(b.z<0?1:-1)*Math.PI/2:0;mesh.isPickable=!doors[b.id];}mapArt?.syncDoors();}
   for (const building of BUILDINGS) {
     const { id, x, z, width, depth, height, palette } = building;
     const meshes: Mesh[] = [];
@@ -463,6 +464,10 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
   for (const mesh of scene.meshes) {
     if (mesh instanceof Mesh && !mesh.parent && mesh.material !== poolMat && mesh !== skyDome) mesh.isPickable = true;
   }
+  const mapArt = options.mapArtSource && options.map !== 'factory'
+    ? createHarborMapArt(scene, options.mapArtSource, scene.meshes.filter(mesh => !mesh.parent && mesh !== skyDome),
+      BUILDINGS, () => doors, shadows)
+    : undefined;
   const targets = [{ x: 0, z: 32 }, { x: -25, z: 12 }, { x: 25, z: 12 }].map((p, index) => {
     const root=new TransformNode(`target-root-${index}`,scene);
     const targetMat = material(`target-${index}`, '#da8d61', '#543524');
@@ -776,11 +781,12 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     setReducedShots(value:boolean){reducedShots=value;effects.setReduced(value);botEffects.setReduced(value||lowPerformance);},
     setShake(level:ShakeLevel){recoil.setShake(level);},
     setShadows(enabled:boolean){requestedShadows=enabled;scene.shadowsEnabled=enabled&&!lowPerformance;},
-    setPerformanceLow(enabled:boolean){if(lowPerformance===enabled)return;lowPerformance=enabled;scene.shadowsEnabled=requestedShadows&&!enabled;botEffects.setReduced(reducedShots||enabled);atmosphere.setLow(enabled);applySurfaceQuality();},
+    setPerformanceLow(enabled:boolean){if(lowPerformance===enabled)return;lowPerformance=enabled;scene.shadowsEnabled=requestedShadows&&!enabled;botEffects.setReduced(reducedShots||enabled);atmosphere.setLow(enabled);mapArt?.setPerformanceLow(enabled);applySurfaceQuality();},
     setQuality(high:boolean){
       onlineQualityHigh=high;for(const r of remotes.values())r.fx.setQuality(high);atmosphere.setQuality(high);robotImpact.setQuality(high);for(const rig of botRigs.slice(1))rig.fx.setQuality(high);
       const mapSize=high?2048:1024;if(shadows.mapSize!==mapSize)shadows.mapSize=mapSize;
       applySurfaceQuality();
+      return mapArt?.setQuality(high);
     },
     consumeHighShots(){return highShotNotices.splice(0);},isBotRevealed(id:string){return botReveals.has(id);},setStance(value:Stance){stance=value;},scene, camera, player, update, resize, selectCharacter, setPreview, setReference, shoot,
     setLobbyWeapon(id:WeaponId){lobbyWeaponId=id;lobbyWeapons.show(id,preview&&lobbyPreview);},setLobbyMotion(enabled:boolean){lobbyMotion=enabled;},rotateLobby(delta:number){if(preview&&lobbyPreview&&Number.isFinite(delta))lobbyYaw=Math.atan2(Math.sin(lobbyYaw+delta),Math.cos(lobbyYaw+delta));},resetLobbyRotation(){lobbyYaw=0;},
