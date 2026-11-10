@@ -26,6 +26,12 @@ export function createLobbyWeapons(scene:Scene){
   if(id==='shotgun'){tube('held-second-barrel',.085,.085,.63,.085,.55,materials[0]!);for(let i=0;i<4;i++)box('held-pump-rib',0,.085,.38+i*.045,.18,.17,.018,materials[2]!);}
   if(id==='dmr'){box('held-dmr-magazine',0,-.08,.2,.08,.2,.15,materials[0]!);tube('held-dmr-sight',0,.21,.15,.045,.12,materials[2]!);}
   if(id==='sniper'){box('held-scope-mount',0,.205,.13,.07,.08,.18,materials[2]!);tube('held-scope',0,.29,.18,.12,.35,materials[0]!);tube('held-scope-rim',0,.29,.365,.145,.035,materials[2]!);}
+  // These details are merged into the existing three material batches below.
+  for(let i=0;i<5;i++)box('held-rail-notch',0,.188,(long?.07:.02)+i*(long?.055:.035),.085,.012,.012,materials[2]!);
+  for(const side of [-1,1]){
+   box('held-panel',side*(long?.072:.058),.06,long?.14:.07,.012,.055,long?.27:.16,materials[0]!);
+   box('held-panel-edge',side*(long?.08:.066),.06,long?.14:.07,.008,.015,long?.22:.12,materials[2]!);
+  }
   if(id==='bazooka'){for(const part of parts)part.dispose();parts.length=0;tube('held-launch-tube',0,.12,.25,.25,1.25,materials[0]!);tube('held-launch-rim',0,.12,.9,.3,.08,materials[2]!);tube('held-launch-rear',0,.12,-.4,.3,.09,materials[2]!);box('held-launch-grip',0,-.12,.05,.09,.3,.14,materials[1]!);box('held-launch-sight',0,.32,.3,.06,.16,.2,materials[1]!);}
   const merged:Mesh[]=[];for(const material of materials){const group=parts.filter(m=>m.material===material);if(!group.length)continue;const m=Mesh.MergeMeshes(group,true,true)!;m.name=`lobby-${id}-${merged.length}`;m.parent=mount;m.material=material;m.isPickable=false;m.checkCollisions=false;m.metadata={lobbyWeapon:id};m.setEnabled(false);merged.push(m);}models.set(id,merged);
  }

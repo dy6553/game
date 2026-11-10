@@ -80,6 +80,16 @@ export function createCharacter(scene: Scene, parent: TransformNode, type: Chara
   round('chest-recess',0,1.4,0.24,0.47,0.26,0.045,dark);
   round('chest-light',0,1.43,0.275,0.2,0.085,0.025,glow);
   for(let i=0;i<4;i++) round('chest-vent',(i-1.5)*0.08,1.29,0.265,0.045,0.05,0.02,silver);
+  // Layered armor improves the close-up silhouette without extra lights or textures.
+  {
+    for (const side of [-1,1]) {
+      const collar=round('collar-armor',side*.28,1.64,.15,.25,.11,.28,silver); collar.rotation.z=side*.18;
+      const chest=round('chest-side-armor',side*.27,1.39,.24,.14,.32,.055,ivory); chest.rotation.z=-side*.12;
+      round('shin-accent',side*.24,.38,.205,.16,.035,.035,copper);
+    }
+    round('chest-core-rim',0,1.43,.28,.25,.12,.025,copper);
+    round('chest-core-lens',0,1.43,.3,.19,.07,.02,glow);
+  }
   round('backpack',0,1.4,-0.3,0.46,0.47,0.25,dark);
   round('backpack-panel',0,1.45,-0.445,0.17,0.25,0.03,ivory);
   round('backpack-charge',0,1.45,-0.465,0.06,0.15,0.02,cyan);

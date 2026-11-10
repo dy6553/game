@@ -479,6 +479,26 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     ['glove-back',0.27,-0.34,0.51,0.17,0.18,0.12,glove],
   ] as const) { const detail=box(`view-${name}`,x,y,z,w,h,d,mat);detail.parent=viewModel; }
   for(let i=0;i<3;i++) {const finger=box('view-finger',0.21+i*0.055,-0.3,0.61,0.045,0.07,0.1,glove);finger.parent=viewModel;}
+  // Merge decorative pieces per material to bound draw calls.
+  const gunDetails:Mesh[]=[];
+  const detailBox=(x:number,y:number,z:number,w:number,h:number,d:number,mat:StandardMaterial)=>{
+    const part=box('weapon-detail',x,y,z,w,h,d,mat);gunDetails.push(part);return part;
+  };
+  detailBox(.27,-.12,.65,.115,.018,.34,metal);
+  for(let i=0;i<7;i++) detailBox(.27,-.108,.51+i*.045,.12,.012,.012,gunCopper);
+  for(const side of [-1,1]){
+    detailBox(.27+side*.078,-.205,.65,.012,.07,.26,metal);
+    detailBox(.27+side*.085,-.202,.65,.008,.025,.20,gunCopper);
+    for(let i=0;i<4;i++) detailBox(.27+side*.086,-.215,.55+i*.06,.009,.025,.018,gunIvory);
+  }
+  detailBox(.27,-.255,.48,.08,.15,.035,gunCopper);
+  detailBox(.27,-.28,.56,.11,.025,.16,metal);
+  detailBox(.27,-.35,.5,.12,.025,.14,gunCopper);
+  for(const mat of [metal,gunCopper,gunIvory]){
+    const pieces=gunDetails.filter(part=>part.material===mat);
+    const merged=Mesh.MergeMeshes(pieces,true,true);
+    if(merged){merged.name='view-weapon-detail';merged.material=mat;merged.parent=viewModel;merged.isPickable=false;}
+  }
   const muzzle=MeshBuilder.CreateCylinder('view-muzzle',{diameter:0.105,height:0.12,tessellation:24},scene);
   muzzle.rotation.x=Math.PI/2;muzzle.position.set(0.27,-0.2,1.035);muzzle.parent=viewModel;muzzle.material=metal;muzzle.isPickable=false;
   const muzzleInset=MeshBuilder.CreateCylinder('view-bore',{diameter:0.055,height:0.01,tessellation:20},scene);
