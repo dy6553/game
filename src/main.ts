@@ -627,7 +627,12 @@ async function start() {
   canvas.addEventListener('contextmenu', event => event.preventDefault());
   const lobbyPolish=createLobbyPolish({rotate:delta=>world.rotateLobby(delta),reset:()=>world.resetLobbyRotation(),enabled:()=>homeOpen&&!settingsView.isOpen&&!gameChoices.isOpen&&!resultView.isOpen,reduced:()=>reducedLobbyMotion.matches});
   const settingsView=createEnvironmentPanel({opened(){lobbyPolish.cancelDrag();input.reset();input.setEnabled(false);closeMenu();closeHelp();if(document.pointerLockElement)document.exitPointerLock();},beforeClose(){gameChoices.close();},closed(){input.reset();frameLimit.reset();if(!homeOpen&&!roomWaiting)canvas.focus();},reset(){resetEnvironment();}});
-  const frameSelect=document.querySelector<HTMLSelectElement>('#frame-target')!;frameSelect.value=String(preferences.value.fps);frameSelect.addEventListener('change',()=>frameLimit.setTarget(savePreference({fps:Number(frameSelect.value) as EnvironmentPreferences['fps']}).fps));
+  const frameSelect=document.querySelector<HTMLSelectElement>('#frame-target')!;
+  frameSelect.value=String(preferences.value.fps);
+  frameSelect.addEventListener('change',()=>{
+    const fps=frameSelect.value==='auto'?'auto':Number(frameSelect.value) as EnvironmentPreferences['fps'];
+    frameLimit.setTarget(savePreference({fps}).fps);
+  });
   const shadowCheck=document.querySelector<HTMLInputElement>('#shadows-enabled')!;shadowCheck.checked=preferences.value.shadows;shadowCheck.addEventListener('change',()=>world.setShadows?.(savePreference({shadows:shadowCheck.checked}).shadows));
   const invertCheck=document.querySelector<HTMLInputElement>('#invert-y')!,minimapCheck=document.querySelector<HTMLInputElement>('#minimap-enabled')!;
   invertCheck.checked=preferences.value.invertY;minimapCheck.checked=preferences.value.minimap;
@@ -694,9 +699,10 @@ async function start() {
     if(drawFrame||!canPlay){
       playtest.frame(playFrameTime,onlineActive?'online':world.duelState().active?'bot':'practice',canPlay,onlineActive?online.network.rttMs:null);
       if(graphicsMode==='auto'){
-        const density=budget.sample(playFrameTime,canPlay,preferences.value.fps);
+        const density=budget.sample(playFrameTime,canPlay,frameLimit.target);
         if(density!==null){engine.setHardwareScalingLevel(1/density);engine.resize();world.resize();}
       }
+      frameLimit.sample(playFrameTime,canPlay);
       playFrameTime=0;
     }
     if(graphicsMode==='auto'){
