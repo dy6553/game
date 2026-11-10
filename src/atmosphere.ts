@@ -7,7 +7,7 @@ import type { Scene } from '@babylonjs/core/scene.js';
 import { canStand,type Point } from './world.ts';
 
 // Authored reflection cards, not screen-space reflections. Bounded mobile cost.
-export function createAtmosphere(scene:Scene){
+export function createAtmosphere(scene:Scene,storefronts=false){
   const meshes:Mesh[]=[];
   let seed=7309;
   const random=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};
@@ -44,6 +44,12 @@ export function createAtmosphere(scene:Scene){
     }
     const p=finish(MeshBuilder.CreatePlane('lantern-atmospheric-glow',{size:2.4},scene),glow);
     p.position.set(x,4.15,z);p.billboardMode=Mesh.BILLBOARDMODE_ALL;
+  }
+  if(storefronts){
+    for(const z of [-19,19])for(const x of [-17,17]){
+      const front=z<0?1:-1;
+      for(const side of [-1,1])card(x+side*3.45,z+front*7.95,2.35,2.85,.079,gold);
+    }
   }
   for(let i=0;i<45;i++){
     const x=(random()-.5)*120,z=-13+(random()-.5)*90;

@@ -10,7 +10,13 @@ test('harbor art uses the game coordinates while original door collision still r
   const engine = new NullEngine();
   const data = await readFile(new URL('../public/maps/harbor-full-low.glb', import.meta.url));
   try {
-    const world = createHarborScene(engine, {mapArtSource: () => data});
+    let requests = 0;
+    const world = createHarborScene(engine, {mapArtSource: () => { requests++; return data; }});
+    const legacyDoor = world.scene.getMeshByName('building-0-1-interactive-door')!;
+    const originalVisibility = legacyDoor.visibility;
+    await world.setQuality(true);
+    assert.equal(requests, 0, 'high renders the original art without requesting a map asset');
+    assert.equal(legacyDoor.visibility, originalVisibility);
     await world.setQuality(false);
     const art = world.scene.getNodeByName('harbor-art-low');
     assert.ok(art, 'the requested low model is attached to the scene');
@@ -46,6 +52,12 @@ test('harbor art uses the game coordinates while original door collision still r
         }
       }
     }
+    await world.setQuality(true);
+    assert.equal(world.scene.getNodeByName('harbor-art-low'), null);
+    assert.equal(legacyDoor.visibility, originalVisibility);
+    assert.equal(requests, 1, 'switching back to high releases the low model without another request');
+    assert.notEqual(legacyDoor.rotation.y, 0, 'the door stays open across a quality switch');
+    assert.equal(pick()?.hit, false);
     world.scene.dispose();
   } finally {
     engine.dispose();

@@ -147,7 +147,7 @@ async function start() {
   engine.setHardwareScalingLevel(1/budget.density);
   const playtest=createPlaytest(import.meta.env?.VITE_ONLINE_URL);
   let selectedMap:MapId='harbor';
-  const harborArtSource=(high:boolean)=>'/maps/harbor-full-'+(high?'high':'low')+'.glb';
+  const harborArtSource=()=>'/maps/harbor-full-low.glb';
   let world = createHarborScene(engine,{mapArtSource:harborArtSource});
   const nearbyDoor=(p:Point,doors:Parameters<typeof world.geometry.nearbyDoor>[1])=>(world.geometry??harborWorld).nearbyDoor(p,doors);
   const indoorAt=(p:Point)=>(world.geometry??harborWorld).indoorAt(p);

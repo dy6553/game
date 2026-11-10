@@ -4,6 +4,26 @@ import {createOnlineMotion} from '../src/online-motion.ts';
 import {NullEngine} from '@babylonjs/core/Engines/nullEngine.js';
 import {createHarborScene} from '../src/scene.ts';
 
+test('walking slightly inside the room side of either stair reaches its upper landing without jumping',()=>{
+ for(const map of ['harbor','factory'] as const){
+  const world=createWorld(map),b=world.BUILDINGS.find(item=>item.enterable)!;
+  const game=createNetworkGame(undefined,map),p=game.join('walker');
+  for(const [index,stair] of world.stairways(b).entries()){
+   const direction=Math.sign(stair.end.z-stair.start.z);
+   const x=stair.start.x+(index===0?1:-1)*(stair.width/2+.18);
+   Object.assign(p,{x,z:stair.start.z-direction*.53,y:stair.start.y,
+    jump:{height:0,velocity:0},fallSpeed:0});
+   const input:Omit<Command,'seq'>={x:0,y:1,yaw:direction>0?0:Math.PI,pitch:0,
+    jump:false,shot:false,fire:false,reload:false,sprint:false,scope:false};
+   const ticks=Math.ceil((Math.abs(stair.end.z-stair.start.z)+.83)/(.05*world.PROTOTYPE.speed));
+   const doors=world.createDoors();
+   for(let i=0;i<ticks;i++)Object.assign(p,advancePlayerMotion(p,input,.05,doors,world));
+   assert.ok(Math.abs(p.y!-stair.end.y)<.05,`${map} stair ${index+1} reaches the upper floor`);
+   assert.ok((p.z-stair.end.z)*direction>0);
+  }
+ }
+});
+
 test('a jump from beside a staircase can land on a higher step',()=>{
  for(const map of ['harbor','factory'] as const){
   const world=createWorld(map),building=world.BUILDINGS.find(b=>b.enterable)!;

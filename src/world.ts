@@ -122,9 +122,9 @@ function moveWithCollisions(
   const dx = delta.x * scale / steps, dz = delta.z * scale / steps;
   let p:Point = {...position};
   for (let i = 0; i < steps; i++) {
-    const nextX = elevatedStep(p,{ ...p,x: p.x + dx });
+    const nextX = elevatedStep(p,{ ...p,x: p.x + dx },radius);
     if (canStand(nextX,radius,solids,false,stairLift)) p = nextX;
-    const nextZ = elevatedStep(p,{ ...p,z: p.z + dz });
+    const nextZ = elevatedStep(p,{ ...p,z: p.z + dz },radius);
     if (canStand(nextZ,radius,solids,false,stairLift)) p = nextZ;
   }
   return p;
@@ -156,10 +156,13 @@ function rampHeight(ramp:NonNullable<Rect['slope']>,z:number){
  const along=Math.max(0,Math.min(1,(z-ramp.start.z)/(ramp.end.z-ramp.start.z)));
  return ramp.start.y+along*(ramp.end.y-ramp.start.y);
 }
+function overlapsStairWidth(stair:Stairway,x:number,radius:number){
+ return Math.abs(x-stair.start.x)<stair.width/2+radius;
+}
 function stairSupport(building:Building,p:Point,ceiling:number){
  let floor=0;
  for(const ramp of stairways(building)){
-  if(Math.abs(p.x-ramp.start.x)>ramp.width/2+PROTOTYPE.radius)continue;
+  if(!overlapsStairWidth(ramp,p.x,PROTOTYPE.radius))continue;
   const along=(p.z-ramp.start.z)/(ramp.end.z-ramp.start.z);
   if(along<0||along>1)continue;
   const height=rampHeight(ramp,p.z);
@@ -225,15 +228,15 @@ function stairways(b:Building):readonly Stairway[]{const cached=stairCache.get(b
 function upperFloorContains(p:Point,r:number){
  if((p.y??0)<.05)return true;
  return BUILDINGS.some(b=>{const ledge=balcony(b,p.y??0);if(b.enterable&&hasBalcony(p.y??0)&&[SECOND_FLOOR,b.height].some(y=>Math.abs((p.y??0)-y)<.05)&&Math.abs(p.x-ledge.x)<=ledge.width/2-r&&Math.abs(p.z-ledge.z)<=ledge.depth/2)return true;if(!b.enterable||Math.abs(p.x-b.x)>b.width/2-.4-r||Math.abs(p.z-b.z)>b.depth/2-.4-r)return false;
-  for(const s of stairways(b)){const t=(p.z-s.start.z)/(s.end.z-s.start.z);if(t>=0&&t<=1&&Math.abs(p.x-s.start.x)<s.width/2-.05&&Math.abs((p.y??0)-(s.start.y+t*(s.end.y-s.start.y)))<.12)return true;}
+  for(const s of stairways(b)){const t=(p.z-s.start.z)/(s.end.z-s.start.z);if(t>=0&&t<=1&&overlapsStairWidth(s,p.x,r)&&Math.abs((p.y??0)-(s.start.y+t*(s.end.y-s.start.y)))<.12)return true;}
   return [SECOND_FLOOR,b.height].some(y=>Math.abs((p.y??0)-y)<.05&&floorPanels(b,y).some(f=>Math.abs(p.x-f.x)<=f.width/2+.05&&Math.abs(p.z-f.z)<=f.depth/2+.05));
  });
 }
-function elevatedStep(from:Point,to:Point):Point{
+function elevatedStep(from:Point,to:Point,radius:number):Point{
  if((from.fallSpeed??0)>0)return to;
  const y=from.y??0;let next=y;
  for(const b of ENTERABLE_BUILDINGS){if(Math.abs(to.x-b.x)>b.width/2||Math.abs(to.z-b.z)>b.depth/2+.5)continue;for(const s of stairways(b)){
-  if(Math.abs(to.x-s.start.x)>s.width/2-.05)continue;
+  if(!overlapsStairWidth(s,to.x,radius))continue;
   const t=(to.z-s.start.z)/(s.end.z-s.start.z),before=(from.z-s.start.z)/(s.end.z-s.start.z);
   const oldHeight=s.start.y+Math.max(0,Math.min(1,before))*(s.end.y-s.start.y);
   if(t>=-.04&&t<=1.04&&Math.abs(y-oldHeight)<.2){next=s.start.y+Math.max(0,Math.min(1,t))*(s.end.y-s.start.y);break;}
