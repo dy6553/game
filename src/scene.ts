@@ -188,9 +188,9 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
       for(const wall of buildingWalls(building))part('shell-'+wall.id,wall.x,height/2,wall.z,wall.width,height,wall.depth,bodyMaterials[palette]!);
       part('interior-floor',x,.035,z,width-.45,.06,depth-.45,interiorFloor);
       for(const slab of shotBoxes({}).filter(r=>r.id.startsWith(id+'-floor')||r.id===id+'-balcony'||r.id===id+'-stair-step'))part(slab.id,slab.x,((slab.yMin??0)+(slab.yMax??0))/2,slab.z,slab.width,(slab.yMax??0)-(slab.yMin??0),slab.depth,slab.id.includes('stair')?wood:interiorFloor);
-      for(const side of [-1,1]){
-        part('roof-rail-x',x+side*(width/2-.2),height+.6,z,.15,1.2,depth,metal);
-        for(const half of [-1,1])part('roof-rail-z',x+half*(DOOR_WIDTH/2+(width-DOOR_WIDTH)/4),height+.6,z+side*(depth/2-.2),(width-DOOR_WIDTH)/2,1.2,.15,metal);
+      for(const fence of worldSolids().filter(rect=>rect.id.startsWith(id+'-roof-rail-')||rect.id.startsWith(id+'-balcony-rail-'))){
+        const base=fence.yMin!,top=fence.yMax!;
+        part(fence.id,fence.x,(base+top)/2,fence.z,fence.width,top-base,fence.depth,metal);
       }
       const rect=doorRect(building),door=box(id+'-interactive-door',rect.x,1.6,rect.z,rect.width,3.2,rect.depth,wood);door.setPivotPoint(new Vector3(-rect.width/2,0,0));doorMeshes.set(id,door);shadows.addShadowCaster(door);
       part('entry-green-header',x,3.3,rect.z+(z<0?.3:-.3),DOOR_WIDTH+.4,.15,.12,entryMat);
@@ -784,6 +784,12 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     setPerformanceLow(enabled:boolean){if(lowPerformance===enabled)return;lowPerformance=enabled;scene.shadowsEnabled=requestedShadows&&!enabled;botEffects.setReduced(reducedShots||enabled);atmosphere.setLow(enabled);mapArt?.setPerformanceLow(enabled);applySurfaceQuality();},
     setQuality(high:boolean){
       onlineQualityHigh=high;for(const r of remotes.values())r.fx.setQuality(high);atmosphere.setQuality(high);robotImpact.setQuality(high);for(const rig of botRigs.slice(1))rig.fx.setQuality(high);
+      if(mapArt){
+        sky.intensity=high?1.13:.65;
+        moon.intensity=high?.47:.32;
+        skyMat.fogEnabled=!high;
+        for(const lamp of streetLights)lamp.intensity=high?3.4:2.2;
+      }
       const mapSize=high?2048:1024;if(shadows.mapSize!==mapSize)shadows.mapSize=mapSize;
       applySurfaceQuality();
       return mapArt?.setQuality(high);

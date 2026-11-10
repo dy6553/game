@@ -27,20 +27,23 @@ test('harbor art uses the game coordinates while original door collision still r
     assert.notEqual(door.rotation.y, 0);
     const artMeshes = new Set(art.getChildMeshes());
     for (const building of world.geometry.BUILDINGS.filter(item => item.enterable)) {
-      for (const y of [world.geometry.SECOND_FLOOR, building.height]) {
-        const deck = world.geometry.balcony(building, y);
+      const y = world.geometry.SECOND_FLOOR;
+      const deck = world.geometry.balcony(building, y);
+      for (const x of [deck.x, deck.x - building.width*.4, deck.x + building.width*.4]) {
         const front = building.z < 0 ? 1 : -1;
         const land = world.scene.pickWithRay(
-          new Ray(new Vector3(deck.x, y + 1, deck.z), new Vector3(0, -1, 0), 1.1),
+          new Ray(new Vector3(x, y + 1, deck.z), new Vector3(0, -1, 0), 1.1),
           mesh => artMeshes.has(mesh),
         );
         assert.ok(land?.pickedPoint && Math.abs(land.pickedPoint.y - y) < .001,
           `${building.id} balcony has a visible floor at collision height ${y}`);
-        const exit = world.scene.pickWithRay(
-          new Ray(new Vector3(deck.x, y + 1, deck.z), new Vector3(0, 0, -front), 2),
-          mesh => artMeshes.has(mesh),
-        );
-        assert.equal(exit?.hit, false, `${building.id} balcony opening is clear at ${y}`);
+        if(x===deck.x){
+          const exit = world.scene.pickWithRay(
+            new Ray(new Vector3(x, y + 1, deck.z), new Vector3(0, 0, -front), 2),
+            mesh => artMeshes.has(mesh),
+          );
+          assert.equal(exit?.hit, false, `${building.id} balcony opening is clear at ${y}`);
+        }
       }
     }
     world.scene.dispose();

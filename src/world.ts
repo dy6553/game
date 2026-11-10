@@ -1,7 +1,7 @@
 import {stanceStats,type Stance} from './stance.ts';
 import {advanceJump,createJump,type JumpState} from './jump.ts';
 export type Point = { x: number; z: number; y?:number;fallSpeed?:number;stance?:Stance };
-export type Rect = { id: string; x: number; z: number; width: number; depth: number; height?:number; yMin?:number;yMax?:number;slope?:{start:Point&{y:number};end:Point&{y:number}} };
+export type Rect = { id: string; x: number; z: number; width: number; depth: number; height?:number; yMin?:number;yMax?:number;jumpClearance?:boolean;slope?:{start:Point&{y:number};end:Point&{y:number}} };
 export type Building = Rect & { height: number; palette: number; enterable?:boolean };
 export type Doors=Record<string,boolean>;
 export type Stairway={building:string;start:Point&{y:number};end:Point&{y:number};width:number};
@@ -102,7 +102,7 @@ function canStand(p: Point, radius: number, solids: readonly Rect[] = SOLIDS, re
   const feet=p.y??0,top=feet+stanceStats(p.stance).height;
   const candidates=solids===openSolids&&Math.abs(radius)<=PROTOTYPE.radius?nearbyOpenSolids(p,solids):solids;
   return !candidates.some(rect=>{
-    const lift=stairLift&&rect.slope?stairLift:0;
+    const lift=rect.slope||rect.jumpClearance?stairLift:0;
     return top+lift>(rect.yMin??0)+.02&&feet+lift<(rect.yMax??Infinity)-.02&&circleOverlapsRect(p,radius,rect)
       &&(!rect.slope||feet+lift<rampHeight(rect.slope,p.z)-.05);
   })
@@ -136,7 +136,22 @@ function normalized(x: number, y: number): { x: number; y: number } {
 }
 
 const SECOND_FLOOR=3.4;
-function balcony(b:Building,y:number):Rect{return {id:b.id+'-balcony',x:b.x,z:b.z+(b.z<0?1:-1)*(b.depth/2+1),width:DOOR_WIDTH,depth:3,yMin:y-.12,yMax:y};}
+const FENCE_HEIGHT=.65;
+function hasBalcony(y:number){return map==='factory'||Math.abs(y-SECOND_FLOOR)<.05;}
+function balcony(b:Building,y:number):Rect{return {id:b.id+'-balcony',x:b.x,z:b.z+(b.z<0?1:-1)*(b.depth/2+1),width:map==='harbor'&&hasBalcony(y)?b.width:DOOR_WIDTH,depth:3,yMin:y-.12,yMax:y};}
+function harborFences(b:Building):Rect[]{
+ const deck=balcony(b,SECOND_FLOOR),front=b.z<0?1:-1,thickness=.15;
+ const roof={yMin:b.height,yMax:b.height+FENCE_HEIGHT,jumpClearance:true};
+ const veranda={yMin:SECOND_FLOOR,yMax:SECOND_FLOOR+FENCE_HEIGHT,jumpClearance:true};
+ return [
+  ...[-1,1].flatMap(side=>[
+   {id:b.id+'-roof-rail-x',x:b.x+side*(b.width/2-.2),z:b.z,width:thickness,depth:b.depth,...roof},
+   {id:b.id+'-roof-rail-z',x:b.x,z:b.z+side*(b.depth/2-.2),width:b.width,depth:thickness,...roof},
+   {id:b.id+'-balcony-rail-x',x:b.x+side*(b.width/2-thickness/2),z:deck.z+front*.25,width:thickness,depth:2.5,...veranda},
+  ]),
+  {id:b.id+'-balcony-rail-z',x:b.x,z:deck.z+front*(deck.depth/2-thickness/2),width:b.width,depth:thickness,...veranda},
+ ];
+}
 function rampHeight(ramp:NonNullable<Rect['slope']>,z:number){
  const along=Math.max(0,Math.min(1,(z-ramp.start.z)/(ramp.end.z-ramp.start.z)));
  return ramp.start.y+along*(ramp.end.y-ramp.start.y);
@@ -191,7 +206,7 @@ function worldSolids(doors?:Doors):Rect[]{
  const result=[...SOLIDS.map(r=>{const b=BUILDINGS.find(b=>r.id===b.id||r.id.startsWith(b.id+'-'));return {...r,yMin:0,yMax:r.id.endsWith('-counter')?1.4:r.id.endsWith('-table')?1:b?.height??r.height??(r.id==='van'?2.15:1.05)};}),
  ...BUILDINGS.filter(b=>b.enterable&&doors&&doors[b.id]!==true).map(doorRect),
  ...ENTERABLE_BUILDINGS.flatMap(b=>stairways(b).map(s=>({id:b.id+'-stair-volume',x:s.start.x,z:(s.start.z+s.end.z)/2,width:s.width,depth:Math.abs(s.end.z-s.start.z),yMin:s.start.y,yMax:s.end.y,slope:s}))),
- ...ENTERABLE_BUILDINGS.flatMap(b=>[-1,1].flatMap(side=>[
+ ...ENTERABLE_BUILDINGS.flatMap(b=>map==='harbor'?harborFences(b):[-1,1].flatMap(side=>[
  {id:b.id+'-roof-rail-x',x:b.x+side*(b.width/2-.2),z:b.z,width:.15,depth:b.depth,yMin:b.height,yMax:b.height+1.2},
  ...[-1,1].map(half=>({id:b.id+'-roof-rail-z',x:b.x+half*(DOOR_WIDTH/2+(b.width-DOOR_WIDTH)/4),z:b.z+side*(b.depth/2-.2),width:(b.width-DOOR_WIDTH)/2,depth:.15,yMin:b.height,yMax:b.height+1.2}))
  ]))];solidCache.set(key,result);if(!doors)openSolids=result;return result;
@@ -209,7 +224,7 @@ function stairways(b:Building):readonly Stairway[]{const cached=stairCache.get(b
  ];for(const stair of result){Object.freeze(stair.start);Object.freeze(stair.end);Object.freeze(stair);}Object.freeze(result);stairCache.set(b,result);return result;}
 function upperFloorContains(p:Point,r:number){
  if((p.y??0)<.05)return true;
- return BUILDINGS.some(b=>{const ledge=balcony(b,p.y??0);if(b.enterable&&[SECOND_FLOOR,b.height].some(y=>Math.abs((p.y??0)-y)<.05)&&Math.abs(p.x-ledge.x)<=ledge.width/2-r&&Math.abs(p.z-ledge.z)<=ledge.depth/2)return true;if(!b.enterable||Math.abs(p.x-b.x)>b.width/2-.4-r||Math.abs(p.z-b.z)>b.depth/2-.4-r)return false;
+ return BUILDINGS.some(b=>{const ledge=balcony(b,p.y??0);if(b.enterable&&hasBalcony(p.y??0)&&[SECOND_FLOOR,b.height].some(y=>Math.abs((p.y??0)-y)<.05)&&Math.abs(p.x-ledge.x)<=ledge.width/2-r&&Math.abs(p.z-ledge.z)<=ledge.depth/2)return true;if(!b.enterable||Math.abs(p.x-b.x)>b.width/2-.4-r||Math.abs(p.z-b.z)>b.depth/2-.4-r)return false;
   for(const s of stairways(b)){const t=(p.z-s.start.z)/(s.end.z-s.start.z);if(t>=0&&t<=1&&Math.abs(p.x-s.start.x)<s.width/2-.05&&Math.abs((p.y??0)-(s.start.y+t*(s.end.y-s.start.y)))<.12)return true;}
   return [SECOND_FLOOR,b.height].some(y=>Math.abs((p.y??0)-y)<.05&&floorPanels(b,y).some(f=>Math.abs(p.x-f.x)<=f.width/2+.05&&Math.abs(p.z-f.z)<=f.depth/2+.05));
  });
@@ -229,7 +244,7 @@ function elevatedStep(from:Point,to:Point):Point{
 const floorCache=new WeakMap<Building,Map<number,readonly Rect[]>>();
 function floorPanels(b:Building,y:number):readonly Rect[]{
  let levels=floorCache.get(b);if(!levels){levels=new Map();floorCache.set(b,levels);}const cached=levels.get(y);if(cached)return cached;
- const [a,c]=stairways(b),w=a!.width+.1,filled=y===SECOND_FLOOR?c!:a!;const result:Rect[]=[balcony(b,y),
+ const [a,c]=stairways(b),w=a!.width+.1,filled=y===SECOND_FLOOR?c!:a!;const result:Rect[]=[...(hasBalcony(y)?[balcony(b,y)]:[]),
  {id:b.id+'-floor-side',x:filled.start.x,z:b.z,width:w,depth:b.depth-.8,yMin:y-.12,yMax:y},
  {id:b.id+'-floor-center',x:b.x,z:b.z,width:b.width-2*(1.5+w/2),depth:b.depth-.8,yMin:y-.12,yMax:y},
  ...[y===SECOND_FLOOR?a!:c!].flatMap(s=>[-1,1].map(side=>({id:b.id+'-floor-landing',x:s.start.x,z:b.z+side*(b.depth/2-1.3),width:w,depth:1.8,yMin:y-.12,yMax:y}))),

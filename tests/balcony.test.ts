@@ -79,13 +79,58 @@ test('players can leave the side of a staircase and steer while falling',()=>{
  assert.equal(landed.y,0);
  assert.equal(landed.fallSpeed,0);
 });
-test('both maps provide a second-floor and rooftop balcony, with a gravity landing after leaving',()=>{
- for(const map of ['harbor','factory'] as const){const w=createWorld(map);for(const b of w.BUILDINGS.filter(b=>b.enterable))for(const y of [w.SECOND_FLOOR,b.height]){
+test('the factory keeps both original balcony exits, with a gravity landing after leaving',()=>{
+ const w=createWorld('factory');for(const b of w.BUILDINGS.filter(b=>b.enterable))for(const y of [w.SECOND_FLOOR,b.height]){
   const f=b.z<0?1:-1;let p:Point={x:b.x,z:b.z+f*(b.depth/2-1),y};
   for(let i=0;i<18;i++)p=w.moveWithCollisions(p,{x:0,z:f*.1},w.worldSolids());
   assert.ok(Math.abs(p.z-b.z)>b.depth/2,'balcony reachable from inside');assert.equal(p.y,y);
   for(let i=0;i<30;i++)p=w.moveWithCollisions(p,{x:0,z:f*.1},w.worldSolids());
   const start=p.y; p=w.advanceFall(p,.05);assert.ok(p.y!<start!,'gravity starts outside balcony');
   for(let i=0;i<100;i++)p=w.advanceFall(p,.05);assert.equal(p.y,0);assert.equal(p.fallSpeed,0);
- }}
+ }
+});
+
+test('the harbor veranda spans the entry facade and its low fence stops walking',()=>{
+ const w=createWorld('harbor');
+ for(const b of w.BUILDINGS.filter(b=>b.enterable)){
+  const direction=b.z<0?1:-1,deck=w.balcony(b,w.SECOND_FLOOR),solids=w.worldSolids();
+  assert.equal(deck.width,b.width);
+  const outside={x:b.x+b.width*.31,z:deck.z,y:w.SECOND_FLOOR};
+  assert.equal(w.advanceFall(outside,.05).y,w.SECOND_FLOOR);
+  const p=w.moveWithCollisions(outside,{x:0,z:direction*3},solids);
+  assert.ok(Math.abs(p.z-deck.z)<deck.depth/2);
+ }
+});
+
+test('each harbor roof edge blocks walking and can be crossed at jump height',()=>{
+ const w=createWorld('harbor'),solids=w.worldSolids();
+ for(const b of w.BUILDINGS.filter(b=>b.enterable)){
+  const edges=solids.filter(r=>r.id.startsWith(b.id+'-roof-rail-'));
+  assert.equal(edges.length,4);
+  for(const edge of edges){
+   const alongX=edge.width<edge.depth,sign=Math.sign(alongX?edge.x-b.x:edge.z-b.z);
+   const axis=alongX?'x':'z';
+   const start={x:edge.x,z:edge.z,y:b.height,[axis]:edge[axis]-sign*1.15};
+   const delta={x:0,z:0,[axis]:sign*2.35};
+   const walk=w.moveWithCollisions(start,delta,solids);
+   const jump=w.moveWithCollisions(start,delta,solids,w.PROTOTYPE.radius,.9);
+   assert.ok((walk[axis]-edge[axis])*sign<0);
+   assert.ok((jump[axis]-edge[axis])*sign>0);
+  }
+ }
+});
+
+test('server movement jumps over the veranda and roof fences and lands outside',()=>{
+ const w=createWorld('harbor'),b=w.BUILDINGS.find(item=>item.enterable&&item.z<0)!;
+ const game=createNetworkGame(undefined,'harbor'),p=game.join('player');
+ const input:Omit<Command,'seq'>={x:0,y:1,yaw:0,pitch:0,jump:false,shot:false,fire:false,reload:false,sprint:false,scope:false};
+ for(const y of [w.SECOND_FLOOR,b.height]){
+  const edge=w.worldSolids().find(r=>r.id===b.id+(y===b.height?'-roof-rail-z':'-balcony-rail-z')&&r.z>b.z)!;
+  Object.assign(p,{x:b.x,z:edge.z-.91,y,jump:{height:0,velocity:0},fallSpeed:0});
+  for(let i=0;i<14;i++)Object.assign(p,advancePlayerMotion(p,input,.05,w.createDoors(),w));
+  assert.ok(p.z<edge.z,'walking stays inside the fence');
+  for(let i=0;i<44;i++)Object.assign(p,advancePlayerMotion(p,{...input,jump:i===0,y:i<22?1:0},.05,w.createDoors(),w));
+  assert.ok(p.z>edge.z,'jump crosses the fence');
+  assert.equal(p.y,0,'actor lands below the fence');
+ }
 });
