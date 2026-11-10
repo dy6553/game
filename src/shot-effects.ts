@@ -51,9 +51,12 @@ export function createShotEffects(scene:Scene,camera:Camera) {
   function emit(start:Vector3,end:Vector3,normal:Vector3,impact:boolean,target:boolean,primary=true) {
     emitted++;if(primary){flashLife=!reduced&&Vector3.DistanceSquared(start,camera.position)>.25?.045:0;flash.position.copyFrom(start);flash.setEnabled(flashLife>0);}
     const trace=traces[traceIndex++%traces.length]!;
-    trace.start.copyFrom(start);trace.end.copyFrom(end);trace.direction=end.subtract(start).normalize();
-    trace.distance=Vector3.Distance(start,end);trace.travel=0;trace.active=true;
-    trace.mesh.rotationQuaternion=new Quaternion();Quaternion.FromUnitVectorsToRef(Vector3.Up(),trace.direction,trace.mesh.rotationQuaternion);
+    trace.start.copyFrom(start);
+    end.subtractToRef(start,trace.direction);
+    trace.distance=trace.direction.length();trace.direction.normalize();
+    trace.travel=0;trace.active=true;
+    trace.mesh.rotationQuaternion??=new Quaternion();
+    Quaternion.FromUnitVectorsToRef(Vector3.Up(),trace.direction,trace.mesh.rotationQuaternion);
     trace.mesh.position.copyFrom(start);trace.mesh.scaling.y=0.01;trace.mesh.setEnabled(true);
     if(primary&&!reduced){const shell=shells[shellIndex++%shells.length]!;
     shell.mesh.position.copyFrom(start);shell.mesh.position.y-=0.1;shell.mesh.setEnabled(true);shell.life=1.1;shell.bounced=false;
@@ -63,9 +66,10 @@ export function createShotEffects(scene:Scene,camera:Camera) {
     const n=normal.lengthSquared()>0.1?normal.normalizeToNew():trace.direction.scale(-1);
     const right=Vector3.Cross(n,Math.abs(n.y)>0.9?Vector3.Right():Vector3.Up()).normalize();
     const up=Vector3.Cross(n,right).normalize();
+    const sparkPosition=end.add(n.scale(.025));
     for(let i=0;i<(reduced?2:6);i++) {
       const p=particles[sparkIndex++%particles.length]!,angle=i*2.4+emitted;
-      p.mesh.position.copyFrom(end.add(n.scale(0.025)));p.mesh.material=target?targetSpark:spark;
+      p.mesh.position.copyFrom(sparkPosition);p.mesh.material=target?targetSpark:spark;
       p.velocity=n.scale(0.6+i*0.1).add(right.scale(Math.cos(angle)*0.8)).add(up.scale(Math.sin(angle)*0.8));
       p.life=0.15+(i%3)*0.035;p.mesh.setEnabled(true);
     }
@@ -77,11 +81,16 @@ export function createShotEffects(scene:Scene,camera:Camera) {
     }
   }
   function update(dt:number) {
-    flashLife-=dt;flash.setEnabled(flashLife>0);
+    if(flashLife>0){
+      flashLife-=dt;
+      if(flashLife<=0)flash.setEnabled(false);
+    }
     for(const trace of traces)if(trace.active) {
       trace.travel+=dt*800;
       const head=Math.min(trace.distance,trace.travel+0.2),tail=Math.max(0,head-2.2),length=Math.max(0.01,head-tail);
-      trace.mesh.position.copyFrom(trace.start.add(trace.direction.scale((head+tail)/2)));trace.mesh.scaling.y=length;
+      const center=(head+tail)/2;
+      trace.mesh.position.set(trace.start.x+trace.direction.x*center,trace.start.y+trace.direction.y*center,trace.start.z+trace.direction.z*center);
+      trace.mesh.scaling.y=length;
       if(trace.travel>trace.distance+2.2){trace.active=false;trace.mesh.setEnabled(false);}
     }
     for(const p of particles)if(p.life>0){p.life-=dt;p.mesh.setEnabled(p.life>0);p.mesh.position.addInPlace(p.velocity.scale(dt));p.velocity.y-=3*dt;}
@@ -99,5 +108,14 @@ export function createShotEffects(scene:Scene,camera:Camera) {
     for(const item of [...particles,...marks,...shells,...clouds])item.life=0;
     flashLife=0;emitted=0;
   }
-  return {emit,update,clear,meshes,setReduced(value:boolean){reduced=value;if(value){flashLife=0;flash.setEnabled(false);}},stats:()=>({emitted,traces:traces.filter(t=>t.active).length,marks:marks.filter(m=>m.life>0).length,sparks:particles.filter(p=>p.life>0).length,shells:shells.filter(s=>s.life>0).length})};
+  function setReduced(value:boolean){
+    if(reduced===value)return;
+    reduced=value;
+    if(!reduced)return;
+    flashLife=0;flash.setEnabled(false);
+    for(const decoration of [...marks,...shells,...clouds])if(decoration.life>0){
+      decoration.life=0;decoration.mesh.setEnabled(false);
+    }
+  }
+  return {emit,update,clear,meshes,setReduced,stats:()=>({emitted,traces:traces.filter(t=>t.active).length,marks:marks.filter(m=>m.life>0).length,sparks:particles.filter(p=>p.life>0).length,shells:shells.filter(s=>s.life>0).length})};
 }

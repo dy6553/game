@@ -1,6 +1,6 @@
 import {stanceStats,type Stance} from './stance.ts';
 import {createRemoteModels,type RemoteModel} from './remote-models.ts';
-import {unobstructed,boxHit} from './combat-geometry.ts';
+import {unobstructed,firstShotBox} from './combat-geometry.ts';
 import {playerName} from './nickname.ts';
 import type {Sound} from './audio.ts';
 import {createMatchPickups} from './match-pickups.ts';
@@ -592,8 +592,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
         if((point.y??0)>=3.35){const b=battleState(),actor=b.bots.find(a=>Math.hypot(a.position.x-point.x,a.position.z-point.z)<.1);botReveals.set(actor?.id??'bot-1',4);if(highShotNotices.length<8)highShotNotices.push('고층 사격 감지 · 미니맵에 4초간 표시');}
         const start=new Vector3(point.x,1.8+(point.y??0),point.z),end=new Vector3(target.x,1.8+(target.y??0),target.z);
         const delta=end.subtract(start);
-        let nearest:{t:number;axis:number}|null=null;
-        for(const box of geometry.shotBoxes(doors)){const hit=boxHit(start,end,box);if(hit&&(!nearest||hit.t<nearest.t))nearest=hit;}
+        const nearest=firstShotBox(geometry,doors,start,end);
         const clear=!nearest,impact=nearest?start.add(delta.scale(nearest.t)):end;
         const normal=delta.normalize().scale(-1);
         if(nearest){normal.set(0,0,0);if(nearest.axis===0)normal.x=delta.x>0?-1:1;else if(nearest.axis===1)normal.y=delta.y>0?-1:1;else normal.z=delta.z>0?-1:1;}
@@ -618,7 +617,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
        else if(target.id.startsWith('target-')){const t=targets[Number(target.id.slice(7))]!;const before=t.health;t.health=Math.max(0,t.health-amount);target.health=t.health;if(before>t.health){hits++;t.flash=.16;}if(before>0&&t.health===0){destroyed++;t.root.setEnabled(false);}t.healthBar.scaling.x=Math.max(.001,t.health/100);}
        else {if(battle.mode==='duel')duel.hurt('bot',amount);else if(survivalMode)survival.hurt(target.id,amount);else ffa.hurt(target.id,amount);const next=battleState();target.health=next.mode==='duel'?next.botHealth:next.bots.find(b=>b.id===target.id)?.health??0;}
       },()=>++toolSequence);
-      const actual=group.state().playerHealth;if(localActor.health>actual)group.healPlayer(localActor.health-actual);localActor.health=group.state().playerHealth;lastToolHealth=localActor.health;for(const b of bots)botFlashes.set(b.id,b.flash);for(const e of events)if(soundEvents.length<16)soundEvents.push({kind:e.kind,x:e.x,z:e.z});toolVisuals.update(localProjectiles,events,dt);syncBot();
+      const actual=group.state().playerHealth;if(localActor.health>actual)group.healPlayer(localActor.health-actual);localActor.health=group.state().playerHealth;lastToolHealth=localActor.health;for(const b of bots)botFlashes.set(b.id,b.flash);for(const e of events)if(soundEvents.length<16)soundEvents.push({kind:e.kind,x:e.x,z:e.z});toolVisuals.update(localProjectiles,events,dt);
     }
     const displayPoint=preview&&lobbyPreview?PROTOTYPE.spawn:p;
     player.position.x = displayPoint.x; player.position.z = displayPoint.z;
@@ -770,10 +769,10 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     renderOnline,endOnline,
     effectsState:effects.stats,
     impactState:()=>({...robotImpact.stats(),recoil:recoil.read()}),
-    setReducedShots(value:boolean){reducedShots=value;effects.setReduced(value);botEffects.setReduced(value);},
+    setReducedShots(value:boolean){reducedShots=value;effects.setReduced(value);botEffects.setReduced(value||lowPerformance);},
     setShake(level:ShakeLevel){recoil.setShake(level);},
     setShadows(enabled:boolean){requestedShadows=enabled;scene.shadowsEnabled=enabled&&!lowPerformance;},
-    setPerformanceLow(enabled:boolean){if(lowPerformance===enabled)return;lowPerformance=enabled;scene.shadowsEnabled=requestedShadows&&!enabled;atmosphere.setLow(enabled);applySurfaceQuality();},
+    setPerformanceLow(enabled:boolean){if(lowPerformance===enabled)return;lowPerformance=enabled;scene.shadowsEnabled=requestedShadows&&!enabled;botEffects.setReduced(reducedShots||enabled);atmosphere.setLow(enabled);applySurfaceQuality();},
     setQuality(high:boolean){
       onlineQualityHigh=high;for(const r of remotes.values())r.fx.setQuality(high);atmosphere.setQuality(high);robotImpact.setQuality(high);for(const rig of botRigs.slice(1))rig.fx.setQuality(high);
       const mapSize=high?2048:1024;if(shadows.mapSize!==mapSize)shadows.mapSize=mapSize;
