@@ -9,6 +9,7 @@
     "NEON_AUTH_URL": "https://ep-lingering-field-azhtw5y3.neonauth.c-3.ap-southeast-1.aws.neon.tech/neondb/auth",
     "ACCOUNTS_ENABLED": "true"
   },
+  "kv_namespaces": [{"binding": "PLAYTEST_LOGS", "id": "a774daccd418479fbf4a23362b7dcf73"}],
   "durable_objects": {
     "bindings": [
       {

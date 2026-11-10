@@ -7,6 +7,7 @@ import {captureOfficialResult,createResultOutbox} from './official-records.js';
 import {createRecordStore} from './record-store.js';
 import {accountHealth} from './account-health.js';
 import {deleteOwnAccount} from './account-delete.js';
+import {savePlaytest} from './playtest.js';
 const json=(body,status=200)=>Response.json(body,{status});
 const code=()=>crypto.randomUUID().replaceAll('-','').slice(0,8).toUpperCase();
 export class Room extends DurableObject {
@@ -111,7 +112,9 @@ export default {async fetch(request,env){
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
  const url=new URL(request.url);let response;
  try{
-  if(url.pathname==='/health/accounts'&&request.method==='GET'){
+  if(url.pathname==='/playtest'){
+   response=await savePlaytest(request,env.PLAYTEST_LOGS);
+  }else if(url.pathname==='/health/accounts'&&request.method==='GET'){
    response=json(await accountHealth(env));
   }else if(url.pathname==='/session'&&request.method==='POST'){
    const text=await request.text();if(text.length>1024)throw Error('Request too large');const body=JSON.parse(text);

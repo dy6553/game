@@ -76,6 +76,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <p><strong>휴대폰</strong> 왼쪽 스틱 이동 · 화면 빈 공간을 좌우·위아래로 드래그해 시점 변경</p>
     <p><strong>달리기</strong> PC는 Shift를 누르고 앞으로 이동하세요. 휴대폰은 스틱 위의 달리기 버튼으로 켜고 끕니다. 이동 속도는 1.5배이며 발사·재장전·확대 조준 중에는 걷습니다. 스태미나 제한은 없습니다.</p>
     <p><strong>점프</strong> 휴대폰은 점프 버튼을 누릅니다. PC는 스페이스바로 점프합니다. 메뉴에서 J키로 변경할 수 있습니다.</p>
+    <p>성능 개선을 위해 플레이 중 프레임과 온라인 연결 수치를 자동으로 수집합니다. 수집한 기록은 48시간 후 자동 삭제됩니다.</p>
     <p id="weapon-help"></p>
     <p>봇 1대1: 양쪽 체력 100, 먼저 10킬 승리. 자동 회복 없이 사망 3초 후 부활합니다. 붉은 표시가 상대 봇입니다. 봇은 1초 조준 후 위치를 고정하고 0.4초 경고 뒤 발사합니다. 경고 때 옆으로 이동하면 피할 수 있으며, 벽 뒤로 숨으면 조준이 초기화됩니다.</p>
     <p>맵을 남쪽 상점 거리와 양옆 골목으로 넓혔습니다. 중앙 거리 양쪽의 열린 출입구와 남쪽 거리의 상점, 총 6곳의 1층에 들어갈 수 있습니다. 문 버튼 없이 걸어서 출입합니다.</p>
@@ -143,7 +144,7 @@ async function start() {
   const densityCap=()=>Math.min(window.devicePixelRatio||1,graphicsMode==='high'?2:graphicsMode==='balanced'?1:graphicsMode==='low'?.7:1);
   let budget=createRenderBudget(densityCap()),qualityHigh=graphicsMode==='high';
   engine.setHardwareScalingLevel(1/budget.density);
-  const playtest=createPlaytest();
+  const playtest=createPlaytest(import.meta.env?.VITE_ONLINE_URL);
   let selectedMap:MapId='harbor';
   let world = createHarborScene(engine);
   const nearbyDoor=(p:Point,doors:Parameters<typeof world.geometry.nearbyDoor>[1])=>(world.geometry??harborWorld).nearbyDoor(p,doors);
