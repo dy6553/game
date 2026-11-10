@@ -1,4 +1,5 @@
 import {chooseOnlineNickname} from './member-nickname-entry.ts';
+import {installFullscreen} from './fullscreen.ts';
 import {stanceStats} from './stance.ts';
 import {createOnlineEvents} from './online-events.ts';
 import type {ShotEvent} from './network-game.ts';
@@ -57,6 +58,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <header class="topbar">
     <div class="brand"><span class="eyebrow">HARBOR / FIRST PERSON</span><h1>항구의 밤<span>1인칭</span></h1></div>
     <button id="menu-toggle" aria-expanded="false" aria-controls="game-toolbar">메뉴</button>
+    <button id="fullscreen-toggle" type="button" aria-label="전체 화면" aria-pressed="false" title="전체 화면">⛶</button><span id="fullscreen-status" role="status"></span>
     <div id="game-toolbar" class="toolbar" aria-label="화면 설정">
       <button id="home-open">홈으로</button><button id="online-copy" hidden>초대 링크 복사</button><button id="character-open">캐릭터 선택</button>
       <button id="pause-open">일시정지</button><button id="pointer-lock" class="mouse-only">마우스 고정</button>
@@ -331,6 +333,7 @@ async function start() {
   document.addEventListener('visibilitychange',()=>{if(document.hidden)pauseGame();});
   let menuOpen=false;
   const menuButton=document.querySelector<HTMLButtonElement>('#menu-toggle')!;
+  installFullscreen(document.querySelector<HTMLButtonElement>('#fullscreen-toggle')!,document.querySelector<HTMLElement>('#fullscreen-status')!,document);
   const closeMenu=()=>{menuOpen=false;document.body.classList.remove('menu-open');menuButton.setAttribute('aria-expanded','false');menuButton.textContent='메뉴';input.reset();};
   function canOpenGameMenu(){
     return hasPlayed&&!homeOpen&&!roomWaiting&&picker.hidden&&!settingsView.isOpen&&!resultView.isOpen&&!gameChoices.isOpen;

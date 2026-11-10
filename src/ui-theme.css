@@ -33,6 +33,9 @@
 /* One settings drawer keeps the arena clear on every screen. */
 .topbar{top:max(14px,env(safe-area-inset-top));left:auto;right:max(16px,env(safe-area-inset-right))}.topbar>.brand{display:none}
 #menu-toggle{display:block;min-height:40px;padding:8px 14px;border-radius:5px;background:#0a1e2de8;border-color:var(--ui-line);font-size:12px}
+#fullscreen-toggle{position:absolute;right:0;top:calc(100% + 6px);width:44px;height:44px;padding:0;pointer-events:auto;font-size:24px;line-height:1;background:#0a1e2de8;border-color:var(--ui-line)}
+#fullscreen-status:not(:empty){position:absolute;right:50px;top:calc(100% + 6px);width:220px;padding:8px;background:#0a1e2df2;border-radius:5px;font-size:12px;line-height:1.4;pointer-events:none}
+.menu-open #fullscreen-toggle,.menu-open #fullscreen-status{visibility:hidden}
 .toolbar{display:none;position:absolute;right:0;top:48px;width:min(350px,calc(100vw - 24px));max-width:none;max-height:calc(var(--app-height,100dvh) - 78px);overflow:auto;padding:14px;background:var(--ui-panel);border:1px solid var(--ui-line);border-radius:6px;gap:10px;box-shadow:0 12px 30px #0008}
 .menu-open .toolbar{display:grid;grid-template-columns:1fr 1fr}.toolbar button,.toolbar select,.toolbar .game-choice-trigger{width:100%;min-height:42px;font-size:12px}.toolbar label{min-width:0}.toolbar .pc-jump-setting,.toolbar .weapon-setting{grid-column:1/-1}
 .duel-hud,.ammo-hud,.practice-score{border-color:#7b99954d;border-radius:6px;box-shadow:0 4px 16px #0003}.touch-controls button{border-color:#bed6d38c;box-shadow:0 3px 10px #0003;font-weight:650}.single-fire{background:#214552b8;border-color:#f3e2b8!important}.sprint-button,.dash-button{border-radius:12px}
