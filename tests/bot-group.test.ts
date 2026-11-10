@@ -40,6 +40,6 @@ test('real three-bot player respawn moves the camera and restores only the selec
  const e=new NullEngine({renderWidth:640,renderHeight:360,textureSize:512,deterministicLockstep:false,lockstepMaxSteps:4});try{
   const world=createHarborScene(e,{randomSpawns:false});world.setMode('ffa','hard');world.selectWeapon('sniper');const p={x:0,z:-4};world.update(p,0);assert.equal(world.pickup(p,'crate-machinegun'),'added');assert.equal(world.inventoryState().inventory.slots.length,2);
   p.z=10;world.update(p,0);world.scene.render();for(let i=0;i<800&&world.duelState().playerHealth>0;i++)world.update(p,.025);assert.equal(world.duelState().playerHealth,0);
-  world.update(p,3);assert.equal(world.duelState().playerHealth,100);assert.deepEqual(p,world.duelState().playerPosition);assert.ok(canStand(p,PROTOTYPE.radius));assert.equal(world.practiceState().weaponId,'sniper');assert.equal(world.inventoryState().inventory.slots.length,1);world.scene.dispose();
+  world.update(p,3);assert.equal(world.duelState().playerHealth,100);assert.deepEqual({x:p.x,z:p.z},world.duelState().playerPosition);assert.equal((p as {fallSpeed?:number}).fallSpeed,0);assert.ok(canStand(p,PROTOTYPE.radius));assert.equal(world.practiceState().weaponId,'sniper');assert.equal(world.inventoryState().inventory.slots.length,1);world.scene.dispose();
  }finally{e.dispose();}
 });

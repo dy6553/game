@@ -7,8 +7,8 @@ import {createDuel,createSurvivalMatch} from '../src/duel.ts';
 test('approved seven weapons expose different roles and exact capacities',()=>{
  assert.equal(weapons.WEAPON_IDS.length,9);const w:any=weapons.WEAPONS;
  assert.deepEqual([w.smg.damage,w.smg.magazineSize,w.smg.reloadSeconds,w.smg.interval],[8,40,1.8,1/12]);assert.ok(w.smg.spread>0);
- assert.deepEqual([w.burst.damage,w.burst.magazineSize,w.burst.reloadSeconds,w.burst.burstCount,w.burst.burstInterval],[18,24,2,3,.08]);
- assert.deepEqual([w.dmr.damage,w.dmr.magazineSize,w.dmr.interval,w.dmr.reloadSeconds],[50,10,.5,2.2]);
+ assert.deepEqual([w.burst.damage,w.burst.magazineSize,w.burst.reloadSeconds,w.burst.burstCount,w.burst.burstInterval],[17,24,2,3,.08]);
+ assert.deepEqual([w.dmr.damage,w.dmr.magazineSize,w.dmr.interval,w.dmr.reloadSeconds],[42,10,.5,2.2]);
 });
 test('one burst press consumes three actual bullets over time and does not auto-repeat',()=>{
  const w:any=weapons.WEAPONS;assert.ok(w.burst,'burst rifle exists');const g=createNetworkGame(),a=g.join('a','burst');g.join('b');a.yaw=Math.PI;
@@ -29,7 +29,7 @@ test('bots and survival reinforcements return sooner while player respawn stays 
 test('server new weapons enforce cadence, damage, ammo and cancellation when a burst is stowed',()=>{
  const g=createNetworkGame(),a=g.join('a','dmr'),b=g.join('b');a.z=10;
  const input=(seq:number,patch:Record<string,unknown>={})=>g.input('a',{seq,x:0,y:0,yaw:0,pitch:0,fire:false,shot:false,reload:false,jump:false,sprint:false,scope:false,...patch});
- input(1,{shot:true,pitch:.06});g.step();assert.equal(b.health,50);input(2,{shot:true});g.step();assert.equal(a.weapon.ammo,9);for(let i=0;i<9;i++)g.step();input(3,{shot:true,pitch:.06});g.step();assert.equal(b.health,0);assert.equal(a.kills,1);
+ input(1,{shot:true,pitch:.06});g.step();assert.equal(b.health,58);input(2,{shot:true});g.step();assert.equal(a.weapon.ammo,9);for(let i=0;i<9;i++)g.step();input(3,{shot:true,pitch:.06});g.step();assert.equal(b.health,16);for(let i=0;i<10;i++)g.step();input(4,{shot:true,pitch:.06});g.step();assert.equal(b.health,0);assert.equal(a.kills,1);
  const burst=createNetworkGame(),c=burst.join('c','burst');burst.join('d');c.inventory.slots.push({id:'pistol',weapon:createWeapon(weapons.WEAPONS.pistol),cooldown:0});
  const cmd=(seq:number,patch:Record<string,unknown>)=>burst.input('c',{seq,x:0,y:0,yaw:Math.PI,pitch:0,fire:false,shot:false,reload:false,jump:false,sprint:false,scope:false,...patch});cmd(1,{shot:true});burst.step();cmd(2,{slot:1});burst.step();for(let i=0;i<10;i++)burst.step();assert.equal(c.inventory.slots[0]!.weapon.ammo,23,'stowing cancels remaining two bullets');
  const automatic=createNetworkGame(),smg=automatic.join('smg','smg');automatic.join('target');for(let i=0;i<20;i++){automatic.input('smg',{seq:i,x:0,y:0,yaw:Math.PI,pitch:0,fire:true,shot:false,reload:false,jump:false,sprint:false,scope:false});automatic.step();}assert.equal(smg.weapon.ammo,28,'held SMG averages twelve rounds in one second');
