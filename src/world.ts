@@ -62,6 +62,32 @@ if(map==='factory')COVERS.splice(0,COVERS.length,
  {id:`factory-boiler-${side}`,x:side*14,z:-42,width:4,depth:4,height:3},
  ]));
 const SOLIDS: Rect[] = [...BUILDINGS.flatMap(b=>b.enterable?[...buildingWalls(b),...interiorFurniture(b)]:[b]), ...COVERS];
+const collisionCellSize=8;
+const emptyCollisionCell:readonly Rect[]=[];
+let openSolids:readonly Rect[]|undefined;
+let openCollisionCells:Map<string,Rect[]>|undefined;
+
+function collisionCellKey(x:number,z:number){
+  return Math.floor(x/collisionCellSize)+','+Math.floor(z/collisionCellSize);
+}
+
+function nearbyOpenSolids(p:Point,solids:readonly Rect[]):readonly Rect[]{
+  if(!openCollisionCells){
+    const cells=new Map<string,Rect[]>();
+    // Pad each rectangle so circles near a cell boundary still see it.
+    for(const rect of solids){
+      const padX=rect.width/2+PROTOTYPE.radius,padZ=rect.depth/2+PROTOTYPE.radius;
+      const left=Math.floor((rect.x-padX)/collisionCellSize),right=Math.floor((rect.x+padX)/collisionCellSize);
+      const back=Math.floor((rect.z-padZ)/collisionCellSize),front=Math.floor((rect.z+padZ)/collisionCellSize);
+      for(let x=left;x<=right;x++)for(let z=back;z<=front;z++){
+        const key=x+','+z,cell=cells.get(key);
+        if(cell)cell.push(rect);else cells.set(key,[rect]);
+      }
+    }
+    openCollisionCells=cells;
+  }
+  return openCollisionCells.get(collisionCellKey(p.x,p.z))??emptyCollisionCell;
+}
 
 function circleOverlapsRect(p: Point, radius: number, rect: Rect): boolean {
   const nx = Math.max(rect.x - rect.width / 2, Math.min(p.x, rect.x + rect.width / 2));
@@ -70,10 +96,11 @@ function circleOverlapsRect(p: Point, radius: number, rect: Rect): boolean {
 }
 
 function canStand(p: Point, radius: number, solids: readonly Rect[] = SOLIDS): boolean {
-  return Number.isFinite(p.x) && Number.isFinite(p.z)
-    && Math.abs(p.x) <= PROTOTYPE.halfWidth - radius
-    && p.z >= -PROTOTYPE.halfDepth + radius && p.z <= PROTOTYPE.maxZ-radius
-    && !solids.some(rect => (p.y??0)+stanceStats(p.stance).height>(rect.yMin??0)+.02&&(p.y??0)<(rect.yMax??Infinity)-.02&&circleOverlapsRect(p, radius, rect)&&(!rect.slope||(p.y??0)<rect.slope.start.y+Math.max(0,Math.min(1,(p.z-rect.slope.start.z)/(rect.slope.end.z-rect.slope.start.z)))*(rect.slope.end.y-rect.slope.start.y)-.05))
+  if(!Number.isFinite(p.x)||!Number.isFinite(p.z)||
+     !(Math.abs(p.x)<=PROTOTYPE.halfWidth-radius&&p.z>=-PROTOTYPE.halfDepth+radius&&p.z<=PROTOTYPE.maxZ-radius))return false;
+  const feet=p.y??0,top=feet+stanceStats(p.stance).height;
+  const candidates=solids===openSolids&&Math.abs(radius)<=PROTOTYPE.radius?nearbyOpenSolids(p,solids):solids;
+  return !candidates.some(rect => top>(rect.yMin??0)+.02&&feet<(rect.yMax??Infinity)-.02&&circleOverlapsRect(p, radius, rect)&&(!rect.slope||feet<rect.slope.start.y+Math.max(0,Math.min(1,(p.z-rect.slope.start.z)/(rect.slope.end.z-rect.slope.start.z)))*(rect.slope.end.y-rect.slope.start.y)-.05))
     && (upperFloorContains(p,radius)||BUILDINGS.every(b=>!b.enterable||Math.abs(p.x-b.x)>b.width/2-.4-radius||Math.abs(p.z-b.z)>b.depth/2-.4-radius));
 }
 
@@ -126,7 +153,7 @@ function worldSolids(doors?:Doors):Rect[]{
  ...ENTERABLE_BUILDINGS.flatMap(b=>[-1,1].flatMap(side=>[
  {id:b.id+'-roof-rail-x',x:b.x+side*(b.width/2-.2),z:b.z,width:.15,depth:b.depth,yMin:b.height,yMax:b.height+1.2},
  ...[-1,1].map(half=>({id:b.id+'-roof-rail-z',x:b.x+half*(DOOR_WIDTH/2+(b.width-DOOR_WIDTH)/4),z:b.z+side*(b.depth/2-.2),width:(b.width-DOOR_WIDTH)/2,depth:.15,yMin:b.height,yMax:b.height+1.2}))
- ]))];solidCache.set(key,result);return result;
+ ]))];solidCache.set(key,result);if(!doors)openSolids=result;return result;
 }
 function nearbyDoor(p:Point,doors:Doors){return BUILDINGS.filter(b=>b.enterable&&Object.hasOwn(doors,b.id)).map(b=>({b,d:Math.hypot(p.x-doorRect(b).x,p.z-doorRect(b).z)})).filter(v=>v.d<=2.5&&(p.y??0)<.5).sort((a,b)=>a.d-b.d)[0]?.b;}
 function toggleDoor(doors:Doors,id:string,p:Point,actors:readonly Point[]):boolean{

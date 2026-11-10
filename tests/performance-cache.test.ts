@@ -1,7 +1,30 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {findRoute,verticalRoute,navigationStats} from '../src/duel.ts';
-import {shotBoxes,createDoors,toggleDoor,doorRect,BUILDINGS,stairways,canStand,PROTOTYPE} from '../src/world.ts';
+import {shotBoxes,createDoors,toggleDoor,doorRect,BUILDINGS,stairways,canStand,PROTOTYPE,createWorld} from '../src/world.ts';
+
+test('open-map collision checks skip distant geometry after warm-up',()=>{
+ const world=createWorld('harbor'),solids=world.worldSolids(),radius=world.PROTOTYPE.radius;
+ const distant=solids.find(rect=>Math.abs(rect.x)>30)!;
+ const x=distant.x;let accesses=0;
+ Object.defineProperty(distant,'x',{get:()=>{accesses++;return x;}});
+ assert.equal(world.canStand(world.PROTOTYPE.spawn,radius,solids),true);
+ accesses=0;
+ for(let i=0;i<20;i++)assert.equal(world.canStand({x:i/20,z:-8},radius,solids),true);
+ assert.equal(accesses,0,'distant collision boxes should never be considered for these positions');
+});
+
+test('indexed collision agrees with a full scan across both maps and floor heights',()=>{
+ for(const map of ['harbor','factory'] as const){
+  const world=createWorld(map),solids=world.worldSolids(),fullScan=[...solids];
+  for(let x=-63.5;x<=63.5;x+=2.25)for(let z=-59.5;z<=34;z+=2.25){
+   for(const y of [0,3.4,7,10])for(const stance of ['stand','crouch','prone'] as const){
+    const point={x,y,z,stance},radius=world.PROTOTYPE.radius;
+    assert.equal(world.canStand(point,radius,solids),world.canStand(point,radius,fullScan),JSON.stringify({map,point}));
+   }
+  }
+ }
+});
 test('warm navigation reuses static collision work without changing owned waypoints',()=>{
  const a={x:-40,z:-32},b={x:0,z:10};const expected=findRoute(a,b);assert.ok(expected.length);const before=navigationStats().collisionSamples;
  for(let i=0;i<10;i++)assert.deepEqual(findRoute(a,b),expected);
