@@ -51,8 +51,8 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   ${NICKNAME_MARKUP}${WAITING_ROOM_MARKUP}<section id="online-lobby" class="online-lobby" hidden aria-labelledby="online-title"><div><button id="online-back">홈으로</button><h2 id="online-title">온라인 대전</h2><label>대전 방식<select id="online-mode"><option value="duel">1대1 · 먼저 10킬</option><option value="ffa">개인전 · 같은 맵 최대 20명</option><option value="team">팀전 · 최대 10대10</option></select></label><p>개인전은 먼저 10킬, 팀전은 팀 합계 30킬입니다. 개인전·팀전은1명부터 시작할 수 있고, 진행 중에도 최대20명까지 합류합니다. 1대1은2명이 필요합니다.</p><p id="online-map"></p><label>캐릭터<select id="online-character"><option value="robot">소형 로봇</option><option value="robot-cat">고양이형 로봇</option></select></label><label>시작 무기<select id="online-weapon"><option value="pistol">권총</option><option value="machinegun">기관총</option><option value="shotgun">산탄총</option><option value="sniper">저격총</option></select></label><div class="online-actions"><button id="online-create">방 만들기</button><button id="online-quick">자동 매칭</button></div><label>방 코드<input id="online-code" maxlength="8" autocomplete="off" placeholder="8자리 코드"></label><button id="online-join">코드로 입장</button><p id="online-message" role="status"></p><p>온라인 대전에서는 메뉴를 열어도 상대의 경기는 계속됩니다.</p></div></section>
   <div id="lobby-deploy-transition" class="lobby-deploy-transition" role="status" hidden><div><span>HARBOR / DEPLOYMENT</span><strong>출격 중</strong><i></i></div></div>
   ${RESULTS_MARKUP}
-  <div id="mouse-aim-hint" class="mouse-only" hidden>마우스를 움직여 조준 · 메뉴에서 마우스 고정 가능</div>
-  <canvas id="game" tabindex="0" aria-label="항구 도시 1인칭 탐색. WASD로 이동하고 화면을 드래그해 시점을 돌립니다."></canvas>
+  <div id="mouse-aim-hint" class="mouse-only" hidden>게임 화면을 클릭해 마우스 고정 · Esc로 게임 메뉴</div>
+  <canvas id="game" tabindex="0" aria-label="항구 도시 1인칭 탐색. WASD로 이동하고 마우스 이동 또는 터치 드래그로 조준합니다."></canvas>
   <header class="topbar">
     <div class="brand"><span class="eyebrow">HARBOR / FIRST PERSON</span><h1>항구의 밤<span>1인칭</span></h1></div>
     <button id="menu-toggle" aria-expanded="false" aria-controls="game-toolbar">메뉴</button>
@@ -72,7 +72,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <section class="help" id="help" hidden>
     <button id="help-close" class="panel-close" aria-label="도움말 닫기">닫기</button><h2>조작과 게임 안내</h2><p>수류탄 G · 섬광탄 B · 회복키트 H 또는 장비 버튼. 각 2개까지 소지하며 상자에서 얻습니다. 회복은 2초 후 50 회복하며 사격/피격 시 취소됩니다. 무기·장비 상자는 매판 야외와 건물 1·2층의 다른 위치에 놓입니다.</p><p>초록 입구와 ‘출입 가능’ 표지가 있는 건물은 1층·2층·옥상에 갈 수 있습니다. 입구에서 E 또는 문 버튼으로 문을 열고 닫습니다. 보급 상자가 가까우면 E는 획득을 우선합니다. 서쪽 계단으로 2층, 동쪽 계단으로 옥상에 오릅니다. 2층·옥상의 중앙 출구로 발코니에 나가 가장자리에서 뛰어내릴 수 있습니다. 고층 사격 시 상대 지도에 4초간 위치가 표시됩니다. C는 앉기, Z는 엎드리기이며 같은 키를 다시 누르면 일어납니다. 몹도 문과 계단으로 추격합니다. 몹은 건물 밖 지상에서만 생성됩니다. 부활 후 3초 동안 보호되며 사격하면 해제됩니다.</p><p>대시: PC F키 또는 대시 버튼. 이동 방향(멈췄다면 보는 방향)으로 4m를 0.2초에 이동하며 사용 시점부터 3초 뒤 다시 사용할 수 있습니다. 지상에서만 시작하고 대시 중 점프는 불가합니다. 사격·재장전은 가능하며 무적이나 벽 관통은 없습니다.</p><p>생존 자동 난이도는 9단계이며 보통에 해당하는 5단계에서 시작합니다. 총 20웨이브입니다. 체력 50 이상으로 2웨이브 연속 클리어하면 한 단계 상승하고, 사망 후 재도전할 때 한 단계 내려갑니다. 조준·경고 시간과 이동·좌우 이동 속도가 조금씩 변하며 전투 중에는 유지됩니다.</p><p>생존: 생명 3개, 쉬움 10·보통 20·어려움 30웨이브. 동시 최대 3명이며 첫 적 4명에서 2웨이브마다 1명씩 늘어 최대 12명입니다. 적 부활·증원 대기는 1.5초입니다. 준비 시간은 5초이며 체력·탄창을 회복합니다. 사망 시 3초 후 현재 웨이브의 적·상자와 소지 무기를 초기화해 시작 총으로 재도전합니다.</p><p>봇 3명 개인전에서는 봇끼리 싸우지 않고 나만 공격합니다. 나와 각 봇의 점수를 따로 기록하며 먼저 10킬이면 승리합니다. 사망하면 3초 후 다른 캐릭터들과 먼 지점에서 시작 총으로 부활합니다.</p><p>봇 대전은 쉬움·보통·어려움 중 선택합니다. 보통·어려움은 더 빨리 조준하고 좌우로 움직이며, 발사 경고 중에는 멈춥니다. 난이도를 변경하면 새 경기를 시작합니다.</p><p>보급 상자 근처에서 E키 또는 획득 버튼으로 무기를 줍습니다. 최대 3개를 소지하며 숫자 1~3 또는 아래 슬롯 버튼으로 바꿉니다. 가득 차면 버릴 총을 선택하세요. 상자는 20초 후 다시 나오며, 사망하면 시작 총만 남습니다.</p>
     <p>로봇의 눈높이에서 거리를 탐색합니다. 화면 중앙의 조준점이 바라보는 방향입니다.</p>
-    <p><strong>PC</strong> WASD 이동 · Shift 달리기 · 마우스를 움직여 시점 변경 · 클릭하지 않아도 게임 화면 위의 마우스 이동으로 조준합니다. 화면 가장자리 제한 없이 조준하려면 메뉴의 마우스 고정을 사용하세요. Esc를 누르면 고정을 해제하고 일시정지합니다.</p>
+    <p><strong>PC</strong> WASD 이동 · Shift 달리기 · 마우스를 움직여 조준. 게임 중 마우스가 고정되어 화면 가장자리 없이 회전할 수 있습니다. Esc를 누르면 고정이 풀리고 게임 메뉴가 열립니다.</p>
     <p><strong>휴대폰</strong> 왼쪽 스틱 이동 · 화면 빈 공간을 좌우·위아래로 드래그해 시점 변경</p>
     <p><strong>달리기</strong> PC는 Shift를 누르고 앞으로 이동하세요. 휴대폰은 스틱 위의 달리기 버튼으로 켜고 끕니다. 이동 속도는 1.5배이며 발사·재장전·확대 조준 중에는 걷습니다. 스태미나 제한은 없습니다.</p>
     <p><strong>점프</strong> 휴대폰은 점프 버튼을 누릅니다. PC는 스페이스바로 점프합니다. 메뉴에서 J키로 변경할 수 있습니다.</p>
@@ -121,10 +121,10 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <div class="character-options">
         <button data-character="robot"><span class="robot-icon" aria-hidden="true">▰<i>● ●</i></span><strong>소형 로봇</strong><span>둥근 머리 · 청록색 눈 · 작은 안테나</span><small>왼쪽 시안</small></button>
         <button data-character="robot-cat"><span class="robot-icon cat-icon" aria-hidden="true">▲ ▲<i>◆ ◆</i></span><strong>고양이형 로봇</strong><span>뾰족한 귀 · 금빛 눈 · 기계 꼬리</span><small>오른쪽 시안</small></button>
-      </div><button id="character-start" class="character-start">시작 · 드래그로 조준</button><button id="character-start-locked" class="character-start mouse-only">마우스 고정하고 시작</button><p id="pointer-status" role="status"></p><p class="character-note">캐릭터를 고르면 오른쪽에서 실제 3D 모델을 볼 수 있습니다.</p>
+      </div><button id="character-start" class="character-start">게임 시작</button><p class="character-note">캐릭터를 고르면 오른쪽에서 실제 3D 모델을 볼 수 있습니다.</p>
     </div>
   </section>
-  <section id="pause-panel" class="pause-panel" role="dialog" aria-modal="true" aria-labelledby="pause-title" hidden><div><h2 id="pause-title">일시정지</h2><p id="pause-description">전투와 이동이 멈췄습니다.</p><button id="resume">계속하기</button><button id="resume-locked" class="mouse-only">마우스 고정하고 계속</button><p id="pause-lock-status" role="status"></p></div></section>
+  <section id="pause-panel" class="pause-panel" role="dialog" aria-modal="true" aria-labelledby="pause-title" hidden><div><h2 id="pause-title">일시정지</h2><p id="pause-description">전투와 이동이 멈췄습니다.</p><button id="resume">계속하기</button><button id="pause-menu">게임 메뉴</button><button id="resume-locked" class="mouse-only" hidden>마우스 고정 다시 시도</button><p id="pause-lock-status" role="status"></p></div></section>
   <div class="loading" id="loading" role="status"><div class="loading-ring"></div><p>밤의 거리를 준비하고 있습니다</p></div>
   <footer class="phase-note">표적 연습 · 봇 1대1 · 봇 3명 개인전</footer>
 `;
@@ -162,7 +162,7 @@ async function start() {
     world.setQuality(qualityHigh);world.setPerformanceLow?.(graphicsMode==='low');engine.resize();world.resize();
   });
   const effectsSetting=document.querySelector<HTMLSelectElement>('#shot-effects')!;let reducedShots=mobile;try{const saved=localStorage.getItem('harbor-shot-effects');if(saved)reducedShots=saved==='low';}catch{}effectsSetting.value=reducedShots?'low':'full';world.setReducedShots?.(reducedShots);effectsSetting.addEventListener('change',()=>{reducedShots=effectsSetting.value==='low';world.setReducedShots?.(reducedShots);try{localStorage.setItem('harbor-shot-effects',effectsSetting.value);}catch{}});
-  const input = createInput(canvas,{mouseScale:()=>world.scoped?.3:1});
+  const input = createInput(canvas,{mouseScale:()=>world.scoped?.3:1,requestMouseLock:()=>requestGameplayMouseLock()});
   input.setEnabled(false);input.setInvertY(preferences.value.invertY);input.setMouseSensitivity?.(preferences.value.mouse);input.setJumpKey(preferences.value.jump);document.querySelector<HTMLSelectElement>('#jump-key')!.value=preferences.value.jump;
   const sensitivity=document.querySelector<HTMLInputElement>('#look-sensitivity')!;
   const setSensitivity=(value:number)=>{
@@ -273,37 +273,74 @@ async function start() {
   document.querySelector('#waiting-start')!.addEventListener('click',()=>online.control('start'));document.querySelector('#waiting-deploy')!.addEventListener('click',()=>online.control('deploy'));document.querySelector('#waiting-leave')!.addEventListener('click',()=>openHome());document.querySelector('#waiting-copy')!.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(onlineCode);document.querySelector('#waiting-status')!.textContent='방 코드를 복사했습니다.';}catch{document.querySelector('#waiting-status')!.textContent='초대 코드 '+onlineCode;}});
   let homeOpen=true;
   let manualPaused=false,hasPlayed=false,wasLocked=false;
+  let mouseLockPending=false,mouseLockFallback=false;
   const pausePanel=document.querySelector<HTMLElement>('#pause-panel')!;
+  const aimHint=document.querySelector<HTMLElement>('#mouse-aim-hint')!;
+  const lockStatus=document.querySelector<HTMLElement>('#pause-lock-status')!;
+  const retryLock=document.querySelector<HTMLButtonElement>('#resume-locked')!;
   const pauseGame=()=>{
-    if(settingsView.isOpen||!hasPlayed||homeOpen||!picker.hidden||resultView.isOpen||gameChoices.isOpen)return;
+    if(settingsView.isOpen||!hasPlayed||homeOpen||roomWaiting||!picker.hidden||resultView.isOpen||gameChoices.isOpen)return;
     manualPaused=true;input.setEnabled(false);audio.pause(true);
     if(document.pointerLockElement)document.exitPointerLock();
     pausePanel.hidden=false;document.querySelector<HTMLButtonElement>('#resume')!.focus();
   };
   const resumeGame=()=>{manualPaused=false;pausePanel.hidden=true;input.reset();canvas.focus();};
-  const reportMouseLock=(message:string)=>{
-    for(const id of ['pointer-status','pause-lock-status'])document.querySelector(`#${id}`)!.textContent=message;
-    if(message){pauseGame();document.querySelector('#pause-lock-status')!.textContent=message;}
+  const reportMouseLock=()=>{
+    if(!mouseLockPending)return;
+    mouseLockPending=false;mouseLockFallback=true;retryLock.hidden=false;
+    lockStatus.textContent='마우스를 고정하지 못했습니다. 계속하기를 누르면 커서로 조준할 수 있습니다.';
+    aimHint.textContent='마우스 고정 실패 · 게임 메뉴에서 다시 시도';
+    pauseGame();
   };
-  document.addEventListener('pointerlockerror',()=>reportMouseLock('마우스를 고정하지 못했습니다. 계속하기로 드래그 조준을 사용하거나 고정을 다시 시도하세요.'));
-  const lockMouse=()=>{
-    const report=reportMouseLock;
-    if(!canvas.requestPointerLock){report('마우스 고정을 지원하지 않습니다. 계속하기를 누르면 드래그로 조준할 수 있습니다.');return;}
-    try{const result=canvas.requestPointerLock();result?.catch(()=>report('마우스를 고정하지 못했습니다. 계속하기로 드래그 조준을 사용하거나 고정을 다시 시도하세요.'));}catch{report('마우스를 고정하지 못했습니다. 계속하기로 드래그 조준을 사용할 수 있습니다.');}
-  };
+  document.addEventListener('pointerlockerror',reportMouseLock);
+  function lockMouse(){
+    if(document.pointerLockElement===canvas||mouseLockPending)return true;
+    if(!canvas.requestPointerLock){
+      aimHint.textContent='이 브라우저에서는 커서로 조준합니다.';
+      return false;
+    }
+    mouseLockPending=true;
+    try{canvas.requestPointerLock()?.catch(reportMouseLock);}
+    catch{reportMouseLock();}
+    return true;
+  }
+  function requestGameplayMouseLock(){return !mobile&&!mouseLockFallback&&lockMouse();}
+  function retryMouseLock(){mouseLockFallback=false;canvas.focus();lockMouse();}
   document.querySelector('#pause-open')!.addEventListener('click',pauseGame);
-  document.querySelector('#resume')!.addEventListener('click',()=>{resumeGame();});
-  document.querySelector('#resume-locked')!.addEventListener('click',()=>{resumeGame();lockMouse();});
-  document.querySelector('#pointer-lock')!.addEventListener('click',()=>{canvas.focus();lockMouse();});
-  document.addEventListener('pointerlockchange',()=>{const locked=document.pointerLockElement===canvas;if(locked){for(const id of ['pointer-status','pause-lock-status'])document.querySelector('#'+id)!.textContent='';}if(wasLocked&&!locked)pauseGame();wasLocked=locked;});
+  document.querySelector('#resume')!.addEventListener('click',()=>{resumeGame();requestGameplayMouseLock();});
+  retryLock.addEventListener('click',()=>{resumeGame();retryMouseLock();});
+  document.querySelector('#pointer-lock')!.addEventListener('click',retryMouseLock);
+  document.addEventListener('pointerlockchange',()=>{
+    const locked=document.pointerLockElement===canvas,unlocked=wasLocked&&!locked;
+    wasLocked=locked;mouseLockPending=false;
+    if(locked){
+      if(homeOpen||roomWaiting||manualPaused||!picker.hidden||settingsView.isOpen||resultView.isOpen){
+        document.exitPointerLock();return;
+      }
+      lockStatus.textContent='';retryLock.hidden=true;
+      aimHint.textContent='게임 화면을 클릭해 마우스 고정 · Esc로 게임 메뉴';
+    }
+    if(unlocked&&!manualPaused&&!menuOpen&&!comparing&&help.hidden&&canOpenGameMenu())openGameMenu();
+  });
   window.addEventListener('blur',pauseGame);
   document.addEventListener('visibilitychange',()=>{if(document.hidden)pauseGame();});
   let menuOpen=false;
   const menuButton=document.querySelector<HTMLButtonElement>('#menu-toggle')!;
-  const closeMenu=()=>{menuOpen=false;document.body.classList.remove('menu-open');menuButton.setAttribute('aria-expanded','false');input.reset();};
+  const closeMenu=()=>{menuOpen=false;document.body.classList.remove('menu-open');menuButton.setAttribute('aria-expanded','false');menuButton.textContent='메뉴';input.reset();};
+  function canOpenGameMenu(){
+    return hasPlayed&&!homeOpen&&!roomWaiting&&picker.hidden&&!settingsView.isOpen&&!resultView.isOpen&&!gameChoices.isOpen;
+  }
+  function openGameMenu(){
+    manualPaused=false;pausePanel.hidden=true;menuOpen=true;
+    document.body.classList.add('menu-open');menuButton.setAttribute('aria-expanded','true');menuButton.textContent='계속하기';
+    input.setEnabled(false);closeHelp();
+    if(document.pointerLockElement)document.exitPointerLock();
+    menuButton.focus();
+  }
+  document.querySelector('#pause-menu')!.addEventListener('click',openGameMenu);
   menuButton.addEventListener('click',()=>{
-    menuOpen=!menuOpen;document.body.classList.toggle('menu-open',menuOpen);menuButton.setAttribute('aria-expanded',String(menuOpen));input.setEnabled(false);input.reset();
-    if(menuOpen){document.querySelector<HTMLElement>('#help')!.hidden=true;document.querySelector('#help-toggle')!.setAttribute('aria-expanded','false');if(document.pointerLockElement)document.exitPointerLock();}
+    if(menuOpen){closeMenu();canvas.focus();requestGameplayMouseLock();}
+    else if(canOpenGameMenu())openGameMenu();
   });
   document.querySelector('#game-toolbar')!.addEventListener('click',event=>{if((event.target as HTMLElement).closest('button'))closeMenu();});
   document.querySelector('#game-toolbar')!.addEventListener('change',closeMenu);
@@ -341,7 +378,7 @@ async function start() {
   const choices = [...document.querySelectorAll<HTMLButtonElement>('[data-character]')];
   const startButton = document.querySelector<HTMLButtonElement>('#character-start')!;
   const refreshCharacter = () => choices.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.character === world.characterType)));
-  const openPicker = () => { setComparison(false);input.setEnabled(false);document.querySelector<HTMLSelectElement>('#start-mode')!.value=document.querySelector<HTMLSelectElement>('#game-mode')!.value;document.querySelector<HTMLSelectElement>('#start-difficulty')!.value=document.querySelector<HTMLSelectElement>('#bot-difficulty')!.value;document.querySelector<HTMLSelectElement>('#start-weapon')!.value=document.querySelector<HTMLSelectElement>('#weapon-select')!.value; input.reset(); if (document.pointerLockElement) document.exitPointerLock(); world.setPreview(true); refreshCharacter(); picker.hidden = false; choices[0]!.focus(); };
+  const openPicker = () => { picker.hidden=false;setComparison(false);input.setEnabled(false);document.querySelector<HTMLSelectElement>('#start-mode')!.value=document.querySelector<HTMLSelectElement>('#game-mode')!.value;document.querySelector<HTMLSelectElement>('#start-difficulty')!.value=document.querySelector<HTMLSelectElement>('#bot-difficulty')!.value;document.querySelector<HTMLSelectElement>('#start-weapon')!.value=document.querySelector<HTMLSelectElement>('#weapon-select')!.value;input.reset();world.setPreview(true);refreshCharacter();choices[0]!.focus(); };
   const home=document.querySelector<HTMLElement>('#home-screen')!;
   const openHome=()=>{settingsView.close();roomWaiting=false;guestPromptPending=false;nicknameDialog.cancel();waitingView.hide();nameplates.clear();document.querySelector('#online-player-list')!.replaceChildren();document.querySelector('#roster-lines')!.replaceChildren();document.body.classList.remove('in-waiting-room');onlineBoard.open=false;pendingEquipment=undefined;onlineToolEventId=-1;void accountView.refreshGrowth().catch(()=>{});predictionDash=predictionJump=false;localDash=cancelDash(localDash);lobbyPolish.cancelDeploy();lobbyPolish.cancelDrag();gameChoices.close();syncHomeSelection();resultTracker.cancel();resultView.hide();online.leave();onlineMotion.reset();remoteMotion.reset();onlineAudio.reset();pendingDoor=undefined;pendingSlot=undefined;pendingTake=undefined;choosePickupId=undefined;onlineActive=false;onlineState=null;onlineShots.reset();onlineTools.reset();onlineId='';onlineEventId=-1;world.endOnline();onlineLobby.hidden=true;updateOnlineControls(false);homeOpen=true;home.hidden=false;document.body.classList.add('at-home');manualPaused=false;pausePanel.hidden=true;closeMenu();document.querySelector<HTMLElement>('#help')!.hidden=true;picker.hidden=true;setComparison(false);input.setEnabled(false);world.setPreview(true,true);document.querySelector<HTMLButtonElement>('#home-start')!.focus();};
   document.querySelector('#online-back')!.addEventListener('click',openHome);
@@ -353,7 +390,6 @@ async function start() {
     if (!isCharacterType(type)) return;
     world.selectCharacter(type); refreshCharacter(); input.reset();
   }));
-  const startLocked=document.querySelector<HTMLButtonElement>('#character-start-locked')!;
   let homeMatchPending=true;
   const syncDifficultyOptions=()=>{
     for(const [modeId,levelId] of [['game-mode','bot-difficulty'],['start-mode','start-difficulty']]){
@@ -363,7 +399,7 @@ async function start() {
     }
   };
   document.querySelector('#start-mode')!.addEventListener('change',syncDifficultyOptions);
-  const beginGame=(locked:boolean)=>{
+  const beginGame=()=>{
     syncDifficultyOptions();
     const mode=document.querySelector<HTMLSelectElement>('#game-mode')!;
     const weapon=document.querySelector<HTMLSelectElement>('#weapon-select')!;
@@ -374,15 +410,14 @@ async function start() {
     mode.value=nextMode;weapon.value=nextWeapon;if(isSurvivalDifficulty(nextDifficulty))difficulty.value=nextDifficulty;
     if((changed||homeMatchPending)&&isWeaponId(nextWeapon)){world.setMode(readMode(nextMode),isSurvivalDifficulty(nextDifficulty)?nextDifficulty:'easy');world.selectWeapon(nextWeapon);restart();}
     homeOpen=false;home.hidden=true;document.body.classList.remove('at-home');homeMatchPending=false;void audio.unlock();input.reset();picker.hidden=true;world.setPreview(false);closeMenu();hasPlayed=true;resumeGame();
-    if(locked)lockMouse();
+    mouseLockFallback=false;requestGameplayMouseLock();
   };
-  startButton.addEventListener('click',()=>beginGame(false));
-  startLocked.addEventListener('click',()=>beginGame(true));
+  startButton.addEventListener('click',beginGame);
   function switchMap(map:MapId,type=world.characterType){if(map===selectedMap)return;world.scene.dispose();world=createHarborScene(engine,{map});selectedMap=map;world.selectCharacter(type);world.setQuality(qualityHigh);world.setShadows?.(preferences.value.shadows);world.setPerformanceLow?.(graphicsMode==='low'||graphicsMode==='auto'&&budget.density<=.85);world.setReducedShots?.(reducedShots);world.setShake(shake.value==='off'||shake.value==='normal'?shake.value:'low');world.setPreview(true,true);}
   const homeView=createHomeScreen({
     selectCharacter(type){world.selectCharacter(type);refreshCharacter();lobbyCue('ui');if(!reducedLobbyMotion.matches)document.querySelector('#home-character-name')?.animate?.([{opacity:.3},{opacity:1}],{duration:180});},
     selectWeapon(id){world.setLobbyWeapon(id);lobbyCue('ui');if(!reducedLobbyMotion.matches)document.querySelector('#home-equipped-art')?.animate?.([{opacity:.3,transform:'translateX(-6px)'},{opacity:1,transform:'translateX(0)'}],{duration:180});},
-    start(selection,locked){
+    start(selection){
       const map=document.querySelector<HTMLSelectElement>('#home-map')!.value;
       const nextMap:MapId=growthLoggedIn&&currentGrowth.level>=3&&map==='factory'?'factory':'harbor';
       switchMap(nextMap,selection.character);
@@ -391,7 +426,7 @@ async function start() {
         document.querySelector<HTMLSelectElement>('#online-character')!.value=selection.character;document.querySelector<HTMLSelectElement>('#online-weapon')!.value=selection.weapon;openOnlineLobby();return;
       }
       document.querySelector<HTMLSelectElement>('#start-mode')!.value=selection.mode;document.querySelector<HTMLSelectElement>('#start-difficulty')!.value=selection.difficulty;document.querySelector<HTMLSelectElement>('#start-weapon')!.value=selection.weapon;
-      lobbyPolish.deploy();lobbyCue('deploy');homeMatchPending=true;beginGame(locked);
+      lobbyPolish.deploy();lobbyCue('deploy');homeMatchPending=true;beginGame();
     },
   });
   function syncHomeSelection(){
@@ -547,7 +582,7 @@ async function start() {
   const resultView=createResultsView(journal,{
     opened(){settingsView.close();lobbyPolish.cancelDeploy();gameChoices.close();input.setEnabled(false);input.reset();pausePanel.hidden=true;manualPaused=false;closeMenu();help.hidden=true;if(document.pointerLockElement)document.exitPointerLock();audio.pause(true);},
     home:openHome,
-    retry(isOnline){if(isOnline){openHome();openOnlineLobby();}else{restart();resumeGame();}},
+    retry(isOnline){if(isOnline){openHome();openOnlineLobby();}else{restart();resumeGame();requestGameplayMouseLock();}},
   });
   document.querySelector('#home-records')!.addEventListener('click',()=>resultView.history());
   function toggleScope(){
@@ -565,18 +600,18 @@ async function start() {
   document.querySelector<HTMLButtonElement>('#scope')!.addEventListener('click',event=>{if(event.detail===0)toggleScope();});
   const help = document.querySelector<HTMLElement>('#help')!;
   const closeHelp=()=>{help.hidden=true;document.querySelector('#help-toggle')!.setAttribute('aria-expanded','false');input.reset();};
-  document.querySelector('#pause-continue')!.addEventListener('click',()=>{closeHelp();closeMenu();resumeGame();});
+  document.querySelector('#pause-continue')!.addEventListener('click',()=>{closeHelp();closeMenu();resumeGame();requestGameplayMouseLock();});
   document.querySelector('#help-close')!.addEventListener('click',()=>{closeHelp();canvas.focus();});
   document.querySelector('#help-toggle')!.addEventListener('click', event => {
     help.hidden = !help.hidden;input.setEnabled(false);input.reset();
     (event.currentTarget as HTMLElement).setAttribute('aria-expanded', String(!help.hidden));
   });
   window.addEventListener('keydown',event=>{
-    if(event.code!=='Escape'||homeOpen||!picker.hidden)return;
+    if(event.code!=='Escape'||event.repeat||!canOpenGameMenu())return;
     if(!help.hidden){event.preventDefault();closeHelp();canvas.focus();}
     else if(comparing){event.preventDefault();setComparison(false);}
-    else if(menuOpen){event.preventDefault();closeMenu();canvas.focus();}
-    else if(!manualPaused&&!document.pointerLockElement){event.preventDefault();pauseGame();}
+    else if(menuOpen){event.preventDefault();}
+    else{event.preventDefault();openGameMenu();}
   });
   pausePanel.addEventListener('keydown',event=>{if(event.key!=='Tab')return;event.preventDefault();const buttons=[...pausePanel.querySelectorAll<HTMLButtonElement>('button')].filter(button=>button.getClientRects().length>0);const index=buttons.indexOf(document.activeElement as HTMLButtonElement);buttons[(index+(event.shiftKey?buttons.length-1:1))%buttons.length]!.focus();});
   let resizeFrame=0,lastWidth=window.innerWidth;
@@ -649,7 +684,7 @@ async function start() {
     lobbyPolish.update();world.setLobbyMotion(!reducedLobbyMotion.matches&&!settingsView.isOpen&&!document.hidden&&document.hasFocus()&&!gameChoices.isOpen&&!resultView.isOpen);audio.setInterfaceActive(!document.hidden&&document.hasFocus());
     const canPlay=!settingsView.isOpen&&!roomWaiting&&!nicknameDialog.isOpen&&!onlineBoard.open&&!lobbyPolish.deploying&&!gameChoices.isOpen&&!resultView.isOpen&&!homeOpen&&!manualPaused&&!document.hidden&&!portraitTouch&&picker.hidden&&!comparing&&!menuOpen&&help.hidden&&document.hasFocus();
     input.setEnabled(canPlay);
-    document.querySelector<HTMLElement>('#mouse-aim-hint')!.hidden=!canPlay||document.pointerLockElement===canvas;
+    aimHint.hidden=!canPlay||document.pointerLockElement===canvas;
     document.querySelector('#pause-description')!.textContent=onlineActive?'내 조작만 멈춥니다. 상대의 경기는 계속됩니다.':'전투와 이동이 멈췄습니다.';
     document.querySelector<HTMLElement>('#pause-indicator')!.hidden=manualPaused||!picker.hidden||comparing||portraitTouch||(!menuOpen&&help.hidden);
     if(uiTick)refreshEquipment();

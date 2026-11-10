@@ -20,12 +20,12 @@ export const HOME_MARKUP=`
    <div class="home-map-setting"><label>전장<select id="home-map"><option value="harbor">항구 지구</option><option value="factory" disabled>폐공장 · Lv3 해금</option></select></label></div><div class="home-mode-tabs" role="group" aria-label="플레이 종류"><button id="home-bot" aria-pressed="true">봇 대전</button><button id="home-online" aria-pressed="false">온라인</button><button id="home-practice" aria-pressed="false">연습</button></div>
    <div id="home-bot-settings" class="home-match-settings"><label>게임 모드<select id="home-mode"><option value="duel">봇 1대1</option><option value="ffa">봇 3명 개인전</option><option value="survival">웨이브 생존</option></select></label><label>난이도<select id="home-difficulty"><option value="easy">쉬움</option><option value="normal">보통</option><option value="hard">어려움</option><option value="auto" disabled hidden>자동 · 생존 9단계</option></select></label></div>
    <p id="home-mode-summary" class="home-mode-summary" role="status"></p>
-   <div class="home-start-actions"><button id="home-start"><span>게임 시작</span><span aria-hidden="true">→</span></button><button id="home-start-locked" class="mouse-only">마우스 고정하고 시작</button></div>
+   <div class="home-start-actions"><button id="home-start"><span>게임 시작</span><span aria-hidden="true">→</span></button></div>
   </section>
  </div>
  <footer class="lobby-footer"><span>항구의 밤 · NIGHT ARENA</span><span>PC · WASD / 마우스 &nbsp; 모바일 · 가로 / 터치</span></footer>
 </section>`;
-export function createHomeScreen(actions:{selectCharacter(type:CharacterType):void;selectWeapon(id:WeaponId):void;start(selection:HomeSelection,locked:boolean):void}){
+export function createHomeScreen(actions:{selectCharacter(type:CharacterType):void;selectWeapon(id:WeaponId):void;start(selection:HomeSelection):void}){
  const el=(id:string)=>document.querySelector<HTMLElement>('#'+id)!;
  const mode=el('home-mode') as HTMLSelectElement,difficulty=el('home-difficulty') as HTMLSelectElement,character=el('home-character') as HTMLSelectElement,weapon=el('home-weapon') as HTMLSelectElement;
  const map=el('home-map') as HTMLSelectElement;
@@ -40,12 +40,12 @@ export function createHomeScreen(actions:{selectCharacter(type:CharacterType):vo
   const selection=read();el('home-character-name').textContent=characterNames[selection.character];el('home-character-code').textContent=selection.character==='robot'?'UNIT / 01':selection.character==='welder'?'UNIT / 03':'UNIT / 02';
   const spec=upgradedWeapon(selection.weapon,tier,category==='bot');el('home-equipped-art').innerHTML=weaponArt(selection.weapon);el('home-loadout-summary').textContent=`${spec.name} · 피해 ${spec.pellets>1?Number(spec.damage.toFixed(2))+'×'+spec.pellets:Number(spec.damage.toFixed(2))} · ${spec.magazineSize}발 · 재장전 ${Number(spec.reloadSeconds.toFixed(2))}초`;
   el('home-mode-summary').textContent=category==='online'?'개인전·팀전 1~20명 · 경기 중 참가':category==='practice'?'표적 3개 · 이동과 조준 연습':mode.value==='survival'?`생명 3개 · ${difficulty.value==='hard'?30:difficulty.value==='easy'?10:20}웨이브${difficulty.value==='auto'?' · 자동 5/9단계 시작':''}`:mode.value==='ffa'?'나와 봇 3명 · 먼저 10킬':'봇 1대1 · 먼저 10킬';
-  el('home-start').querySelector('span')!.textContent=category==='online'?'온라인 로비 입장':'게임 시작';el('home-start-locked').hidden=category==='online';
+  el('home-start').querySelector('span')!.textContent=category==='online'?'온라인 로비 입장':'게임 시작';
  }
  el('lobby-tab-home').addEventListener('click',()=>el('home-start').focus());el('lobby-tab-character').addEventListener('click',()=>el('home-character-trigger').click());el('lobby-tab-loadout').addEventListener('click',()=>el('home-weapon-trigger').click());
  for(const [id,value] of [['home-bot','bot'],['home-online','online'],['home-practice','practice']] as const)el(id).addEventListener('click',()=>{category=value;refresh();});
  map.addEventListener('change',refresh);
  character.addEventListener('change',()=>{if(isCharacterType(character.value))actions.selectCharacter(character.value);refresh();});weapon.addEventListener('change',()=>{if(isWeaponId(weapon.value))actions.selectWeapon(weapon.value);refresh();});mode.addEventListener('change',refresh);difficulty.addEventListener('change',refresh);
- el('home-start').addEventListener('click',()=>actions.start(read(),false));el('home-start-locked').addEventListener('click',()=>actions.start(read(),true));refresh();
+ el('home-start').addEventListener('click',()=>actions.start(read()));refresh();
  return {read,setTier(value:number){tier=value;refresh();},sync(selection:HomeSelection){character.value=selection.character;weapon.value=selection.weapon;category=selection.mode==='online'?'online':selection.mode==='practice'?'practice':'bot';if(category==='bot')mode.value=selection.mode;difficulty.value=isSurvivalDifficulty(selection.difficulty)?selection.difficulty:'easy';refresh();}};
 }

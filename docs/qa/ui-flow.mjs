@@ -2,7 +2,6 @@ import {WEAPONS} from '../../src/weapons.ts';
 import {createNetworkGame} from '../../src/network-game.ts';
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 // Optional DOM-only smoke check. No browser, WebGL or device performance assertions.
 // Add --online-event-loss to run the known failing snapshot/feedback regressions.
@@ -42,7 +41,7 @@ const hooks=registerHooks({load(url,context,next){
  return next(url,context);
 }});
 globalThis.setInterval=()=>0;
-await import(fileURLToPath(new URL('../../src/main.ts',import.meta.url)));await new Promise(resolve=>setImmediate(resolve));
+await import(new URL('../../src/main.ts',import.meta.url).href);await new Promise(resolve=>setImmediate(resolve));
 const el=id=>document.querySelector('#'+id);
 const click=id=>{el(id).dispatchEvent(new window.Event('click',{bubbles:true}));if(!el('lobby-deploy-transition')?.hidden)uiNow+=350;};
 const change=(id,value)=>{el(id).value=value;el(id).dispatchEvent(new window.Event('change',{bubbles:true}));};
@@ -74,17 +73,32 @@ click('help-toggle');click('reference-open');frame();assert.equal(el('comparison
 click('help-toggle');key('keydown','Escape');assert.equal(el('help').hidden,true);
 el('look-sensitivity').value='150';el('look-sensitivity').dispatchEvent(new window.Event('input'));assert.equal(storage.get('harbor-touch-sensitivity'),'1.5');
 change('screen-shake','off');assert.equal(calls.shake,'off');assert.equal(storage.get('harbor-screen-shake'),'off');
-// The explicit lock gesture never reaches the canvas firing handlers.
+// The ordinary desktop start captures the mouse and uses relative movement.
 el('game').requestPointerLock=()=>{calls.lock++;document.pointerLockElement=el('game');document.dispatchEvent(new window.Event('pointerlockchange'));return Promise.resolve();};
 if(!coarse){
  click('home-open');click('home-start');frame();
- const move=(x,y)=>el('game').dispatchEvent(Object.assign(new window.Event('pointermove',{bubbles:true}),{pointerType:'mouse',pointerId:99,clientX:x,clientY:y}));
- const beforeLook=calls.updates.at(-1).look.yaw;move(300,200);move(380,200);frame();assert.ok(calls.updates.at(-1).look.yaw>beforeLook,'unlocked hover reaches the world camera without any click');assert.equal(calls.lock,0);assert.equal(calls.shot,0);
- click('pause-open');frame();const pausedLook=calls.updates.at(-1).look.yaw;move(600,200);frame();assert.equal(calls.updates.at(-1).look.yaw,pausedLook);click('resume');frame();move(600,200);frame();assert.equal(calls.updates.at(-1).look.yaw,pausedLook,'first resumed motion cannot snap');move(620,200);frame();assert.ok(calls.updates.at(-1).look.yaw>pausedLook);
+ assert.equal(document.pointerLockElement,el('game'),'ordinary desktop start locks the cursor');
+ const move=()=>document.dispatchEvent(Object.assign(new window.Event('mousemove'),{movementX:40,movementY:0,clientX:1279,clientY:200}));
+ const beforeLook=calls.updates.at(-1).look.yaw;move();frame();
+ const firstLook=calls.updates.at(-1).look.yaw;assert.ok(firstLook>beforeLook);
+ move();frame();assert.ok(calls.updates.at(-1).look.yaw>firstLook,'relative motion keeps turning at a fixed screen edge');
+ document.exitPointerLock();assert.equal(el('menu-toggle').getAttribute('aria-expanded'),'true');
+ click('menu-toggle');frame();assert.equal(document.pointerLockElement,el('game'),'continue captures again');
+ assert.equal(calls.shot,0);
+}else{
+ click('home-open');click('home-start');frame();
+ assert.ok(!document.pointerLockElement,'touch start does not capture the pointer');
 }
-click('pointer-lock');frame();assert.equal(calls.lock,1);assert.equal(calls.shot,0);
-document.exitPointerLock();assert.equal(el('pause-panel').hidden,false,'Esc/unlock pauses');click('resume');frame();
-const supportedLock=el('game').requestPointerLock;el('game').requestPointerLock=()=>undefined;click('pointer-lock');document.dispatchEvent(new window.Event('pointerlockerror'));assert.equal(el('pause-panel').hidden,false,'legacy pointerlockerror must show recovery');assert.ok(el('pause-lock-status').textContent.includes('드래그'));click('resume');frame();el('game').requestPointerLock=supportedLock;
+if(!coarse){
+ key('keydown','Escape');assert.equal(el('menu-toggle').getAttribute('aria-expanded'),'true','Esc opens the game menu');
+ assert.ok(!document.pointerLockElement);
+ const supportedLock=el('game').requestPointerLock;el('game').requestPointerLock=()=>undefined;
+ click('menu-toggle');document.dispatchEvent(new window.Event('pointerlockerror'));
+ assert.equal(el('pause-panel').hidden,false,'legacy pointerlockerror must show recovery');
+ assert.ok(el('pause-lock-status').textContent.includes('커서'));
+ click('resume');frame();assert.ok(!document.pointerLockElement,'resume falls back after a denied lock');
+ el('game').requestPointerLock=supportedLock;
+}
 window.dispatchEvent(new window.Event('blur'));frame();assert.equal(el('pause-panel').hidden,false);click('resume');frame();
 click('character-open');assert.equal(el('start-weapon').value,'sniper');change('start-mode','duel');click('character-start');frame();
 battle.playerHealth=75;battle.respawnVersion=1;battle.winner='player';frame();assert.ok(calls.sounds.includes('win'));const wins=calls.sounds.filter(s=>s==='win').length;

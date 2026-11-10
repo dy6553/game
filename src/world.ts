@@ -95,13 +95,13 @@ function circleOverlapsRect(p: Point, radius: number, rect: Rect): boolean {
   return (p.x - nx) ** 2 + (p.z - nz) ** 2 < radius ** 2 - 1e-8;
 }
 
-function canStand(p: Point, radius: number, solids: readonly Rect[] = SOLIDS): boolean {
+function canStand(p: Point, radius: number, solids: readonly Rect[] = SOLIDS, requireSupport=true): boolean {
   if(!Number.isFinite(p.x)||!Number.isFinite(p.z)||
      !(Math.abs(p.x)<=PROTOTYPE.halfWidth-radius&&p.z>=-PROTOTYPE.halfDepth+radius&&p.z<=PROTOTYPE.maxZ-radius))return false;
   const feet=p.y??0,top=feet+stanceStats(p.stance).height;
   const candidates=solids===openSolids&&Math.abs(radius)<=PROTOTYPE.radius?nearbyOpenSolids(p,solids):solids;
   return !candidates.some(rect => top>(rect.yMin??0)+.02&&feet<(rect.yMax??Infinity)-.02&&circleOverlapsRect(p, radius, rect)&&(!rect.slope||feet<rect.slope.start.y+Math.max(0,Math.min(1,(p.z-rect.slope.start.z)/(rect.slope.end.z-rect.slope.start.z)))*(rect.slope.end.y-rect.slope.start.y)-.05))
-    && (upperFloorContains(p,radius)||BUILDINGS.every(b=>!b.enterable||Math.abs(p.x-b.x)>b.width/2-.4-radius||Math.abs(p.z-b.z)>b.depth/2-.4-radius));
+    && (!requireSupport||upperFloorContains(p,radius)||BUILDINGS.every(b=>!b.enterable||Math.abs(p.x-b.x)>b.width/2-.4-radius||Math.abs(p.z-b.z)>b.depth/2-.4-radius));
 }
 
 function moveWithCollisions(
@@ -118,9 +118,9 @@ function moveWithCollisions(
   let p:Point = {...position};
   for (let i = 0; i < steps; i++) {
     const nextX = elevatedStep(p,{ ...p,x: p.x + dx });
-    if (canStand(nextX, radius, solids)) p = nextX;
+    if (canStand(nextX, radius, solids,false)) p = nextX;
     const nextZ = elevatedStep(p,{ ...p,z: p.z + dz });
-    if (canStand(nextZ, radius, solids)) p = nextZ;
+    if (canStand(nextZ, radius, solids,false)) p = nextZ;
   }
   return p;
 }
@@ -133,13 +133,28 @@ function normalized(x: number, y: number): { x: number; y: number } {
 const SECOND_FLOOR=3.4;
 function balcony(b:Building,y:number):Rect{return {id:b.id+'-balcony',x:b.x,z:b.z+(b.z<0?1:-1)*(b.depth/2+1),width:DOOR_WIDTH,depth:3,yMin:y-.12,yMax:y};}
 function advanceFall(p:Point,dt:number):Point{
- if((p.y??0)<=0||dt<=0)return p;
- const panels=ENTERABLE_BUILDINGS.flatMap(b=>[...floorPanels(b,SECOND_FLOOR),...floorPanels(b,b.height)]);
- let floor=0;for(const f of panels)if(Math.abs(p.x-f.x)<=f.width/2&&Math.abs(p.z-f.z)<=f.depth/2&&(f.yMax??0)<=(p.y??0)+.05)floor=Math.max(floor,f.yMax??0);
- if(Math.abs((p.y??0)-floor)<.05)return {...p,y:floor,fallSpeed:0};
- // Stair ramps support the actor at their continuous elevation.
- for(const b of ENTERABLE_BUILDINGS)for(const ramp of stairways(b)){const t=(p.z-ramp.start.z)/(ramp.end.z-ramp.start.z);if(t>=0&&t<=1&&Math.abs(p.x-ramp.start.x)<ramp.width/2&&Math.abs((p.y??0)-(ramp.start.y+t*(ramp.end.y-ramp.start.y)))<.2)return {...p,fallSpeed:0};}
- const speed=(p.fallSpeed??0)+18*dt,next=(p.y??0)-speed*dt;
+ const y=p.y??0;
+ if(y<=0||dt<=0)return p;
+ let floor=0;
+ for(const building of ENTERABLE_BUILDINGS){
+  if(Math.abs(p.x-building.x)>building.width/2||Math.abs(p.z-building.z)>building.depth/2+2.5)continue;
+  for(const height of [SECOND_FLOOR,building.height]){
+   if(height>y+.05)continue;
+   for(const panel of floorPanels(building,height)){
+    if(Math.abs(p.x-panel.x)<=panel.width/2&&Math.abs(p.z-panel.z)<=panel.depth/2)floor=Math.max(floor,height);
+   }
+  }
+  for(const ramp of stairways(building)){
+   if(Math.abs(p.x-ramp.start.x)>ramp.width/2+PROTOTYPE.radius)continue;
+   const along=(p.z-ramp.start.z)/(ramp.end.z-ramp.start.z);
+   if(along<0||along>1)continue;
+   const height=ramp.start.y+along*(ramp.end.y-ramp.start.y);
+   if(height<=y+.05)floor=Math.max(floor,height);
+  }
+ }
+ if(y<=floor+.05)return {...p,y:floor,fallSpeed:0};
+ // Clamp the whole fall step to the highest surface below the actor.
+ const speed=(p.fallSpeed??0)+18*dt,next=y-speed*dt;
  return {...p,y:Math.max(floor,next),fallSpeed:next<=floor?0:speed};
 }
 function doorRect(b:Building):Rect{return {id:b.id+'-door',x:b.x,z:b.z+(b.z<0?1:-1)*(b.depth/2-.2),width:DOOR_WIDTH,depth:.4,yMin:0,yMax:3.2};}
@@ -174,6 +189,7 @@ function upperFloorContains(p:Point,r:number){
  });
 }
 function elevatedStep(from:Point,to:Point):Point{
+ if((from.fallSpeed??0)>0)return to;
  const y=from.y??0;let next=y;
  for(const b of ENTERABLE_BUILDINGS){if(Math.abs(to.x-b.x)>b.width/2||Math.abs(to.z-b.z)>b.depth/2+.5)continue;for(const s of stairways(b)){
   if(Math.abs(to.x-s.start.x)>s.width/2-.05)continue;
