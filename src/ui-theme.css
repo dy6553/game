@@ -90,4 +90,4 @@
 #interaction-prompts{position:absolute;inset:0;z-index:4;pointer-events:none}
 #interaction-prompts #pickup-panel,#interaction-prompts #door-panel{position:absolute;bottom:max(78px,calc(env(safe-area-inset-bottom) + 68px));left:50%;transform:translateX(-50%);width:min(38vw,360px);pointer-events:auto;text-align:center}
 .at-home #interaction-prompts,.results-open #interaction-prompts,.in-waiting-room #interaction-prompts,.environment-open #interaction-prompts,.menu-open #interaction-prompts,.choice-open #interaction-prompts{visibility:hidden}
-#posture-controls{left:calc(50% - 84px);right:auto;top:max(130px,calc(50% - 100px));width:168px;flex-direction:row;justify-content:center;transform:none}
+#posture-controls{left:max(16px,env(safe-area-inset-left));right:auto;top:max(125px,calc(50% - 90px));width:168px;flex-direction:row;justify-content:center;transform:none}
