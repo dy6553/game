@@ -25,8 +25,9 @@ export function createEquipmentVisuals(scene:Scene){
   mesh.material=material;mesh.isPickable=false;mesh.setEnabled(false);
   return {mesh,material,life:0,kind:'grenade'};
  });
- let at=0,last=-1,previousProjectileCount=0;
+ let at=0,last=-1,previousProjectileCount=0,effectsEnabled=true;
  return {
+  setEffectsEnabled(value:boolean){effectsEnabled=value;if(!value)for(const burst of bursts){burst.life=0;burst.mesh.setEnabled(false);}},
   clear(){
    last=-1;
    for(let i=0;i<previousProjectileCount;i++)balls[i]!.setEnabled(false);
@@ -52,6 +53,7 @@ export function createEquipmentVisuals(scene:Scene){
 
    for(const event of events)if(event.id>last){
     last=event.id;
+    if(!effectsEnabled)continue;
     const burst=bursts[at++%bursts.length]!;
     burst.kind=event.kind;burst.life=.5;
     burst.mesh.position.set(event.x,event.y,event.z);

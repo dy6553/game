@@ -604,7 +604,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
   let hits=0,destroyed=0,shots=0;
   const effects=createShotEffects(scene,camera);
   let preview = false, reference = false, lobbyPreview=false,lobbyMotion=true,lobbyTime=0,lobbyYaw=0,lobbyWeaponId:WeaponId='pistol';
-  const recoil=createRecoil();let reducedShots=false;
+  const recoil=createRecoil();let reducedShots=false,combatEffectsEnabled=true;
   function equip(){const slot=inventory.slots[inventory.active]!;weaponId=slot.id;spec=localSpec(weaponId);weapon=slot.weapon;cooldown=slot.cooldown;scoped=false;recoil.clear();}
   const supplies=createSupplyCrates(scene,matchPickups());
   function syncSupplies(){supplies.update(pickups,!preview&&!reference);}
@@ -797,7 +797,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     const estimates=new Map((Array.isArray(remotePosition)?remotePosition:remotePosition?[remotePosition]:[]).map(p=>[p.id,p]));const ids=new Set(state.players.filter(p=>p.id!==id&&!p.abandoned).map(p=>p.id));for(const key of remotes.keys())if(!ids.has(key))removeRemote(key);
     for(const other of state.players){if(other.id===id||other.abandoned)continue;let rig=remotes.get(other.id);
       if(!rig||rig.type!==other.character){removeRemote(other.id);const parent=new TransformNode('online-player-'+other.id,scene);parent.parent=remoteParent;const model=remoteModels.create(parent,other.character,other.weaponId!=='pistol'),body=model.meshes;
-       const fx=createRobotImpact(scene,model.root,body,{particleLimit:12});fx.setQuality(onlineQualityHigh);const marker=MeshBuilder.CreateBox('team-marker',{width:.45,height:.07,depth:.1},scene);marker.parent=parent;marker.position.y=2.95;marker.isPickable=false;rig={model,fx,parent,type:other.character,health:other.health,marker,castsShadow:false};remotes.set(other.id,rig);parent.position.set(other.x,(other.y??0)+other.jump.height,other.z);
+       const fx=createRobotImpact(scene,model.root,body,{particleLimit:12});fx.setQuality(onlineQualityHigh);fx.setEffectsEnabled(combatEffectsEnabled);const marker=MeshBuilder.CreateBox('team-marker',{width:.45,height:.07,depth:.1},scene);marker.parent=parent;marker.position.y=2.95;marker.isPickable=false;rig={model,fx,parent,type:other.character,health:other.health,marker,castsShadow:false};remotes.set(other.id,rig);parent.position.set(other.x,(other.y??0)+other.jump.height,other.z);
       }
       if(rig.health===0&&other.health>0){rig.fx.reset();rig.parent.position.set(other.x,(other.y??0)+other.jump.height,other.z);}const target=estimates.get(other.id)??other,factor=1-Math.exp(-dt*35);rig.parent.position.x+=(target.x-rig.parent.position.x)*factor;rig.parent.position.z+=(target.z-rig.parent.position.z)*factor;rig.parent.position.y+=((target.y??other.y??0)+other.jump.height-rig.parent.position.y)*factor;rig.parent.rotation.y+=Math.atan2(Math.sin(other.yaw-rig.parent.rotation.y),Math.cos(other.yaw-rig.parent.rotation.y))*factor;rig.model.root.rotation.x=other.stance==='prone'?Math.PI/2:0;rig.model.root.position.y=other.stance==='prone'?.5:0;rig.model.root.scaling.y=other.stance==='crouch'?.6:1;rig.marker.position.y=stanceStats(other.stance).height+.45;rig.marker.material=me.team!==undefined&&me.team===other.team?friendMat:enemyMat;rig.fx.update(dt);rig.parent.setEnabled(other.connected&&other.playing!==false&&(!other.guest||!!other.nickname)&&(other.health>0||rig.fx.showingDeath));rig.health=other.health;
       const shadowRadius=onlineQualityHigh?40:24;
@@ -838,6 +838,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     renderOnline,endOnline,
     effectsState:effects.stats,
     impactState:()=>({...robotImpact.stats(),recoil:recoil.read()}),
+    setCombatEffects(value:boolean){combatEffectsEnabled=value;effects.setEnabled(value);botEffects.setEnabled(value);toolVisuals.setEffectsEnabled(value);robotImpact.setEffectsEnabled(value);for(const rig of botRigs.slice(1))rig.fx.setEffectsEnabled(value);for(const rig of remotes.values())rig.fx.setEffectsEnabled(value);},
     setReducedShots(value:boolean){reducedShots=value;effects.setReduced(value);botEffects.setReduced(value||lowPerformance);},
     setShake(level:ShakeLevel){recoil.setShake(level);},
     setShadows(enabled:boolean){requestedShadows=enabled;scene.shadowsEnabled=enabled&&!lowPerformance;},

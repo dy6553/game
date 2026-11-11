@@ -39,7 +39,7 @@ export function createShotEffects(scene:Scene,camera:Camera) {
   const flashMat=mat('flash','#ffffff',true);flashMat.diffuseTexture=texture('flash');
   flashMat.useAlphaFromDiffuseTexture=true;flashMat.disableDepthWrite=true;flashMat.backFaceCulling=false;
   const flash=add(MeshBuilder.CreatePlane('fx-muzzle-flash',{size:0.37},scene),flashMat);flash.billboardMode=Mesh.BILLBOARDMODE_ALL;
-  let flashLife=0,reduced=false;
+  let flashLife=0,reduced=false,enabled=true;
   const markMat=mat('mark','#ffffff',true);markMat.diffuseTexture=texture('mark');
   markMat.useAlphaFromDiffuseTexture=true;markMat.disableDepthWrite=true;markMat.backFaceCulling=false;
   const traces=Array.from({length:8},()=>({mesh:add(MeshBuilder.CreateCylinder('fx-tracer',{height:1,diameter:0.018,tessellation:6},scene),light),start:Vector3.Zero(),end:Vector3.Zero(),direction:Vector3.Forward(),distance:0,travel:0,active:false}));
@@ -49,6 +49,7 @@ export function createShotEffects(scene:Scene,camera:Camera) {
   const clouds=Array.from({length:6},()=>({mesh:add(MeshBuilder.CreateSphere('fx-impact-dust',{diameter:0.12,segments:6},scene),dust),life:0}));
   let traceIndex=0,sparkIndex=0,markIndex=0,shellIndex=0,cloudIndex=0,emitted=0;
   function emit(start:Vector3,end:Vector3,normal:Vector3,impact:boolean,target:boolean,primary=true) {
+    if(!enabled)return;
     emitted++;if(primary){flashLife=!reduced&&Vector3.DistanceSquared(start,camera.position)>.25?.045:0;flash.position.copyFrom(start);flash.setEnabled(flashLife>0);}
     const trace=traces[traceIndex++%traces.length]!;
     trace.start.copyFrom(start);
@@ -117,5 +118,5 @@ export function createShotEffects(scene:Scene,camera:Camera) {
       decoration.life=0;decoration.mesh.setEnabled(false);
     }
   }
-  return {emit,update,clear,meshes,setReduced,stats:()=>({emitted,traces:traces.filter(t=>t.active).length,marks:marks.filter(m=>m.life>0).length,sparks:particles.filter(p=>p.life>0).length,shells:shells.filter(s=>s.life>0).length})};
+  return {emit,update,clear,meshes,setReduced,setEnabled(value:boolean){enabled=value;if(!value)clear();},stats:()=>({emitted,traces:traces.filter(t=>t.active).length,marks:marks.filter(m=>m.life>0).length,sparks:particles.filter(p=>p.life>0).length,shells:shells.filter(s=>s.life>0).length})};
 }
