@@ -1,3 +1,5 @@
+import {weaponSlotMarkup,combatIcon} from './combat-ui.ts';
+import {navigationLocation} from './wayfinding.ts';
 import {createControlSettings} from './control-settings.ts';
 import {installControlEditor} from './control-editor.ts';
 import {chooseOnlineNickname} from './member-nickname-entry.ts';
@@ -156,7 +158,6 @@ async function start() {
   const harborArtSource=(profile:'low'|'balanced')=>'/maps/harbor-full-'+profile+'.glb';
   let world = createHarborScene(engine,{mapArtSource:harborArtSource});
   const nearbyDoor=(p:Point,doors:Parameters<typeof world.geometry.nearbyDoor>[1])=>(world.geometry??harborWorld).nearbyDoor(p,doors);
-  const indoorAt=(p:Point)=>(world.geometry??harborWorld).indoorAt(p);
   function applyGraphicsProfile(high:boolean,low:boolean){
     if(high){world.setQuality(true);world.setPerformanceLow?.(low);}
     else{world.setPerformanceLow?.(low);world.setQuality(false);}
@@ -195,6 +196,7 @@ async function start() {
   document.addEventListener('keydown',()=>{void audio.unlock();});
   for(const key of ['master','effects','environment'] as const){const slider=document.querySelector<HTMLInputElement>(`#audio-${key}`)!;slider.value=String(audio.settings[key]*100);slider.addEventListener('input',()=>audio.configure({[key]:Number(slider.value)/100}));}
   const mute=document.querySelector<HTMLInputElement>('#audio-mute')!;mute.checked=audio.settings.muted;mute.addEventListener('change',()=>audio.configure({muted:mute.checked}));
+  document.querySelector('#weapon-sound-preview')!.addEventListener('click',()=>{const id=document.querySelector<HTMLSelectElement>('#weapon-sound-choice')!.value;if(isWeaponId(id))void audio.unlock().then(()=>audio.previewWeapon(id));});
   document.querySelector('#audio-test')!.addEventListener('click',()=>{void audio.unlock().then(()=>{if(!document.hidden&&document.hasFocus())audio.preview();});});
   document.addEventListener('visibilitychange',()=>{if(document.hidden){audio.pause(true);audio.setInterfaceActive(false);}});
   window.addEventListener('blur',()=>{audio.pause(true);audio.setInterfaceActive(false);});
@@ -261,6 +263,7 @@ async function start() {
     if(onlineActive)pendingDoor=door.id;else world.toggleDoor(data.position,door.id);
   }
   bindInventoryAction(document.querySelector<HTMLButtonElement>('#door-action')!,requestDoor);
+  for(const button of document.querySelectorAll<HTMLButtonElement>('[data-equipment]'))button.insertAdjacentHTML('afterbegin',combatIcon(button.dataset.equipment!));
   slotButtons.forEach((button,i)=>bindInventoryAction(button,()=>requestSlot(i)));
   bindInventoryAction(document.querySelector<HTMLButtonElement>('#pickup-action')!,()=>requestPickup());
   bindInventoryAction(document.querySelector<HTMLButtonElement>('#pickup-cancel')!,()=>{choosePickupId=undefined;});
@@ -268,7 +271,7 @@ async function start() {
   function refreshInventory(){
     inventoryUi.hidden=homeOpen||!picker.hidden||comparing;if(inventoryUi.hidden)return;
     const data=inventoryData(),crate=nearbyPickup(data.position,data.pickups)??data.pickups.filter(c=>c.remaining>0&&Math.abs((c.y??0)-(data.position.y??0))<1.5&&Math.hypot(c.x-data.position.x,c.z-data.position.z)<=2.5).sort((a,b)=>Math.hypot(a.x-data.position.x,a.z-data.position.z)-Math.hypot(b.x-data.position.x,b.z-data.position.z))[0];if(!crate||crate.remaining>0||crate.id!==choosePickupId||data.blocked)choosePickupId=undefined;
-    slotButtons.forEach((button,i)=>{const slot=data.inventory.slots[i],text=slot?`${controls.label(('slot'+(i+1)) as 'slot1'|'slot2'|'slot3')} · ${WEAPONS[slot.id].name}${choosePickupId?' 버리기':''}`:`${controls.label(('slot'+(i+1)) as 'slot1'|'slot2'|'slot3')} · 비어 있음`;if(button.textContent!==text)button.textContent=text;button.disabled=!slot||data.blocked||!canUseInventory()||!data.ready;button.setAttribute('aria-pressed',String(i===data.inventory.active));});
+    slotButtons.forEach((button,i)=>{const slot=data.inventory.slots[i],key=controls.label(('slot'+(i+1)) as 'slot1'|'slot2'|'slot3'),name=slot?WEAPONS[slot.id].name+(choosePickupId?' · 버리기':''):'비어 있음',cacheKey=key+':'+name;if(button.dataset.card!==cacheKey){button.innerHTML=weaponSlotMarkup(name,key,slot?.id);button.dataset.card=cacheKey;}button.disabled=!slot||data.blocked||!canUseInventory()||!data.ready;button.setAttribute('aria-pressed',String(i===data.inventory.active));button.setAttribute('aria-label',`${key} · ${name}`);});
     const doors=onlineActive?onlineState?.doors:world.doorState?.(),door=doors?nearbyDoor(data.position,doors):undefined;
     const doorPanel=document.querySelector<HTMLElement>('#door-panel')!,doorAction=document.querySelector<HTMLButtonElement>('#door-action')!;
     doorPanel.hidden=!door||!!crate||data.blocked||!canUseInventory();doorAction.disabled=data.blocked;doorAction.textContent=door&&doors?.[door.id]?'문 닫기 · '+controls.label('interact'):'문 열기 · '+controls.label('interact');
@@ -563,6 +566,7 @@ async function start() {
     else if(battle.active)actors=battle.mode==='duel'?[{...battle.position,id:'bot-1',revealed:world.isBotRevealed?.('bot-1'),name:'적 봇',health:battle.botHealth}]:battle.bots.map(b=>({...b.position,id:b.id,revealed:world.isBotRevealed?.(b.id),name:b.name,health:b.health,active:!!b.position}));
     else actors=world.targetContacts?.()??[];
     const view=combatContacts(geometry,doors,p,input.look.yaw,input.look.pitch,actors),target=health>0?view.target:undefined;card.hidden=!target;if(target){document.querySelector('#target-name')!.textContent=target.name;document.querySelector('#target-hp')!.textContent=String(Math.ceil(target.health));document.querySelector<HTMLProgressElement>('#target-hp-bar')!.value=target.health;}
+    const navigation=navigationLocation(geometry,me??position),locationLabel=document.querySelector<HTMLElement>('#map-location')!;if(locationLabel.textContent!==navigation.label)locationLabel.textContent=navigation.label;locationLabel.style.borderColor=navigation.color;
     if(showMinimap)drawCombatMap(document.querySelector<HTMLCanvasElement>('#minimap')!,geometry,p,input.look.yaw,view.radar);
     nameplates.update(onlineActive&&onlineState&&online.connected?(world.onlineNameplates?.(onlineState,onlineId)??[]):[]);refreshRoster();
   }
@@ -776,8 +780,7 @@ async function start() {
         }
         observeOfflineResult(step);if(resultView.isOpen)break;
       }
-      const building=indoorAt(position);zone.textContent = building?`${(position.y??0)>=building.height-.1?'옥상':(position.y??0)>=3.3?'2층':'1층'} · 출입 가능 건물`:selectedMap==='factory'?'폐공장 · 산업 지구':position.z < -28?'남쪽 상점 거리':position.z > 28 ? '항구 산책로' : Math.abs(position.x) > 20 ? '건물 사이 골목'
-        : Math.abs(position.z) < 11 && Math.abs(position.x) < 11 ? '중앙 광장' : '해안 거리';
+      zone.textContent=navigationLocation(world.geometry??harborWorld,position).label;
     } else { localDash=cancelDash(localDash);input.consumeDashes();input.consumeShots();input.consumeReloads();input.consumeJumps();world.update(position, dt, input.look,true);world.consumeSounds(); }
     const dashButton=document.querySelector<HTMLButtonElement>('#dash')!,onlineMe=onlineState?.players.find(p=>p.id===onlineId),dashState=onlineActive?onlineMe?.dash:localDash;
     const dashGrounded=onlineActive?!!onlineMe&&onlineMe.jump.height===0&&onlineMe.jump.velocity===0:world.practiceState().grounded;

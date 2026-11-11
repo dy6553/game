@@ -1,3 +1,5 @@
+import {renderWeaponSound,mixWeaponSound} from './weapon-audio.ts';
+import {isWeaponId,WEAPON_IDS,type WeaponId} from './weapons.ts';
 export type Sound='quad'|'bazooka'|'rocket'|'grenade'|'flash'|'heal'|'smg'|'burst'|'dmr'|'pistol'|'machinegun'|'shotgun'|'sniper'|'hit'|'wall'|'step'|'step2'|'land'|'reload'|'ready'|'empty'|'jump'|'hurt'|'death'|'respawn'|'win'|'lose'|'ui'|'scope'|'kill'|'deploy'|'dash'|'pickup'|'equip';
 export type AudioSettings={master:number;effects:number;environment:number;muted:boolean};
 const samples=['pistol','machinegun','shotgun','sniper','hit','wall','step','step2','land','reload'];
@@ -25,6 +27,13 @@ export function createGameAudio(){
   }
   buffers.set(key,b);return b;
  }
+ function soundBuffer(kind:Sound){
+  if(!ctx)throw Error('Audio not initialized');
+  if(!isWeaponId(kind))return buffers.get(kind)??synthetic(kind);
+  const key='weapon-'+kind,cached=buffers.get(key);if(cached)return cached;
+  const signature=renderWeaponSound(kind,ctx.sampleRate),sample=buffers.get(kind)?.getChannelData(0);
+  const data=mixWeaponSound(signature,sample?.subarray(0,Math.ceil(ctx.sampleRate*.8))),buffer=ctx.createBuffer(1,data.length,ctx.sampleRate);buffer.getChannelData(0).set(data);buffers.set(key,buffer);return buffer;
+ }
  async function unlock(){
   if(disposed)return;
   try{
@@ -33,12 +42,12 @@ export function createGameAudio(){
     fx.connect(master);env.connect(master);menuFx.connect(master);master.connect(compressor);compressor.connect(ctx.destination);
     const b=ctx.createBuffer(1,ctx.sampleRate*6,ctx.sampleRate),data=b.getChannelData(0);let low=0;
     for(let i=0;i<data.length;i++){low=.985*low+(Math.random()*2-1)*.015;data[i]=low*(.7+.3*Math.cos(i/ctx.sampleRate*2*Math.PI/6));}
-    wind=ctx.createBufferSource();wind.buffer=b;wind.loop=true;wind.connect(env);wind.start();apply();
+    wind=ctx.createBufferSource();wind.buffer=b;wind.loop=true;wind.connect(env);wind.start();apply();for(const id of WEAPON_IDS)soundBuffer(id);
    }
    if(ctx.state!=='running'&&ctx.state!=='closed')await ctx.resume();
    if(!loading&&location.protocol!=='file:'){
     loading=true;const context=ctx;
-    void Promise.allSettled(samples.map(async name=>{const response=await fetch(`/audio/${name}.mp3`);if(!response.ok)return;const b=await context.decodeAudioData(await response.arrayBuffer());buffers.set(name,b);}));
+    void Promise.allSettled(samples.map(async name=>{const response=await fetch(`/audio/${name}.mp3`);if(!response.ok)return;const b=await context.decodeAudioData(await response.arrayBuffer());buffers.set(name,b);buffers.delete('weapon-'+name);if(isWeaponId(name))soundBuffer(name);}));
    }
   }catch{/* Audio restrictions must never stop gameplay. */}
  }
@@ -47,17 +56,17 @@ export function createGameAudio(){
   const rank=priority(kind);
   if(voices.size>=24){const victim=[...voices].find(source=>(priorities.get(source)??0)<rank);if(!victim)return;try{victim.stop();}catch{}voices.delete(victim);priorities.delete(victim);}
   const source=ctx.createBufferSource(),gain=ctx.createGain(),panner=ctx.createStereoPanner();
-  source.buffer=buffers.get(kind)??synthetic(kind);source.playbackRate.value=kind==='smg'?1.15:kind==='dmr'?.85:kind==='burst'?.98:kind==='machinegun'||kind.startsWith('step')?.96+Math.random()*.08:1;
+  source.buffer=soundBuffer(kind);source.playbackRate.value=isWeaponId(kind)?.985+Math.random()*.03:kind.startsWith('step')?.96+Math.random()*.08:1;
   gain.gain.value=Math.max(0,Math.min(1,volume))*(kind==='hit'?.55:kind==='wall'?.3:kind.startsWith('step')?.35:.7);panner.pan.value=Math.max(-1,Math.min(1,pan));
   source.connect(gain);gain.connect(panner);panner.connect(fx);voices.add(source);priorities.set(source,rank);
   source.onended=()=>{voices.delete(source);priorities.delete(source);source.disconnect();gain.disconnect();panner.disconnect();};source.start();
  }
  function stopInterface(){for(const source of interfaceVoices){try{source.stop();}catch{}}interfaceVoices.clear();}
- function playInterface(kind:'ui'|'deploy',pan=0,delay=0){
+ function playInterface(kind:'ui'|'deploy'|WeaponId,pan=0,delay=0){
   if(!ctx||ctx.state!=='running'||!interfaceActive||settings.muted||settings.master===0||settings.effects===0||disposed||interfaceVoices.size>=4)return;
-  const source=ctx.createBufferSource(),panner=ctx.createStereoPanner();source.buffer=synthetic(kind);panner.pan.value=pan;source.connect(panner);panner.connect(menuFx);interfaceVoices.add(source);source.onended=()=>{interfaceVoices.delete(source);source.disconnect();panner.disconnect();};source.start(ctx.currentTime+delay);
+  const source=ctx.createBufferSource(),panner=ctx.createStereoPanner();source.buffer=soundBuffer(kind);panner.pan.value=pan;source.connect(panner);panner.connect(menuFx);interfaceVoices.add(source);source.onended=()=>{interfaceVoices.delete(source);source.disconnect();panner.disconnect();};source.start(ctx.currentTime+delay);
  }
- return {unlock,play,playInterface,preview(){playInterface('ui',-.8);playInterface('deploy',.8,.25);},setInterfaceActive(value:boolean){interfaceActive=value;if(!value)stopInterface();apply();},get settings(){return {...settings};},get available(){return !!ctx&&ctx.state==='running';},
+ return {unlock,play,playInterface,previewWeapon(kind:WeaponId){stopInterface();playInterface(kind);},preview(){playInterface('ui',-.8);playInterface('deploy',.8,.25);},setInterfaceActive(value:boolean){interfaceActive=value;if(!value)stopInterface();apply();},get settings(){return {...settings};},get available(){return !!ctx&&ctx.state==='running';},
   configure(next:Partial<AudioSettings>){if(next.muted){stopEffects();stopInterface();}settings={...settings,...next};for(const key of ['master','effects','environment'] as const)settings[key]=Number.isFinite(settings[key])?Math.max(0,Math.min(1,settings[key])):0;try{localStorage.setItem('harbor-audio',JSON.stringify(settings));}catch{}apply();},
   pause(value:boolean){if(value===paused)return;paused=value;if(value)stopEffects();apply();},
   dispose(){disposed=true;stopInterface();stopEffects();wind?.stop();void ctx?.close();},

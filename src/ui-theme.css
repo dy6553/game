@@ -91,3 +91,17 @@
 #interaction-prompts #pickup-panel,#interaction-prompts #door-panel{position:absolute;bottom:max(78px,calc(env(safe-area-inset-bottom) + 68px));left:50%;transform:translateX(-50%);width:min(38vw,360px);pointer-events:auto;text-align:center}
 .at-home #interaction-prompts,.results-open #interaction-prompts,.in-waiting-room #interaction-prompts,.environment-open #interaction-prompts,.menu-open #interaction-prompts,.choice-open #interaction-prompts{visibility:hidden}
 #posture-controls{left:max(16px,env(safe-area-inset-left));right:auto;top:max(125px,calc(50% - 90px));width:168px;flex-direction:row;justify-content:center;transform:none}
+/* Consistent combat cards: stable keys, silhouettes, counts and selection. */
+#combat-slots{gap:6px}
+#combat-slots button,:root.tablet-device #combat-slots button{position:relative;min-height:60px;border:1px solid #728f925e;border-radius:7px;background:linear-gradient(160deg,#183541ee,#0b202de8);color:#dbe7e1;gap:4px;padding:8px 4px 6px;transition:border-color .1s,background-color .1s}
+#combat-slots button:disabled{opacity:.42}
+#combat-slots button[aria-pressed="true"]{border-color:#e4d3a1;background:linear-gradient(145deg,#34483e,#18313b);box-shadow:inset 0 -3px #e4d3a1;color:#fff2c7}
+#combat-slots .combat-icon{width:30px;height:25px;flex:none;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;opacity:.9}
+#combat-slots .slot-name,#equipment-slots button>span{display:block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px;font-weight:650;line-height:1.2}
+#combat-slots small,#equipment-slots small,:root.tablet-device #equipment-slots small{display:block;position:absolute;left:5px;top:3px;font:9px ui-monospace,monospace;color:#bacbc5}
+#equipment-slots b,:root.tablet-device #equipment-slots b{position:absolute;right:5px;top:3px;min-width:15px;border-radius:3px;background:#071c27;color:#eed8a0;font-size:10px;line-height:16px;text-align:center}
+#combat-vitals,#target-vitals,.ammo-hud,.duel-hud,#combat-map{border-color:#6d91916b;background:#0a202ce8;border-radius:7px}
+#combat-vitals>span,.ammo-hud>span{letter-spacing:.06em;font-weight:600}#combat-hp,.ammo-hud b{font-variant-numeric:tabular-nums;letter-spacing:-.04em}
+#map-location{margin:2px 1px 0;padding:3px 3px 2px;border-left:2px solid #79cbbd;color:#dfebe2;font-size:8px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#weapon-sound-preview{min-height:44px;margin-bottom:8px}
+@media(any-pointer:coarse) and (min-width:900px){:root.tablet-device #combat-slots button{min-height:64px}#combat-slots .slot-name,#equipment-slots button>span{font-size:12px}#map-location{font-size:10px}}

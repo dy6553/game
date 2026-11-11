@@ -1,3 +1,4 @@
+import {createWayfindingSigns} from './wayfinding-signs.ts';
 import {stanceStats,type Stance} from './stance.ts';
 import {createRemoteModels,type RemoteModel} from './remote-models.ts';
 import {createHarborMapArt,type HarborArtSource} from './harbor-map-art.ts';
@@ -35,7 +36,6 @@ import type { Look } from './view.ts';
 import { Ray } from '@babylonjs/core/Culling/ray.js';
 import { Scene } from '@babylonjs/core/scene.js';
 import { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator.js';
-import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
 import { PRACTICE_RULES,createWeapon,tryFire,beginReload,advanceWeapon,applyDamage } from './combat.ts';
 import { createJump,beginJump,advanceJump,type JumpState } from './jump.ts';
@@ -191,11 +191,6 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
   let doors:Doors=createDoors();
   const doorMeshes=new Map<string,Mesh>();
   const entryMat=material('enterable-entry','#0c8e67','#23c992');
-  const entrySignMat=material('entry-sign-material','#ffffff','#ffffff');
-  if(typeof document!=='undefined'&&typeof document.createElement('canvas').getContext==='function'){
-    const texture=new DynamicTexture('entry-sign-text',{width:512,height:128},scene,false);
-    texture.drawText('출입 가능 · 2F / 옥상',null,78,'bold 36px sans-serif','#dcfff4','#084a3a',true,true);entrySignMat.diffuseTexture=texture;entrySignMat.emissiveTexture=texture;
-  }else entrySignMat.diffuseColor=Color3.FromHexString('#23c992');
   function syncDoors(){for(const b of BUILDINGS.filter(b=>b.enterable)){const mesh=doorMeshes.get(b.id)!;mesh.rotation.y=doors[b.id]?(b.z<0?1:-1)*Math.PI/2:0;mesh.isPickable=!doors[b.id];}mapArt?.syncDoors();}
   for (const building of BUILDINGS) {
     const { id, x, z, width, depth, height, palette } = building;
@@ -216,7 +211,6 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
       const rect=doorRect(building),door=box(id+'-interactive-door',rect.x,1.6,rect.z,rect.width,3.2,rect.depth,wood);door.setPivotPoint(new Vector3(-rect.width/2,0,0));doorMeshes.set(id,door);shadows.addShadowCaster(door);
       part('entry-green-header',x,3.3,rect.z+(z<0?.3:-.3),DOOR_WIDTH+.4,.15,.12,entryMat);
       for(const side of [-1,1])part('entry-green-side',x+side*(DOOR_WIDTH/2+.18),1.6,rect.z+(z<0?.3:-.3),.13,3.2,.12,entryMat);
-      const sign=MeshBuilder.CreatePlane(id+'-entry-sign',{width:4,height:1,sideOrientation:Mesh.DOUBLESIDE},scene);sign.position.set(x,3.95,rect.z+(z<0?.28:-.28));sign.rotation.y=z<0?Math.PI:0;sign.material=entrySignMat;sign.isPickable=false;
       for(let i=0;i<3;i++)part('entry-path-marker',x,.07,rect.z+(z<0?1:-1)*(1+i*.7),.7,.025,.3,entryMat);
 
       part('ceiling-light',x,3.25,z,2.5,.08,.7,warm);
@@ -528,6 +522,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     ? createHarborMapArt(scene, options.mapArtSource, scene.meshes.filter(mesh => !mesh.parent && mesh !== skyDome),
       BUILDINGS, () => doors, shadows)
     : undefined;
+  createWayfindingSigns(scene,geometry);
   const targets = [{ x: 0, z: 32 }, { x: -25, z: 12 }, { x: 25, z: 12 }].map((p, index) => {
     const root=new TransformNode(`target-root-${index}`,scene);
     const targetMat = material(`target-${index}`, '#da8d61', '#543524');

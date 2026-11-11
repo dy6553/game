@@ -72,7 +72,7 @@ test('actual doors stay dynamic after batching and rooftop scenery matches colli
   const mesh=scene.scene.getMeshByName(building.id+'-interactive-door')!;assert.ok(mesh&&!mesh.isDisposed(),'door must survive static batching');assert.equal(mesh.isWorldMatrixFrozen,false);
   assert.equal(scene.toggleDoor(actor,building.id),true);assert.ok(Math.abs(mesh.rotation.y)>1.5);assert.equal(mesh.isPickable,false);
   assert.equal(scene.toggleDoor(actor,building.id),true);assert.equal(mesh.rotation.y,0);assert.equal(mesh.isPickable,true);
-  assert.equal(scene.scene.meshes.filter(m=>m.material?.name==='entry-sign-material').reduce((n,m)=>n+m.getTotalIndices()/12,0),6,'six complete double-sided signs survive batching');
+  assert.equal(scene.scene.meshes.filter(m=>m.material?.name==='navigation-signs').reduce((n,m)=>n+m.getTotalIndices()/12,0),18,'six buildings have three complete double-sided floor signs in one batch');
   const roof={x:building.x,z:building.z,y:building.height};scene.setMode('practice');scene.update(roof,0);assert.equal(scene.camera.position.y,building.height+1.95);
   for(let i=0;i<5;i++){scene.setMode('duel');const state=scene.duelState();assert.equal(world.indoorAt(state.position),undefined);assert.equal(state.position.y??0,0);}
   scene.scene.dispose();
