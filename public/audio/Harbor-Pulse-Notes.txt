@@ -1,0 +1,5 @@
+Harbor Pulse — original background loop created for this game.
+Source: scripts/create-bgm.py (deterministic synthesis of original notes, pads, bass and percussion).
+No third-party music or samples are included in this track.
+Encoding: mono MP3, 22,050 Hz, 64 kbit/s, approximately 20 seconds, 160,748 bytes.
+Existing Kenney sound effects retain their licenses in this directory.

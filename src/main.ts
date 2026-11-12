@@ -89,7 +89,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <p>맵을 남쪽 상점 거리와 양옆 골목으로 넓혔습니다. 중앙 거리 양쪽의 열린 출입구와 남쪽 거리의 상점, 총 6곳의 1층에 들어갈 수 있습니다. 문 버튼 없이 걸어서 출입합니다.</p>
     <p>시작 무기는 메뉴에서 선택하며 변경하면 경기를 새로 시작합니다. 기관총은 발사 버튼을 누르고 있거나 PC 마우스 고정 상태에서 왼쪽 버튼을 누르면 연사합니다. 산탄총은 탄알 6개가 퍼지며, 저격총은 확대 버튼 또는 PC Q키로 조준합니다.</p>
     <p>야경 개선: 젖은 노면의 빛, 수면 반짝임, 벽·지붕 표면과 금속 광택을 추가했습니다. 자동 화질은 지속적인 프레임 저하가 있을 때 렌더 해상도를 조절합니다. 높음은 수동 고화질, 균형은 낮은 부하 설정입니다.</p>
-    <fieldset class="audio-settings"><legend>소리</legend><label><input id="audio-mute" type="checkbox"> 음소거</label><label>전체<input id="audio-master" type="range" min="0" max="100" aria-label="전체 음량"></label><label>효과음<input id="audio-effects" type="range" min="0" max="100" aria-label="효과음 음량"></label><label>환경음<input id="audio-environment" type="range" min="0" max="100" aria-label="환경음 음량"></label><button id="audio-test" type="button">좌우 소리 확인</button><small>이어폰으로 왼쪽 → 오른쪽 소리를 확인하세요.</small><small id="audio-status">시작 버튼을 누르면 소리를 켭니다.</small></fieldset>
+    <fieldset class="audio-settings"><legend>소리</legend><label><input id="audio-mute" type="checkbox"> 음소거</label><label>전체<input id="audio-master" type="range" min="0" max="100" aria-label="전체 음량"></label><label>효과음<input id="audio-effects" type="range" min="0" max="100" aria-label="효과음 음량"></label><label>환경음<input id="audio-environment" type="range" min="0" max="100" aria-label="환경음 음량"></label><label><input id="audio-music-enabled" type="checkbox" checked> 배경 음악 켜기</label><label>BGM<input id="audio-music" type="range" min="0" max="100" aria-label="배경 음악 음량"></label><button id="audio-test" type="button">좌우 소리 확인</button><small>이어폰으로 왼쪽 → 오른쪽 소리를 확인하세요.</small><small id="audio-status">시작 버튼을 누르면 소리를 켭니다.</small></fieldset>
     <label class="graphics-setting">사격 효과<select id="shot-effects"><option value="low">안정 · 섬광/화면 흔들림 최소</option><option value="full">기본 · 전체 효과</option></select></label><label class="graphics-setting">화면 흔들림<select id="screen-shake"><option value="off">끄기</option><option value="low" selected>약하게</option><option value="normal">보통</option></select></label><p>총기 반동·로봇 피격·처치 연출을 추가했습니다. 화면 흔들림은 조절할 수 있으며, 조준 방향과 무기 피해량은 바꾸지 않습니다.</p>
     <label class="sensitivity-setting">모바일 조준 감도 <output id="look-sensitivity-value">1.00배</output><input id="look-sensitivity" type="range" min="25" max="200" step="5" value="100" aria-label="모바일 조준 감도"></label>
     <details class="developer-settings"><summary>개발용 도구</summary><button id="reference-open" aria-pressed="false">시안 비교</button><p>배경 시안과 현재 맵을 비교합니다.</p></details>
@@ -148,7 +148,7 @@ async function start() {
   const mobile=matchMedia('(pointer: coarse)').matches;
   let settingsStorage:Storage|null=null;try{settingsStorage=localStorage;}catch{}const preferences=createEnvironmentPreferences(settingsStorage),frameLimit=createFrameLimit(preferences.value.fps);
   const savePreference=(value:Partial<EnvironmentPreferences>)=>{const next=preferences.patch(value);document.querySelector('#environment-save-status')!.textContent=preferences.saved?'설정은 이 브라우저에 자동 저장됩니다.':'저장할 수 없어 이번 접속에만 적용됩니다.';return next;};
-  const controls=createControlSettings(settingsStorage,preferences.value.jump);
+  const controls=createControlSettings(settingsStorage,preferences.value.jump,mobile?(Math.min(screen.width,screen.height)>=600?'tablet':'phone'):'desktop');
   let graphicsMode=preferences.value.graphics;
   const densityCap=()=>Math.min(window.devicePixelRatio||1,graphicsMode==='high'?2:graphicsMode==='balanced'?1:graphicsMode==='low'?.7:1);
   let budget=createRenderBudget(densityCap()),qualityHigh=graphicsMode==='high';
@@ -190,11 +190,13 @@ async function start() {
   sensitivity.addEventListener('input',()=>{const next=setSensitivity(Number(sensitivity.value)/100);try{localStorage.setItem('harbor-touch-sensitivity',String(next));}catch{}});
   const journal=createResultJournal({getItem:key=>localStorage.getItem(key),setItem:(key,value)=>localStorage.setItem(key,value)}),resultTracker=createResultTracker();
   let shownResult='';let localDash=createDash(),predictionDash=false,predictionJump=false;
-  const audio=createGameAudio();const reducedLobbyMotion=matchMedia('(prefers-reduced-motion: reduce)');
+  const audio=createGameAudio();const reducedLobbyMotion=matchMedia('(prefers-reduced-motion: reduce)');world.setMotionReduced(reducedLobbyMotion.matches);reducedLobbyMotion.addEventListener('change',()=>world.setMotionReduced(reducedLobbyMotion.matches));
+  const unlockAudio=()=>{void audio.unlock();};window.addEventListener('pointerdown',unlockAudio,{once:true,passive:true});window.addEventListener('keydown',unlockAudio,{once:true});
   const lobbyCue=(kind:'ui'|'deploy')=>{void audio.unlock().then(()=>{if(!document.hidden&&document.hasFocus())audio.playInterface(kind);});};
   document.addEventListener('pointerdown',()=>{void audio.unlock();});
   document.addEventListener('keydown',()=>{void audio.unlock();});
-  for(const key of ['master','effects','environment'] as const){const slider=document.querySelector<HTMLInputElement>(`#audio-${key}`)!;slider.value=String(audio.settings[key]*100);slider.addEventListener('input',()=>audio.configure({[key]:Number(slider.value)/100}));}
+  for(const key of ['master','effects','environment','music'] as const){const slider=document.querySelector<HTMLInputElement>(`#audio-${key}`)!;slider.value=String(audio.settings[key]*100);slider.addEventListener('input',()=>audio.configure({[key]:Number(slider.value)/100}));}
+  const musicToggle=document.querySelector<HTMLInputElement>('#audio-music-enabled')!;musicToggle.checked=audio.settings.musicEnabled;musicToggle.addEventListener('change',()=>audio.configure({musicEnabled:musicToggle.checked}));
   const mute=document.querySelector<HTMLInputElement>('#audio-mute')!;mute.checked=audio.settings.muted;mute.addEventListener('change',()=>audio.configure({muted:mute.checked}));
   document.querySelector('#weapon-sound-preview')!.addEventListener('click',()=>{const id=document.querySelector<HTMLSelectElement>('#weapon-sound-choice')!.value;if(isWeaponId(id))void audio.unlock().then(()=>audio.previewWeapon(id));});
   document.querySelector('#audio-test')!.addEventListener('click',()=>{void audio.unlock().then(()=>{if(!document.hidden&&document.hasFocus())audio.preview();});});
@@ -229,7 +231,7 @@ async function start() {
     roomWaiting=needsWaiting(state,id)||!!me?.guest&&!normalizeNickname(me.nickname);
     if(!onlineActive){onlineActive=true;homeOpen=false;home.hidden=true;onlineLobby.hidden=true;picker.hidden=true;manualPaused=false;pausePanel.hidden=true;document.body.classList.remove('at-home');gameChoices.close();}
     document.body.classList.toggle('in-waiting-room',roomWaiting);
-    if(roomWaiting){waitingView.show(state,id,onlineCode,online.connected);nameplates.clear();input.reset();input.setEnabled(false);if(!wasWaiting){world.endOnline();world.setPreview(true,true);}}
+    if(roomWaiting){waitingView.show(state,id,onlineCode,online.connected);nameplates.clear();input.reset();input.setEnabled(false);if(!wasWaiting){world.endOnline();world.setMotionReduced(reducedLobbyMotion.matches);world.setPreview(true,true);}}
     else{waitingView.hide();if(!wasActive||wasWaiting){switchMap(state.map==='factory'?'factory':'harbor',me?.character??'robot');lobbyPolish.deploy();lobbyCue('deploy');world.setPreview(false);if(me){world.selectCharacter(me.character);world.selectWeapon(me.weaponId);input.resetLook();input.setLook(me.yaw,me.pitch);}hasPlayed=true;canvas.focus();}}
     if(me?.guest&&!normalizeNickname(me.nickname)&&online.connected&&!guestPromptPending){guestPromptPending=true;void nicknameDialog.open(false).then(name=>{if(!onlineActive)return;if(!name){openHome();return;}online.control('nickname',name);});}else if(me?.nickname)guestPromptPending=false;
     for(const cue of onlineAudio.update(state,id,input.look.yaw,canUseInventory()&&online.connected))audio.play(cue.kind,cue.pan,cue.volume);
@@ -290,6 +292,7 @@ async function start() {
   let manualPaused=false,hasPlayed=false,wasLocked=false;
   let mouseLockPending=false,mouseLockFallback=false;
   const pausePanel=document.querySelector<HTMLElement>('#pause-panel')!;
+  const pauseDescription=document.querySelector<HTMLElement>('#pause-description')!,pauseIndicator=document.querySelector<HTMLElement>('#pause-indicator')!,postureButtons=(['crouch','prone'] as const).map(id=>({id,node:document.querySelector<HTMLButtonElement>('#'+id)!}));let lastPosture='';
   const aimHint=document.querySelector<HTMLElement>('#mouse-aim-hint')!;
   const lockStatus=document.querySelector<HTMLElement>('#pause-lock-status')!;
   const retryLock=document.querySelector<HTMLButtonElement>('#resume-locked')!;
@@ -429,7 +432,7 @@ async function start() {
     mouseLockFallback=false;requestGameplayMouseLock();
   };
   startButton.addEventListener('click',beginGame);
-  function switchMap(map:MapId,type=world.characterType){if(map===selectedMap)return;world.scene.dispose();world=createHarborScene(engine,{map,mapArtSource:harborArtSource});selectedMap=map;world.selectCharacter(type);applyGraphicsProfile(qualityHigh,graphicsMode==='low'||graphicsMode==='auto'&&budget.density<=.85);world.setShadows?.(preferences.value.shadows);world.setReducedShots?.(reducedShots);world.setCombatEffects(preferences.value.combatEffects);world.setShake(shake.value==='off'||shake.value==='normal'?shake.value:'low');world.setPreview(true,true);}
+  function switchMap(map:MapId,type=world.characterType){if(map===selectedMap)return;world.scene.dispose();world=createHarborScene(engine,{map,mapArtSource:harborArtSource});selectedMap=map;world.selectCharacter(type);applyGraphicsProfile(qualityHigh,graphicsMode==='low'||graphicsMode==='auto'&&budget.density<=.85);world.setShadows?.(preferences.value.shadows);world.setReducedShots?.(reducedShots);world.setCombatEffects(preferences.value.combatEffects);world.setShake(shake.value==='off'||shake.value==='normal'?shake.value:'low');world.setMotionReduced(reducedLobbyMotion.matches);world.setPreview(true,true);}
   const homeView=createHomeScreen({
     selectCharacter(type){world.selectCharacter(type);refreshCharacter();lobbyCue('ui');if(!reducedLobbyMotion.matches)document.querySelector('#home-character-name')?.animate?.([{opacity:.3},{opacity:1}],{duration:180});},
     selectWeapon(id){world.setLobbyWeapon(id);lobbyCue('ui');if(!reducedLobbyMotion.matches)document.querySelector('#home-equipped-art')?.animate?.([{opacity:.3,transform:'translateX(-6px)'},{opacity:1,transform:'translateX(0)'}],{duration:180});},
@@ -659,9 +662,9 @@ async function start() {
   function applyInterface(){const p=preferences.value,style=document.documentElement.style;style.setProperty('--combat-text-scale',p.hud==='large'?'1.2':'1');style.setProperty('--touch-opacity',String(p.opacity));style.setProperty('--reticle-color',p.crosshairColor==='green'?'#83ffb3':p.crosshairColor==='gold'?'#ffe38b':'#e7fcff');style.setProperty('--reticle-size',p.crosshairSize==='large'?'1.5':'1');document.querySelector('#controls-opacity-value')!.textContent=Math.round(p.opacity*100)+'%';}
   hudSelect.value=preferences.value.hud;opacitySlider.value=String(preferences.value.opacity*100);colorSelect.value=preferences.value.crosshairColor;crossSize.value=preferences.value.crosshairSize;applyInterface();
   for(const [node,key,event] of [[hudSelect,'hud','change'],[colorSelect,'crosshairColor','change'],[crossSize,'crosshairSize','change'],[opacitySlider,'opacity','input']] as const)node.addEventListener(event,()=>{savePreference({[key]:key==='opacity'?Number(node.value)/100:node.value} as Partial<EnvironmentPreferences>);applyInterface();});
-  for(const id of ['audio-master','audio-effects','audio-environment'] as const){const node=document.querySelector<HTMLInputElement>('#'+id)!,output=document.createElement('output');output.id=id+'-value';node.parentElement!.append(output);const label=()=>{output.textContent=Math.round(Number(node.value))+'%';};label();node.addEventListener('input',label);}
+  for(const id of ['audio-master','audio-effects','audio-environment','audio-music'] as const){const node=document.querySelector<HTMLInputElement>('#'+id)!,output=document.createElement('output');output.id=id+'-value';node.parentElement!.append(output);const label=()=>{output.textContent=Math.round(Number(node.value))+'%';};label();node.addEventListener('input',label);}
   const changeSelect=(id:string,value:string)=>{const node=document.querySelector<HTMLSelectElement>('#'+id)!;node.value=value;node.dispatchEvent(new window.Event('change',{bubbles:true}));};
-  function resetEnvironment(){const p=preferences.reset();controlEditor.reset();combatEffectsCheck.checked=p.combatEffects;world.setCombatEffects(p.combatEffects);for(const [id,value] of [['graphics-quality',p.graphics],['frame-target',String(p.fps)],['hud-size',p.hud],['crosshair-color',p.crosshairColor],['crosshair-size',p.crosshairSize],['jump-key',p.jump],['shot-effects',mobile?'low':'full'],['screen-shake',mobile?'off':'low']])changeSelect(id!,value!);invertCheck.checked=p.invertY;invertCheck.dispatchEvent(new window.Event('change',{bubbles:true}));minimapCheck.checked=p.minimap;minimapCheck.dispatchEvent(new window.Event('change',{bubbles:true}));shadowCheck.checked=p.shadows;shadowCheck.dispatchEvent(new window.Event('change',{bubbles:true}));for(const [node,value] of [[mouseSlider,100],[opacitySlider,100],[sensitivity,100]] as const){node.value=String(value);node.dispatchEvent(new window.Event('input',{bubbles:true}));}audio.configure({master:.7,effects:.85,environment:.16,muted:false});for(const key of ['master','effects','environment'] as const){const node=document.querySelector<HTMLInputElement>('#audio-'+key)!;node.value=String(audio.settings[key]*100);node.dispatchEvent(new window.Event('input',{bubbles:true}));}mute.checked=false;gameChoices.refresh();document.querySelector('#environment-save-status')!.textContent=preferences.saved?'기본 설정으로 복원했습니다. 게임 기록은 유지됩니다.':'저장할 수 없어 이번 접속에만 기본값을 적용합니다.';}
+  function resetEnvironment(){const p=preferences.reset();controlEditor.reset();combatEffectsCheck.checked=p.combatEffects;world.setCombatEffects(p.combatEffects);for(const [id,value] of [['graphics-quality',p.graphics],['frame-target',String(p.fps)],['hud-size',p.hud],['crosshair-color',p.crosshairColor],['crosshair-size',p.crosshairSize],['jump-key',p.jump],['shot-effects',mobile?'low':'full'],['screen-shake',mobile?'off':'low']])changeSelect(id!,value!);invertCheck.checked=p.invertY;invertCheck.dispatchEvent(new window.Event('change',{bubbles:true}));minimapCheck.checked=p.minimap;minimapCheck.dispatchEvent(new window.Event('change',{bubbles:true}));shadowCheck.checked=p.shadows;shadowCheck.dispatchEvent(new window.Event('change',{bubbles:true}));for(const [node,value] of [[mouseSlider,100],[opacitySlider,100],[sensitivity,100]] as const){node.value=String(value);node.dispatchEvent(new window.Event('input',{bubbles:true}));}audio.configure({master:.7,effects:.85,environment:.16,music:.18,musicEnabled:true,muted:false});musicToggle.checked=true;for(const key of ['master','effects','environment','music'] as const){const node=document.querySelector<HTMLInputElement>('#audio-'+key)!;node.value=String(audio.settings[key]*100);node.dispatchEvent(new window.Event('input',{bubbles:true}));}mute.checked=false;gameChoices.refresh();document.querySelector('#environment-save-status')!.textContent=preferences.saved?'기본 설정으로 복원했습니다. 게임 기록은 유지됩니다.':'저장할 수 없어 이번 접속에만 기본값을 적용합니다.';}
   document.querySelector('#environment-low-preset')!.addEventListener('click',()=>{
     for(const [id,value] of [['graphics-quality','low'],['frame-target','30'],['shot-effects','low'],['screen-shake','off']])changeSelect(id!,value!);
     shadowCheck.checked=false;shadowCheck.dispatchEvent(new window.Event('change',{bubbles:true}));gameChoices.refresh();
@@ -699,7 +702,7 @@ async function start() {
   engine.runRenderLoop(() => {
     const elapsed=resetClock?0:Math.max(0,engine.getDeltaTime()/1000);resetClock=false;
     const dt = Math.min(elapsed, 0.05);
-    world.setStance?.(input.stance);for(const posture of ['crouch','prone'])document.querySelector('#'+posture)?.setAttribute('aria-pressed',String(input.stance===posture));
+    world.setStance?.(input.stance);if(lastPosture!==input.stance){lastPosture=input.stance;for(const {id,node} of postureButtons)node.setAttribute('aria-pressed',String(input.stance===id));}
     const drawFrame=!roomWaiting&&!settingsView.isOpen&&frameLimit.shouldRender(performance.now());
     if(!onlineActive||!onlineState||roomWaiting)onlineVisualTime=0;
     const uiTick=performance.now()-uiRefreshAt>=50;if(uiTick)uiRefreshAt=performance.now();
@@ -709,8 +712,8 @@ async function start() {
     input.setEnabled(canPlay);
     input.advanceLook(elapsed);
     aimHint.hidden=!canPlay||document.pointerLockElement===canvas;
-    document.querySelector('#pause-description')!.textContent=onlineActive?'내 조작만 멈춥니다. 상대의 경기는 계속됩니다.':'전투와 이동이 멈췄습니다.';
-    document.querySelector<HTMLElement>('#pause-indicator')!.hidden=manualPaused||!picker.hidden||comparing||portraitTouch||(!menuOpen&&help.hidden);
+    const pauseText=onlineActive?'내 조작만 멈춥니다. 상대의 경기는 계속됩니다.':'전투와 이동이 멈췄습니다.';if(pauseDescription.textContent!==pauseText)pauseDescription.textContent=pauseText;
+    pauseIndicator.hidden=manualPaused||!picker.hidden||comparing||portraitTouch||(!menuOpen&&help.hidden);
     if(uiTick)refreshEquipment();
     // Count drawn frames, not the extra callbacks skipped by the FPS cap.
     playFrameTime=canPlay?playFrameTime+elapsed:0;

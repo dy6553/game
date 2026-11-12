@@ -6,11 +6,28 @@ export type TouchTarget=keyof typeof TOUCH_TARGETS;
 export type TouchPosition={x:number;y:number;size:number};
 const validKey=(key:string)=>/^(Key[A-Z]|Digit[0-9]|Space|ShiftLeft|ShiftRight|ArrowUp|ArrowDown|ArrowLeft|ArrowRight)$/.test(key);
 export const keyLabel=(key:string)=>key.replace(/^Key|^Digit/,'').replace('Space','스페이스').replace('ShiftLeft','왼쪽 Shift').replace('ShiftRight','오른쪽 Shift');
-export function createControlSettings(storage:Pick<Storage,'getItem'|'setItem'>|null,jump='Space'){
+export type TouchProfile='default'|'tablet'|'phone'|'desktop';
+const PROFILES:readonly string[]=['default','tablet','phone','desktop'];
+export function createControlSettings(storage:Pick<Storage,'getItem'|'setItem'>|null,jump='Space',initialProfile:TouchProfile='default'){
  const defaults=()=>Object.fromEntries(Object.entries(KEY_ACTIONS).map(([k,v])=>[k,k==='jump'?jump:EQUIPMENT_KEYS[k as keyof typeof EQUIPMENT_KEYS]??v[1]])) as Record<KeyAction,string>;
- let keys=defaults(),touch:Partial<Record<TouchTarget,TouchPosition>>={},saved=true;
- const save=()=>{try{if(!storage)throw Error();storage.setItem('harbor-controls-v1',JSON.stringify({keys,touch,postureLayout:2}));saved=true;}catch{saved=false;}};
- const position=(id:TouchTarget,p:TouchPosition)=>{if(!(id in TOUCH_TARGETS)||![p.x,p.y,p.size].every(Number.isFinite))return;touch[id]={x:Math.max(0,Math.min(100,p.x)),y:Math.max(0,Math.min(100,p.y)),size:Math.max(60,Math.min(150,p.size))};};
- try{const data=JSON.parse(storage?.getItem('harbor-controls-v1')??'null');if(data){const candidate={...keys,...data.keys};if(Object.keys(KEY_ACTIONS).every(k=>validKey(candidate[k]))&&new Set(Object.values(candidate)).size===Object.keys(KEY_ACTIONS).length)keys=candidate;for(const [id,key] of Object.entries(EQUIPMENT_KEYS)){const action=id as KeyAction;if(keys[action]===KEY_ACTIONS[action][1]&&!Object.values(keys).includes(key))keys[action]=key;}for(const id of Object.keys(TOUCH_TARGETS) as TouchTarget[])if(data.touch?.[id])position(id,data.touch[id]);if(data.postureLayout!==2){for(const id of ['crouch','prone'] as const){const p=touch[id];if(p&&p.x>=25&&p.x<=75&&p.y>=20&&p.y<=70)delete touch[id];}save();}}}catch{saved=false;}
- return {get keys(){return {...keys};},get touch(){return structuredClone(touch);},get saved(){return saved;},label(action:KeyAction){return keyLabel(keys[action]);},bind(action:KeyAction,key:string){if(!(action in KEY_ACTIONS)||!validKey(key))return false;const conflict=(Object.keys(keys) as KeyAction[]).find(k=>k!==action&&keys[k]===key);if(conflict)keys[conflict]=keys[action];keys[action]=key;save();return true;},position(id:TouchTarget,p:TouchPosition){position(id,p);save();},reset(){keys=Object.fromEntries(Object.entries(KEY_ACTIONS).map(([k,v])=>[k,EQUIPMENT_KEYS[k as keyof typeof EQUIPMENT_KEYS]??v[1]])) as Record<KeyAction,string>;touch={};save();},resetTouch(){touch={};save();},mapCode(code:string){const action=(Object.keys(keys) as KeyAction[]).find(k=>keys[k]===code);if(action)return KEY_ACTIONS[action][1];for(const [id,key] of Object.entries(EQUIPMENT_KEYS)){const action=id as KeyAction;if(code===KEY_ACTIONS[action][1]&&keys[action]===key)return code;}if(code==='ShiftRight'&&keys.sprint==='ShiftLeft')return 'ShiftRight';return Object.values(KEY_ACTIONS).some(v=>v[1]===code)||code==='ShiftRight'?'Unbound':code;}};
+ let keys=defaults(),touch:Partial<Record<TouchTarget,TouchPosition>>={},saved=true,profile=initialProfile;
+ let profiles:Partial<Record<TouchProfile,Partial<Record<TouchTarget,TouchPosition>>>>={};
+ const save=()=>{profiles[profile]=structuredClone(touch);try{if(!storage)throw Error();storage.setItem('harbor-controls-v1',JSON.stringify({keys,touch,touchProfiles:profiles,activeTouchProfile:profile,postureLayout:2}));saved=true;}catch{saved=false;}};
+ const position=(id:TouchTarget,p:TouchPosition)=>{if(!(id in TOUCH_TARGETS)||!p||![p.x,p.y,p.size].every(Number.isFinite))return;touch[id]={x:Math.max(0,Math.min(100,p.x)),y:Math.max(0,Math.min(100,p.y)),size:Math.max(60,Math.min(150,p.size))};};
+ function loadTouch(data:Partial<Record<TouchTarget,TouchPosition>>|undefined){touch={};for(const id of Object.keys(TOUCH_TARGETS) as TouchTarget[])if(data?.[id])position(id,data[id]!);}
+ try{const data=JSON.parse(storage?.getItem('harbor-controls-v1')??'null');if(data){const candidate={...keys,...data.keys};if(Object.keys(KEY_ACTIONS).every(k=>validKey(candidate[k]))&&new Set(Object.values(candidate)).size===Object.keys(KEY_ACTIONS).length)keys=candidate;
+  for(const [id,key] of Object.entries(EQUIPMENT_KEYS)){const action=id as KeyAction;if(keys[action]===KEY_ACTIONS[action][1]&&!Object.values(keys).includes(key))keys[action]=key;}
+  if(PROFILES.includes(data.activeTouchProfile))profile=data.activeTouchProfile;
+  if(data.touchProfiles&&typeof data.touchProfiles==='object')profiles=data.touchProfiles;
+  loadTouch(profiles[profile]??data.touch);
+  if(data.postureLayout!==2){for(const id of ['crouch','prone'] as const){const p=touch[id];if(p&&p.x>=25&&p.x<=75&&p.y>=20&&p.y<=70)delete touch[id];}save();}
+ }}catch{saved=false;}
+ return {get keys(){return {...keys};},get touch(){return structuredClone(touch);},get profile(){return profile;},get saved(){return saved;},
+  label(action:KeyAction){return keyLabel(keys[action]);},
+  bind(action:KeyAction,key:string){if(!(action in KEY_ACTIONS)||!validKey(key))return false;const conflict=(Object.keys(keys) as KeyAction[]).find(k=>k!==action&&keys[k]===key);if(conflict)keys[conflict]=keys[action];keys[action]=key;save();return true;},
+  position(id:TouchTarget,p:TouchPosition){position(id,p);save();},
+  useTouchProfile(next:TouchProfile){if(!PROFILES.includes(next))return false;profiles[profile]=structuredClone(touch);profile=next;loadTouch(profiles[next]);save();return true;},
+  reset(){keys=Object.fromEntries(Object.entries(KEY_ACTIONS).map(([k,v])=>[k,EQUIPMENT_KEYS[k as keyof typeof EQUIPMENT_KEYS]??v[1]])) as Record<KeyAction,string>;touch={};profiles={};save();},resetTouch(){touch={};save();},
+  mapCode(code:string){const action=(Object.keys(keys) as KeyAction[]).find(k=>keys[k]===code);if(action)return KEY_ACTIONS[action][1];for(const [id,key] of Object.entries(EQUIPMENT_KEYS)){const action=id as KeyAction;if(code===KEY_ACTIONS[action][1]&&keys[action]===key)return code;}if(code==='ShiftRight'&&keys.sprint==='ShiftLeft')return 'ShiftRight';return Object.values(KEY_ACTIONS).some(v=>v[1]===code)||code==='ShiftRight'?'Unbound':code;}
+ };
 }

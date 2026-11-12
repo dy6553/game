@@ -1,18 +1,18 @@
 import {renderWeaponSound,mixWeaponSound} from './weapon-audio.ts';
 import {isWeaponId,WEAPON_IDS,type WeaponId} from './weapons.ts';
 export type Sound='quad'|'bazooka'|'rocket'|'grenade'|'flash'|'heal'|'smg'|'burst'|'dmr'|'pistol'|'machinegun'|'shotgun'|'sniper'|'hit'|'wall'|'step'|'step2'|'land'|'reload'|'ready'|'empty'|'jump'|'hurt'|'death'|'respawn'|'win'|'lose'|'ui'|'scope'|'kill'|'deploy'|'dash'|'pickup'|'equip';
-export type AudioSettings={master:number;effects:number;environment:number;muted:boolean};
+export type AudioSettings={master:number;effects:number;environment:number;music:number;musicEnabled:boolean;muted:boolean};
 const samples=['pistol','machinegun','shotgun','sniper','hit','wall','step','step2','land','reload'];
 export function spatialSound(x:number,z:number,yaw:number){const distance=Math.hypot(x,z);return {pan:Math.sin(Math.atan2(x,z)-yaw),gain:1/(1+distance*.13)};}
 export function createGameAudio(){
- let settings:AudioSettings={master:.7,effects:.85,environment:.16,muted:false};
- try{const saved=JSON.parse(localStorage.getItem('harbor-audio')??'{}');for(const key of ['master','effects','environment'] as const)if(Number.isFinite(saved[key]))settings[key]=Math.max(0,Math.min(1,saved[key]));if(typeof saved.muted==='boolean')settings.muted=saved.muted;}catch{/* Storage is optional. */}
- let ctx:AudioContext|undefined,master:GainNode,fx:GainNode,env:GainNode,menuFx:GainNode,interfaceActive=true,paused=true,loading=false,disposed=false;
+ let settings:AudioSettings={master:.7,effects:.85,environment:.16,music:.18,musicEnabled:true,muted:false};
+ try{const saved=JSON.parse(localStorage.getItem('harbor-audio')??'{}');for(const key of ['master','effects','environment','music'] as const)if(Number.isFinite(saved[key]))settings[key]=Math.max(0,Math.min(1,saved[key]));if(typeof saved.musicEnabled==='boolean')settings.musicEnabled=saved.musicEnabled;if(typeof saved.muted==='boolean')settings.muted=saved.muted;}catch{/* Storage is optional. */}
+ let ctx:AudioContext|undefined,master:GainNode,fx:GainNode,env:GainNode,menuFx:GainNode,musicGain:GainNode,musicLoading=false,musicSource:AudioBufferSourceNode|undefined,interfaceActive=true,paused=true,loading=false,disposed=false;
  let wind:AudioBufferSourceNode|undefined;const buffers=new Map<string,AudioBuffer>(),voices=new Set<AudioBufferSourceNode>(),interfaceVoices=new Set<AudioBufferSourceNode>();
  const priorities=new Map<AudioBufferSourceNode,number>();
  const priority=(kind:Sound)=>['step','step2','wall'].includes(kind)?0:['hit','kill','hurt','death','win','lose','respawn'].includes(kind)?2:1;
  function stopEffects(){for(const source of voices){try{source.stop();}catch{}}voices.clear();priorities.clear();}
- const apply=()=>{if(!ctx)return;master.gain.setTargetAtTime(settings.muted?0:settings.master,ctx.currentTime,.025);fx.gain.setTargetAtTime(paused?0:settings.effects,ctx.currentTime,.025);env.gain.setTargetAtTime(paused?0:settings.environment*.22,ctx.currentTime,.15);menuFx.gain.setTargetAtTime(interfaceActive?settings.effects:0,ctx.currentTime,.025);};
+ const apply=()=>{if(!ctx)return;master.gain.setTargetAtTime(settings.muted?0:settings.master,ctx.currentTime,.025);fx.gain.setTargetAtTime(paused?0:settings.effects,ctx.currentTime,.025);env.gain.setTargetAtTime(paused?0:settings.environment*.22,ctx.currentTime,.15);menuFx.gain.setTargetAtTime(interfaceActive?settings.effects:0,ctx.currentTime,.025);musicGain.gain.setTargetAtTime(interfaceActive&&settings.musicEnabled?settings.music*(paused?1:.35):0,ctx.currentTime,.25);};
  function synthetic(kind:Sound){
   if(!ctx)throw new Error('Audio not initialized');
   const key='synth-'+kind,old=buffers.get(key);if(old)return old;
@@ -34,17 +34,23 @@ export function createGameAudio(){
   const signature=renderWeaponSound(kind,ctx.sampleRate),sample=buffers.get(kind)?.getChannelData(0);
   const data=mixWeaponSound(signature,sample?.subarray(0,Math.ceil(ctx.sampleRate*.8))),buffer=ctx.createBuffer(1,data.length,ctx.sampleRate);buffer.getChannelData(0).set(data);buffers.set(key,buffer);return buffer;
  }
+ async function loadMusic(){
+  if(!ctx||disposed||musicLoading||musicSource||!settings.musicEnabled||settings.music===0||location.protocol==='file:')return;
+  musicLoading=true;const context=ctx;
+  try{const response=await fetch('/audio/harbor-pulse.mp3');if(!response.ok)return;const buffer=await context.decodeAudioData(await response.arrayBuffer());if(disposed||ctx!==context)return;musicSource=context.createBufferSource();musicSource.buffer=buffer;musicSource.loop=true;musicSource.connect(musicGain);musicSource.start();apply();}catch{/* Music failure cannot block play. */}finally{musicLoading=false;}
+ }
  async function unlock(){
   if(disposed)return;
   try{
    if(!ctx){
-    ctx=new AudioContext({latencyHint:'interactive'});master=ctx.createGain();fx=ctx.createGain();env=ctx.createGain();menuFx=ctx.createGain();const compressor=ctx.createDynamicsCompressor();compressor.threshold.value=-16;compressor.ratio.value=5;
-    fx.connect(master);env.connect(master);menuFx.connect(master);master.connect(compressor);compressor.connect(ctx.destination);
+    ctx=new AudioContext({latencyHint:'interactive'});master=ctx.createGain();fx=ctx.createGain();env=ctx.createGain();menuFx=ctx.createGain();musicGain=ctx.createGain();const compressor=ctx.createDynamicsCompressor();compressor.threshold.value=-16;compressor.ratio.value=5;
+    fx.connect(master);env.connect(master);menuFx.connect(master);musicGain.connect(master);master.connect(compressor);compressor.connect(ctx.destination);
     const b=ctx.createBuffer(1,ctx.sampleRate*6,ctx.sampleRate),data=b.getChannelData(0);let low=0;
     for(let i=0;i<data.length;i++){low=.985*low+(Math.random()*2-1)*.015;data[i]=low*(.7+.3*Math.cos(i/ctx.sampleRate*2*Math.PI/6));}
     wind=ctx.createBufferSource();wind.buffer=b;wind.loop=true;wind.connect(env);wind.start();apply();for(const id of WEAPON_IDS)soundBuffer(id);
    }
    if(ctx.state!=='running'&&ctx.state!=='closed')await ctx.resume();
+   void loadMusic();
    if(!loading&&location.protocol!=='file:'){
     loading=true;const context=ctx;
     void Promise.allSettled(samples.map(async name=>{const response=await fetch(`/audio/${name}.mp3`);if(!response.ok)return;const b=await context.decodeAudioData(await response.arrayBuffer());buffers.set(name,b);buffers.delete('weapon-'+name);if(isWeaponId(name))soundBuffer(name);}));
@@ -66,9 +72,9 @@ export function createGameAudio(){
   if(!ctx||ctx.state!=='running'||!interfaceActive||settings.muted||settings.master===0||settings.effects===0||disposed||interfaceVoices.size>=4)return;
   const source=ctx.createBufferSource(),panner=ctx.createStereoPanner();source.buffer=soundBuffer(kind);panner.pan.value=pan;source.connect(panner);panner.connect(menuFx);interfaceVoices.add(source);source.onended=()=>{interfaceVoices.delete(source);source.disconnect();panner.disconnect();};source.start(ctx.currentTime+delay);
  }
- return {unlock,play,playInterface,previewWeapon(kind:WeaponId){stopInterface();playInterface(kind);},preview(){playInterface('ui',-.8);playInterface('deploy',.8,.25);},setInterfaceActive(value:boolean){interfaceActive=value;if(!value)stopInterface();apply();},get settings(){return {...settings};},get available(){return !!ctx&&ctx.state==='running';},
-  configure(next:Partial<AudioSettings>){if(next.muted){stopEffects();stopInterface();}settings={...settings,...next};for(const key of ['master','effects','environment'] as const)settings[key]=Number.isFinite(settings[key])?Math.max(0,Math.min(1,settings[key])):0;try{localStorage.setItem('harbor-audio',JSON.stringify(settings));}catch{}apply();},
+ return {unlock,play,playInterface,previewWeapon(kind:WeaponId){stopInterface();playInterface(kind);},preview(){playInterface('ui',-.8);playInterface('deploy',.8,.25);},setInterfaceActive(value:boolean){if(interfaceActive===value)return;interfaceActive=value;if(!value)stopInterface();apply();},get settings(){return {...settings};},get available(){return !!ctx&&ctx.state==='running';},get musicPlaying(){return !!musicSource&&ctx?.state==='running'&&interfaceActive&&settings.musicEnabled&&!settings.muted&&settings.music>0;},
+  configure(next:Partial<AudioSettings>){if(next.muted){stopEffects();stopInterface();}settings={...settings,...next};for(const key of ['master','effects','environment','music'] as const)settings[key]=Number.isFinite(settings[key])?Math.max(0,Math.min(1,settings[key])):0;try{localStorage.setItem('harbor-audio',JSON.stringify(settings));}catch{}apply();if(ctx)void loadMusic();},
   pause(value:boolean){if(value===paused)return;paused=value;if(value)stopEffects();apply();},
-  dispose(){disposed=true;stopInterface();stopEffects();wind?.stop();void ctx?.close();},
+  dispose(){disposed=true;stopInterface();stopEffects();wind?.stop();musicSource?.stop();void ctx?.close();},
  };
 }
