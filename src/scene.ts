@@ -461,28 +461,28 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
   }
   const viewModel = new TransformNode('first-person-hands', scene);
   viewModel.parent = camera;
-  const gun = box('view-gun', 0.27, -0.23, 0.65, 0.12, 0.13, 0.4, metal); gun.parent = viewModel;
+  const gun = box('view-gun', 0.27, -0.255, 0.65, 0.12, 0.09, 0.4, metal); gun.parent = viewModel;
   const barrel = box('view-barrel', 0.27, -0.2, 0.93, 0.065, 0.065, 0.24, metal); barrel.parent = viewModel;
   const sight = box('view-sight', 0.27, -0.145, 0.8, 0.035, 0.035, 0.035, accent); sight.parent = viewModel;
   const reloadMagazine=box('view-reload-magazine',.27,-.34,.7,.075,.2,.1,metal);reloadMagazine.parent=viewModel;reloadMagazine.setEnabled(false);
-  const hand = box('view-hand', 0.27, -0.34, 0.55, 0.15, 0.24, 0.18, metal); hand.parent = viewModel;
+  const hand = box('view-hand', 0.27, -0.345, 0.44, 0.15, 0.18, 0.15, metal); hand.parent = viewModel;
   const gunIvory=material('gun-ivory','#bfc6ca');
   const gunCopper=material('gun-copper','#b29b73');
-  const glove=material('view-glove','#d9d6c5');
+  const glove=material('view-glove','#d9d6c5');hand.material=glove;
   for(const [name,x,y,z,w,h,d,mat] of [
     ['receiver',0.27,-0.17,0.64,0.14,0.08,0.42,gunIvory],
     ['slide-rail',0.27,-0.125,0.65,0.09,0.025,0.34,metal],
     ['grip',0.27,-0.32,0.5,0.09,0.24,0.13,metal],
     ['side-inlay',0.345,-0.19,0.62,0.015,0.035,0.2,gunCopper],
-    ['glove-back',0.27,-0.34,0.51,0.17,0.18,0.12,glove],
+    ['glove-back',0.27,-0.46,0.39,0.13,0.20,0.14,glove],
   ] as const) { const detail=box(`view-${name}`,x,y,z,w,h,d,mat);detail.parent=viewModel; }
-  for(let i=0;i<3;i++) {const finger=box('view-finger',0.21+i*0.055,-0.3,0.61,0.045,0.07,0.1,glove);finger.parent=viewModel;}
+  for(let i=0;i<3;i++) {const finger=box('view-finger',0.205,-0.285-i*.047,0.51,0.045,0.037,0.14,glove);finger.parent=viewModel;}
   // Merge decorative pieces per material to bound draw calls.
   const gunDetails:Mesh[]=[];
   const detailBox=(x:number,y:number,z:number,w:number,h:number,d:number,mat:StandardMaterial)=>{
     const part=box('weapon-detail',x,y,z,w,h,d,mat);gunDetails.push(part);return part;
   };
-  detailBox(.27,-.12,.65,.115,.018,.34,metal);
+  // The slide rail is already present; a second overlapping rail caused coplanar faces.
   for(let i=0;i<7;i++) detailBox(.27,-.108,.51+i*.045,.12,.012,.012,gunCopper);
   for(const side of [-1,1]){
     detailBox(.27+side*.078,-.205,.65,.012,.07,.26,metal);
@@ -646,7 +646,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     const motion=viewmodelPose(weapon.reloadRemaining,spec.reloadSeconds,equipAge,motionReduced);
     viewModel.position.z=0.18-kick.push;viewModel.position.y=-.055+Math.sin(animationTime*1.8)*.002-motion.lower;
     viewModel.rotation.z=-motion.roll;viewModel.rotation.y=motion.yaw;viewModel.rotation.x=-kick.tilt;
-    reloadMagazine.setEnabled(weapon.reloadRemaining>0&&!['shotgun','bazooka'].includes(weaponId));reloadMagazine.position.y=-.34-motion.magazine*.22;hand.rotation.x=motion.magazine*.25;
+    reloadMagazine.setEnabled(weapon.reloadRemaining>0&&!['shotgun','bazooka'].includes(weaponId));reloadMagazine.position.y=-.34-motion.magazine*.22;
     if(!paused&&!preview&&!reference)effects.update(dt);
     if(active&&!duelMode&&rangeMoving){rangeTime+=dt;placeRange();}
     for (const target of targets) {
@@ -713,6 +713,8 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     launcher.setEnabled(weaponId==='bazooka');launcherRim.setEnabled(weaponId==='bazooka');muzzle.setEnabled(weaponId!=='bazooka');muzzleInset.setEnabled(weaponId!=='bazooka');
     scopeBody.setEnabled(weaponId==='sniper');secondBarrel.setEnabled(weaponId==='shotgun');
     gun.scaling.z=weaponId==='pistol'?1:weaponId==='smg'?1.2:weaponId==='dmr'?1.9:1.6;barrel.scaling.z=weaponId==='sniper'?2:weaponId==='dmr'?1.8:weaponId==='pistol'?1:weaponId==='smg'?1.2:1.5;
+    // Anchor the muzzle to the actual barrel end for every weapon length.
+    const barrelEnd=.81+.24*barrel.scaling.z;barrel.position.z=.81+.12*barrel.scaling.z;muzzle.position.z=barrelEnd+.04;muzzleInset.position.z=barrelEnd+.105;secondBarrel.position.z=barrelEnd-.21;
     updateInteriorLights(p,!preview&&!reference&&!(mapArt&&lowPerformance));
     syncBot();syncSupplies();
     if(active){const sequence=advanceBurst(weapon,dt);weapon=sequence.state;if(sequence.due>0){const shot=shoot(true);if(shot.fired)autoShotResults.push(shot);else weapon=cancelBurst(weapon);}}
