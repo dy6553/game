@@ -1,5 +1,5 @@
 import {createServerClock} from '../src/server-clock.ts';
-import {statePacket,privatePacket} from '../src/network-wire.ts';
+import {statePacket,privatePacket,recipientState} from '../src/network-wire.ts';
 import { DurableObject } from 'cloudflare:workers';
 import { createNetworkGame,onlinePlaying,normalizeNickname } from '../src/network-game.ts';
 import {createIdentityVerifier} from './account-auth.js';
@@ -50,7 +50,7 @@ export class Room extends DurableObject {
      if((this.game.state.mode??'duel')==='duel'&&this.disconnectedAt&&Date.now()-this.disconnectedAt>30000){server.close(1008,'재접속 시간이 지났습니다.');this.closeRoom('상대 연결을 복구하지 못해 경기를 종료했습니다.');return;}
      id=this.sessions[msg.token];for(const [socket,other] of this.sockets)if(other===id){this.sockets.delete(socket);socket.close(1000,'새 연결로 복귀했습니다.');}
      this.sockets.set(server,id);this.protocols.set(server,msg.protocol===2?2:1);clearTimeout(timeout);delete this.disconnects[id];this.game.join(id);if(this.game.state.mode!=='duel'&&this.game.state.phase==='playing')this.game.deploy(id);this.last=Date.now();if(this.game.state.players.every(p=>p.connected))this.disconnectedAt=0;
-     server.send(JSON.stringify({type:'welcome',id,state:this.game.state}));this.start();return;
+     server.send(JSON.stringify({type:'welcome',id,state:recipientState(this.game.state,id)}));this.start();return;
     }
     const now=Date.now(),rate=this.packets.get(server)??{at:now,count:0};if(now-rate.at>1000){rate.at=now;rate.count=0;}if(++rate.count>80){server.close(1008,'전송 속도 초과');return;}this.packets.set(server,rate);
     if(msg.type==='start'){if(!this.game.startMatch(id))server.send(JSON.stringify({type:'room-error',reason:'방장만 시작할 수 있습니다. 개인전·팀전은1명부터,1대1은2명부터 시작합니다.'}));else this.matchStarted=true;this.ctx.waitUntil(this.save());this.broadcast();}
@@ -65,7 +65,7 @@ export class Room extends DurableObject {
   server.addEventListener('close',close);server.addEventListener('error',close);
   return new Response(null,{status:101,webSocket:client});
  }
- broadcast(){const compact=statePacket(this.game.state);let legacy;for(const [socket,id] of this.sockets)try{socket.send(this.protocols.get(socket)===2?privatePacket(compact,this.game.state,id):(legacy??=JSON.stringify({type:'state',state:this.game.state})));}catch{}}
+ broadcast(){const compact=statePacket(this.game.state);for(const [socket,id] of this.sockets)try{socket.send(this.protocols.get(socket)===2?privatePacket(compact,this.game.state,id):JSON.stringify({type:'state',state:recipientState(this.game.state,id)}));}catch{}}
  expirePlayers(){for(const [id,at] of Object.entries(this.disconnects))if(Date.now()-at>=30000){if(this.game.state.phase==='waiting'){this.game.leaveWaiting(id);delete this.accounts[id];}else this.game.abandon(id);delete this.disconnects[id];for(const token of Object.keys(this.sessions))if(this.sessions[token]===id)delete this.sessions[token];}}
  start(){if(this.timer)return;if(!this.startedAt)this.startedAt=Date.now();let ticks=0;const clock=createServerClock(Date.now());this.timer=setInterval(()=>{
   if((this.game.state.mode??'duel')==='duel'&&this.disconnectedAt&&Date.now()-this.disconnectedAt>30000){this.closeRoom('상대 연결을 복구하지 못해 경기를 종료했습니다.');return;}

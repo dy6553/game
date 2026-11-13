@@ -1,3 +1,4 @@
+import {rangedDamage,WEAPON_RANGES} from './weapon-range.ts';
 import { PRACTICE_RULES,type CombatRules } from './combat.ts';
 export const WEAPON_IDS=['pistol','machinegun','shotgun','sniper','smg','burst','dmr','quad','bazooka'] as const;
 export type WeaponId=typeof WEAPON_IDS[number];
@@ -29,3 +30,6 @@ export function upgradedWeapon(id:WeaponId,tier:number,botMode:boolean):Readonly
  const base=WEAPONS[id],n=botMode&&Number.isInteger(tier)?Math.max(0,Math.min(3,tier)):0;
  return n?{...base,damage:base.damage*(1+n*.05),reloadSeconds:base.reloadSeconds*(1-n*.05)}:base;
 }
+
+/** Base online values; no bot-only upgrades or idealized kill-time promises. */
+export function weaponComparison(distance:number){return WEAPON_IDS.map(id=>{const s=WEAPONS[id],body=rangedDamage(id,s.damage,Math.max(0,Number.isFinite(distance)?distance:0));return {id,name:s.name,body,head:body*(id==='bazooka'?1:1.5),pellets:s.pellets,magazine:s.magazineSize,reload:s.reloadSeconds,interval:s.interval,burst:s.burstCount??1,range:WEAPON_RANGES[id][0]};});}
