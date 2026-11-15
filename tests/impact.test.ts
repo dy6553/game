@@ -46,7 +46,7 @@ test('real duel keeps a dying robot visible but unpickable, then restores it on 
   const body=world.scene.getTransformNodeByName('opponent')!;
   const root=body.getChildren().find(node=>node.name==='character-robot-cat') as TransformNode;
   const meshes=world.scene.meshes.length,materials=world.scene.materials.length;
-  assert.equal(world.shoot().eliminated,true);assert.equal(world.duelState().playerKills,1);
+  assert.equal(world.shoot().eliminated,false);world.update(position,1.5);const target=world.duelState().position;world.update(position,0,{yaw:Math.atan2(target.x-position.x,target.z-position.z),pitch:0});world.scene.render();assert.equal(world.shoot().eliminated,true);assert.equal(world.duelState().playerKills,1);
   assert.equal(body.isEnabled(),true,'collapse stays visible after the kill');assert.ok(body.getChildMeshes().every(mesh=>!mesh.isPickable));
   world.update(position,.3);assert.ok(Math.abs(root.rotation.z)>.5);assert.ok(world.impactState().active>0);
   const pose=root.rotation.z;world.update(position,.5,undefined,true);assert.equal(root.rotation.z,pose,'pause freezes collapse');

@@ -64,7 +64,7 @@ test('server floors block cross-storey bullets while same-storey hits remain aut
  a.x=house.x;a.z=house.z;a.y=0;b.x=house.x;b.z=house.z+3;b.y=3.4;
  const command=(seq:number,pitch:number)=>({seq,x:0,y:0,yaw:0,pitch,fire:false,shot:true,reload:false,jump:false,sprint:false,scope:false});
  game.input('a',command(1,-Math.atan2(3.4,3)));game.step();assert.equal(b.health,100,'second-floor slab intercepts the rising bullet');
- a.y=3.4;a.cooldown=0;game.input('a',command(2,0));game.step();assert.equal(b.health,0,'same-floor sniper hit is valid');
+ a.y=3.4;a.cooldown=0;game.input('a',command(2,0));game.step();assert.equal(b.health,17.5,'same-floor sniper headshot damages without one-shot elimination');
 });
 test('actual doors stay dynamic after batching and rooftop scenery matches collision height',async()=>{
  const {NullEngine}=await import('@babylonjs/core/Engines/nullEngine.js');const {createHarborScene}=await import('../src/scene.ts');const e=new NullEngine();try{
@@ -72,7 +72,7 @@ test('actual doors stay dynamic after batching and rooftop scenery matches colli
   const mesh=scene.scene.getMeshByName(building.id+'-interactive-door')!;assert.ok(mesh&&!mesh.isDisposed(),'door must survive static batching');assert.equal(mesh.isWorldMatrixFrozen,false);
   assert.equal(scene.toggleDoor(actor,building.id),true);assert.ok(Math.abs(mesh.rotation.y)>1.5);assert.equal(mesh.isPickable,false);
   assert.equal(scene.toggleDoor(actor,building.id),true);assert.equal(mesh.rotation.y,0);assert.equal(mesh.isPickable,true);
-  assert.equal(scene.scene.meshes.filter(m=>m.material?.name==='entry-sign-material').reduce((n,m)=>n+m.getTotalIndices()/12,0),6,'six complete double-sided signs survive batching');
+  assert.equal(scene.scene.meshes.filter(m=>m.material?.name==='navigation-signs').reduce((n,m)=>n+m.getTotalIndices()/12,0),18,'six buildings have three complete double-sided floor signs in one batch');
   const roof={x:building.x,z:building.z,y:building.height};scene.setMode('practice');scene.update(roof,0);assert.equal(scene.camera.position.y,building.height+1.95);
   for(let i=0;i<5;i++){scene.setMode('duel');const state=scene.duelState();assert.equal(world.indoorAt(state.position),undefined);assert.equal(state.position.y??0,0);}
   scene.scene.dispose();

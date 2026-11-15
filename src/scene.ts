@@ -1,3 +1,6 @@
+import {rangedDamage} from './weapon-range.ts';
+import {viewmodelPose} from './viewmodel-motion.ts';
+import {createWayfindingSigns} from './wayfinding-signs.ts';
 import {stanceStats,type Stance} from './stance.ts';
 import {createRemoteModels,type RemoteModel} from './remote-models.ts';
 import {createHarborMapArt,type HarborArtSource} from './harbor-map-art.ts';
@@ -38,7 +41,6 @@ import type { Look } from './view.ts';
 import { Ray } from '@babylonjs/core/Culling/ray.js';
 import { Scene } from '@babylonjs/core/scene.js';
 import { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator.js';
-import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
 import { PRACTICE_RULES,createWeapon,tryFire,beginReload,advanceWeapon,applyDamage } from './combat.ts';
 import { createJump,beginJump,advanceJump,type JumpState } from './jump.ts';
@@ -201,12 +203,8 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
   let doors:Doors=createDoors();
   const doorMeshes=new Map<string,Mesh>();
   const entryMat=material('enterable-entry','#0c8e67','#23c992');
-  const entrySignMat=material('entry-sign-material','#ffffff','#ffffff');
-  if(!expansion&&typeof document!=='undefined'&&typeof document.createElement('canvas').getContext==='function'){
-    const texture=new DynamicTexture('entry-sign-text',{width:512,height:128},scene,false);
-    texture.drawText('출입 가능 · 2F / 옥상',null,78,'bold 36px sans-serif','#dcfff4','#084a3a',true,true);entrySignMat.diffuseTexture=texture;entrySignMat.emissiveTexture=texture;
-  }else entrySignMat.diffuseColor=Color3.FromHexString('#23c992');
-  function syncDoors(){if(!expansion)for(const b of BUILDINGS.filter(b=>b.enterable)){const mesh=doorMeshes.get(b.id)!;mesh.rotation.y=doors[b.id]?(b.z<0?1:-1)*Math.PI/2:0;mesh.isPickable=!doors[b.id];}mapArt?.syncDoors();}
+  const doorBuildings=BUILDINGS.filter(b=>!expansion&&b.enterable);let lastDoorKey='';
+  function syncDoors(){const key=doorBuildings.map(b=>doors[b.id]?'1':'0').join('');if(key===lastDoorKey)return;lastDoorKey=key;for(const b of doorBuildings){const mesh=doorMeshes.get(b.id)!;mesh.rotation.y=doors[b.id]?(b.z<0?1:-1)*Math.PI/2:0;mesh.isPickable=!doors[b.id];}mapArt?.syncDoors();}
   if(!expansion)for (const building of BUILDINGS) {
     const { id, x, z, width, depth, height, palette } = building;
     const meshes: Mesh[] = [];
@@ -226,7 +224,6 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
       const rect=doorRect(building),door=box(id+'-interactive-door',rect.x,1.6,rect.z,rect.width,3.2,rect.depth,wood);door.setPivotPoint(new Vector3(-rect.width/2,0,0));doorMeshes.set(id,door);shadows.addShadowCaster(door);
       part('entry-green-header',x,3.3,rect.z+(z<0?.3:-.3),DOOR_WIDTH+.4,.15,.12,entryMat);
       for(const side of [-1,1])part('entry-green-side',x+side*(DOOR_WIDTH/2+.18),1.6,rect.z+(z<0?.3:-.3),.13,3.2,.12,entryMat);
-      const sign=MeshBuilder.CreatePlane(id+'-entry-sign',{width:4,height:1,sideOrientation:Mesh.DOUBLESIDE},scene);sign.position.set(x,3.95,rect.z+(z<0?.28:-.28));sign.rotation.y=z<0?Math.PI:0;sign.material=entrySignMat;sign.isPickable=false;
       for(let i=0;i<3;i++)part('entry-path-marker',x,.07,rect.z+(z<0?1:-1)*(1+i*.7),.7,.025,.3,entryMat);
 
       part('ceiling-light',x,3.25,z,2.5,.08,.7,warm);
@@ -477,27 +474,28 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
   }
   const viewModel = new TransformNode('first-person-hands', scene);
   viewModel.parent = camera;
-  const gun = box('view-gun', 0.27, -0.23, 0.65, 0.12, 0.13, 0.4, metal); gun.parent = viewModel;
+  const gun = box('view-gun', 0.27, -0.255, 0.65, 0.12, 0.09, 0.4, metal); gun.parent = viewModel;
   const barrel = box('view-barrel', 0.27, -0.2, 0.93, 0.065, 0.065, 0.24, metal); barrel.parent = viewModel;
   const sight = box('view-sight', 0.27, -0.145, 0.8, 0.035, 0.035, 0.035, accent); sight.parent = viewModel;
-  const hand = box('view-hand', 0.27, -0.34, 0.55, 0.15, 0.24, 0.18, metal); hand.parent = viewModel;
+  const reloadMagazine=box('view-reload-magazine',.27,-.34,.7,.075,.2,.1,metal);reloadMagazine.parent=viewModel;reloadMagazine.setEnabled(false);
+  const hand = box('view-hand', 0.27, -0.345, 0.44, 0.15, 0.18, 0.15, metal); hand.parent = viewModel;
   const gunIvory=material('gun-ivory','#bfc6ca');
   const gunCopper=material('gun-copper','#b29b73');
-  const glove=material('view-glove','#d9d6c5');
+  const glove=material('view-glove','#d9d6c5');hand.material=glove;
   for(const [name,x,y,z,w,h,d,mat] of [
     ['receiver',0.27,-0.17,0.64,0.14,0.08,0.42,gunIvory],
     ['slide-rail',0.27,-0.125,0.65,0.09,0.025,0.34,metal],
     ['grip',0.27,-0.32,0.5,0.09,0.24,0.13,metal],
     ['side-inlay',0.345,-0.19,0.62,0.015,0.035,0.2,gunCopper],
-    ['glove-back',0.27,-0.34,0.51,0.17,0.18,0.12,glove],
+    ['glove-back',0.27,-0.46,0.39,0.13,0.20,0.14,glove],
   ] as const) { const detail=box(`view-${name}`,x,y,z,w,h,d,mat);detail.parent=viewModel; }
-  for(let i=0;i<3;i++) {const finger=box('view-finger',0.21+i*0.055,-0.3,0.61,0.045,0.07,0.1,glove);finger.parent=viewModel;}
+  for(let i=0;i<3;i++) {const finger=box('view-finger',0.205,-0.285-i*.047,0.51,0.045,0.037,0.14,glove);finger.parent=viewModel;}
   // Merge decorative pieces per material to bound draw calls.
   const gunDetails:Mesh[]=[];
   const detailBox=(x:number,y:number,z:number,w:number,h:number,d:number,mat:StandardMaterial)=>{
     const part=box('weapon-detail',x,y,z,w,h,d,mat);gunDetails.push(part);return part;
   };
-  detailBox(.27,-.12,.65,.115,.018,.34,metal);
+  // The slide rail is already present; a second overlapping rail caused coplanar faces.
   for(let i=0;i<7;i++) detailBox(.27,-.108,.51+i*.045,.12,.012,.012,gunCopper);
   for(const side of [-1,1]){
     detailBox(.27+side*.078,-.205,.65,.012,.07,.26,metal);
@@ -571,6 +569,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     ? createHarborMapArt(scene, options.mapArtSource, scene.meshes.filter(mesh => !mesh.parent && mesh !== skyDome),
       BUILDINGS, () => doors, shadows)
     : undefined;
+  if(!expansion)createWayfindingSigns(scene,geometry);
   const targets = [{ x: 0, z: 32 }, { x: -25, z: 12 }, { x: 25, z: 12 }].map((p, index) => {
     const root=new TransformNode(`target-root-${index}`,scene);
     const targetMat = material(`target-${index}`, '#da8d61', '#543524');
@@ -586,9 +585,12 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     const healthBar=box(`target-health-fill-${index}`,p.x,2.88,p.z-0.04,1.5,0.08,0.03,accent);
     for(const mesh of [target,post,center,healthBack,healthBar])mesh.parent=root;
     healthBack.isPickable=false;healthBar.isPickable=false;
-    return { mat: targetMat, flash: 0,root,healthBar,x:p.x,z:p.z,health:PRACTICE_RULES.maxHealth };
+    return { mat: targetMat, flash: 0,root,healthBar,baseX:p.x,baseZ:p.z,x:p.x,z:p.z,health:PRACTICE_RULES.maxHealth };
 
   });
+  let rangeDistance=0,rangeMoving=false,rangeTime=0;
+  function placeRange(){targets.forEach((t,i)=>{const x=rangeDistance?(i-1)*4+(rangeMoving?Math.sin(rangeTime*1.5+i)*1.4:0):t.baseX,z=rangeDistance?PROTOTYPE.spawn.z+rangeDistance:t.baseZ;t.x=x;t.z=z;t.root.position.set(x-t.baseX,0,z-t.baseZ);t.root.computeWorldMatrix(true);});}
+  function setPracticeRange(distance:number,moving:boolean){if(duelMode||![0,10,20,40].includes(distance))return false;rangeDistance=distance;rangeMoving=distance>0&&moving;rangeTime=0;resetPractice();return true;}
   const atmosphere:ReturnType<typeof createAtmosphere>=expansion
     ? {update(){},setQuality(){},setLow(){},meshes:[]}
     : createAtmosphere(scene,options.map!=='factory');
@@ -651,8 +653,9 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
   let hits=0,destroyed=0,shots=0;
   const effects=createShotEffects(scene,camera);
   let preview = false, reference = false, lobbyPreview=false,lobbyMotion=true,lobbyTime=0,lobbyYaw=0,lobbyWeaponId:WeaponId='pistol';
-  const recoil=createRecoil();let reducedShots=false;
-  function equip(){const slot=inventory.slots[inventory.active]!;weaponId=slot.id;spec=localSpec(weaponId);weapon=slot.weapon;cooldown=slot.cooldown;scoped=false;recoil.clear();}
+  const recoil=createRecoil();let reducedShots=false,combatEffectsEnabled=true,equipAge=1,motionReduced=false;
+  function syncEffectQuality(){const detailed=onlineQualityHigh&&!lowPerformance&&!reducedShots&&combatEffectsEnabled;effects.setDetailed(detailed);botEffects.setDetailed(detailed);toolVisuals.setDetailed(detailed);}
+  function equip(){equipAge=0;const slot=inventory.slots[inventory.active]!;weaponId=slot.id;spec=localSpec(weaponId);weapon=slot.weapon;cooldown=slot.cooldown;scoped=false;recoil.clear();}
   const supplies=createSupplyCrates(scene,matchPickups());
   function syncSupplies(){supplies.update(pickups,!preview&&!reference);}
   let animationTime = 0;
@@ -672,6 +675,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     for(const light of streetLights) light.setEnabled(!value&&!expansion);
   }
   const autoShotResults:ReturnType<typeof shoot>[]=[];
+  const flashTargetColor=Color3.FromHexString('#67d6ca'),idleTargetColor=Color3.FromHexString('#543524');
   const highShotNotices:string[]=[];const botReveals=new Map<string,number>();let stance:Stance='stand';
   function update(p: Point, dt: number, look: Look = { yaw: 0, pitch: 0 }, paused=false) {
     snowfall?.update(p,snowfallEnabled&&!paused&&!preview&&!reference&&!geometry.indoorAt(p),look.yaw);
@@ -680,24 +684,24 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
       if(stance==='stand')delete p.stance;else p.stance=stance;
       const vertical=geometry.advanceJumpOnTerrain(p,jumpState,dt);
       Object.assign(p,vertical.position);jumpState=vertical.jump;falling=(p.fallSpeed??0)>0;
-      syncSlot(inventory,weapon,cooldown);advanceStowed(inventory,dt);tickPickups(pickups,dt);weapon=advanceWeapon(weapon,dt,spec);if(weaponId==='smg')weapon={...weapon,cadenceCarry:cadenceCarry(cooldown,dt)};cooldown=Math.max(0,cooldown-dt);
+      syncSlot(inventory,weapon,cooldown);advanceStowed(inventory,dt);tickPickups(pickups,dt);weapon=advanceWeapon(weapon,dt,spec);if(spec.automatic)weapon={...weapon,cadenceCarry:cadenceCarry(cooldown,dt)};cooldown=Math.max(0,cooldown-dt);
     }
     syncDoors();if(!paused)atmosphere.update(dt,p);
     const texel=64/shadows.mapSize;
     moon.position.set(Math.round((p.x+24.75)/texel)*texel,55,Math.round((p.z-13.75)/texel)*texel);
     if(waterNormals)waterNormals.uOffset+=paused?0:Math.min(dt,.1)*.012;
     const active=!paused&&!preview&&!reference;
-    if(active){animationTime+=dt;recoil.update(dt);robotImpact.update(dt);if(ffaMode||survivalMode)for(const rig of botRigs.slice(1))rig.fx.update(dt);}
+    if(active){animationTime+=dt;equipAge+=dt;recoil.update(dt);robotImpact.update(dt);if(ffaMode||survivalMode)for(const rig of botRigs.slice(1))rig.fx.update(dt);}
     const kick=recoil.read();
-    viewModel.position.z=0.18-kick.push;
-    const reloadMotion=weapon.reloadRemaining>0?Math.sin((1-weapon.reloadRemaining/spec.reloadSeconds)*Math.PI):0;
-    viewModel.position.y=-0.055+Math.sin(animationTime*1.8)*0.002-reloadMotion*0.16;
-    viewModel.rotation.z=-reloadMotion*0.3;
-    viewModel.rotation.x=-kick.tilt;
+    const motion=viewmodelPose(weapon.reloadRemaining,spec.reloadSeconds,equipAge,motionReduced);
+    viewModel.position.z=0.18-kick.push;viewModel.position.y=-.055+Math.sin(animationTime*1.8)*.002-motion.lower;
+    viewModel.rotation.z=-motion.roll;viewModel.rotation.y=motion.yaw;viewModel.rotation.x=-kick.tilt;
+    reloadMagazine.setEnabled(weapon.reloadRemaining>0&&!['shotgun','bazooka'].includes(weaponId));reloadMagazine.position.y=-.34-motion.magazine*.22;
     if(!paused&&!preview&&!reference)effects.update(dt);
+    if(active&&!duelMode&&rangeMoving){rangeTime+=dt;placeRange();}
     for (const target of targets) {
       target.flash = Math.max(0, target.flash - dt);
-      target.mat.emissiveColor = Color3.FromHexString(target.flash > 0 ? '#67d6ca' : '#543524');
+      target.mat.emissiveColor.copyFrom(target.flash>0?flashTargetColor:idleTargetColor);
     }
     if(duelMode&&!paused&&!preview&&!reference){
       botEffects.update(dt);
@@ -759,6 +763,8 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     launcher.setEnabled(weaponId==='bazooka');launcherRim.setEnabled(weaponId==='bazooka');muzzle.setEnabled(weaponId!=='bazooka');muzzleInset.setEnabled(weaponId!=='bazooka');
     scopeBody.setEnabled(weaponId==='sniper');secondBarrel.setEnabled(weaponId==='shotgun');
     gun.scaling.z=weaponId==='pistol'?1:weaponId==='smg'?1.2:weaponId==='dmr'?1.9:1.6;barrel.scaling.z=weaponId==='sniper'?2:weaponId==='dmr'?1.8:weaponId==='pistol'?1:weaponId==='smg'?1.2:1.5;
+    // Anchor the muzzle to the actual barrel end for every weapon length.
+    const barrelEnd=.81+.24*barrel.scaling.z;barrel.position.z=.81+.12*barrel.scaling.z;muzzle.position.z=barrelEnd+.04;muzzleInset.position.z=barrelEnd+.105;secondBarrel.position.z=barrelEnd-.21;
     updateInteriorLights(p,!preview&&!reference&&!(mapArt&&lowPerformance));
     syncBot();syncSupplies();
     if(active){const sequence=advanceBurst(weapon,dt);weapon=sequence.state;if(sequence.due>0){const shot=shoot(true);if(shot.fired)autoShotResults.push(shot);else weapon=cancelBurst(weapon);}}
@@ -771,9 +777,9 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     const attempt=tryFire(weapon);weapon=attempt.state;
     if(!attempt.fired)return {fired:false,hit:false,reason:attempt.reason};
     if(camera.position.y-stanceStats(stance).eye-jumpState.height>=3.35&&highShotNotices.length<8)highShotNotices.push('고층 사격 · 내 위치가 4초간 노출됩니다');
-    (survivalMode?survival:ffaMode?ffa:duel).playerFired();localActor.healing=0;shots++;recoil.fire(weaponId);if(!continued){cooldown=Math.max(0,spec.interval-(weaponId==='smg'?(weapon.cadenceCarry??0):0));weapon=startBurst(weapon,spec);}
+    (survivalMode?survival:ffaMode?ffa:duel).playerFired();localActor.healing=0;shots++;recoil.fire(weaponId);if(!continued){cooldown=Math.max(0,spec.interval-(spec.automatic?(weapon.cadenceCarry??0):0));weapon=startBurst(weapon,spec);}
     if(weaponId==='bazooka'){launchRocket({...localActor,x:camera.position.x,y:camera.position.y-stanceStats(stance).eye,stance,z:camera.position.z,jump:{height:0},yaw:camera.rotation.y,pitch:camera.rotation.x},localProjectiles,++toolSequence,spec.damage);return {fired:true,hit:false,eliminated:false,damage:0,impact:false,point:camera.position.clone()};}
-    let anyHit=false,anyEliminated=false,impact=false,totalDamage=0;
+    let anyHeadshot=false,anyHit=false,anyEliminated=false,impact=false,totalDamage=0;
     let lastPoint=camera.position.clone();
     const offsets=pelletOffsets(spec);
     for(let pellet=0;pellet<offsets.length;pellet++){
@@ -794,17 +800,17 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     if(hit&&duelMode){
       const id=String(pick!.pickedMesh!.metadata.botId??'bot-1'),multi=ffaMode||survivalMode,group=survivalMode?survival:ffa;
       const before=multi?group.state().bots.find(b=>b.id===id)!.health:battleState().botHealth;
-      const head=/^(robot-(head|screen|eye|ear)|cat-(head|face|eye|cheek|nose|forehead)|welding-(mask|visor|filter))/.test(pick!.pickedMesh!.name);const damageAmount=spec.damage*(head?1.5:1);eliminated=multi?group.hurt(id,damageAmount):duel.hurt('bot',damageAmount);
+      const head=/^(robot-(head|screen|eye|ear)|cat-(head|face|eye|cheek|nose|forehead)|welding-(mask|visor|filter))/.test(pick!.pickedMesh!.name);anyHeadshot ||=head;const damageAmount=rangedDamage(weaponId,spec.damage,pick!.distance)*(head?1.5:1);eliminated=multi?group.hurt(id,damageAmount):duel.hurt('bot',damageAmount);
       const after=multi?group.state().bots.find(b=>b.id===id)!.health:battleState().botHealth,damage=before-after;totalDamage+=damage;
       const rig=botRigs.find(b=>b.id===id);if(damage>0&&rig)rig.fx.hit(end,end.x-rig.parent.position.x,eliminated);syncBot();
     }
     if(hit&&!duelMode) {
       const target=targets[pick!.pickedMesh!.metadata.targetIndex]!;
-      const damage=applyDamage(target.health,spec.damage);totalDamage+=target.health-damage.health;
+      const damage=applyDamage(target.health,rangedDamage(weaponId,spec.damage,pick!.distance));totalDamage+=target.health-damage.health;
       target.health=damage.health;target.flash=0.16;hits++;
       const fraction=target.health/PRACTICE_RULES.maxHealth;
       target.healthBar.scaling.x=Math.max(0.001,fraction);
-      target.healthBar.position.x=target.x-0.75*(1-fraction);
+      target.healthBar.position.x=target.baseX-0.75*(1-fraction);
       eliminated=damage.eliminated;
       if(eliminated){target.root.setEnabled(false);destroyed++;}
     }
@@ -812,7 +818,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     impact=impact||pick?.hit===true;
     anyHit=anyHit||hit;anyEliminated=anyEliminated||eliminated;lastPoint=end;
     }
-    return { fired: true, hit:anyHit, eliminated:anyEliminated, damage:totalDamage,impact,point:lastPoint };
+    return { fired: true, hit:anyHit,headshot:anyHeadshot, eliminated:anyEliminated, damage:totalDamage,impact,point:lastPoint };
   }
   function reload() {
     if(preview||reference||(battleState().playerHealth===0||!!battleState().winner))return false;
@@ -822,9 +828,10 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     localActor={id:'player',...PROTOTYPE.spawn,yaw:0,pitch:0,health:100,gear:createGear(),healing:0,flash:0,gearCooldown:0};localProjectiles=[];toolSequence=0;toolDamageVersion=0;lastToolHealth=100;botFlashes.clear();toolVisuals.clear();
     highShotNotices.length=0;botReveals.clear();autoShotResults.length=0;weaponId=startWeapon;spec=localSpec(weaponId);inventory=createInventory(startWeapon);pickups=matchPickups();weapon=createWeapon(spec);cooldown=0;scoped=false;jumpState=createJump();falling=false;hits=0;destroyed=0;shots=0;
     effects.clear();botEffects.clear();recoil.clear();robotImpact.reset();doors=createDoors();environment.doors=doors;duel=createDuel(fixedDifficulty(),environment.randomSpawns?randomOutdoorSpawn([PROTOTYPE.spawn]):{x:0,z:18},undefined,environment);ffa=createBotMatch(fixedDifficulty(),environment);survival=createSurvivalMatch(botDifficulty,undefined,environment);syncDoors();seenResupply=0;for(const rig of botRigs){rig.fx.reset();rig.health=100;}seenRespawn=0;syncBot();
+    rangeTime=0;placeRange();
     for(const target of targets){
       target.health=PRACTICE_RULES.maxHealth;target.flash=0;target.root.setEnabled(!duelMode);
-      target.healthBar.scaling.x=1;target.healthBar.position.x=target.x;
+      target.healthBar.scaling.x=1;target.healthBar.position.x=target.baseX;
     }
   }
   const remoteModels=createRemoteModels(scene);
@@ -842,12 +849,12 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
   }
   function renderOnline(state:MatchState,id:string,look:Look,dt:number,predictedPosition?:Point,remotePosition?:(Point&{id:string})|Array<Point&{id:string}>,predictedJump?:JumpState){
     const me=state.players.find(p=>p.id===id);if(!me)return;stance=me.stance??'stand';remoteParent.setEnabled(true);doors=state.doors??{};environment.doors=doors;
-    duelMode=false;ffaMode=false;survivalMode=false;preview=false;reference=false;lobbyWeapons.show(lobbyWeaponId,false);character.poseLobby(false);if(weaponId!==me.weaponId||me.health===0)scoped=false;weaponId=me.weaponId;spec=WEAPONS[weaponId];weapon={...me.weapon};cooldown=me.cooldown;if(networkJumpTick!==state.tick){networkJumpTick=state.tick;networkJumpAge=0;}else networkJumpAge=Math.min(.15,networkJumpAge+dt);jumpState=predictedJump??advanceJump(me.jump,networkJumpAge);falling=(me.fallSpeed??0)>0;inventory=me.inventory??createInventory(me.weaponId);pickups=state.pickups??[];
+    duelMode=false;ffaMode=false;survivalMode=false;preview=false;reference=false;lobbyWeapons.show(lobbyWeaponId,false);character.poseLobby(false);if(weaponId!==me.weaponId||me.health===0)scoped=false;if(weaponId!==me.weaponId)equipAge=0;else equipAge+=dt;weaponId=me.weaponId;spec=WEAPONS[weaponId];weapon={...me.weapon};cooldown=me.cooldown;if(networkJumpTick!==state.tick){networkJumpTick=state.tick;networkJumpAge=0;}else networkJumpAge=Math.min(.15,networkJumpAge+dt);jumpState=predictedJump??advanceJump(me.jump,networkJumpAge);falling=(me.fallSpeed??0)>0;inventory=me.inventory??createInventory(me.weaponId);pickups=state.pickups??[];
     recoil.update(dt);effects.update(dt);botEffects.update(dt);update(predictedPosition??me,0,look,true);toolVisuals.update(state.projectiles??[],state.toolEvents??[],dt);for(const target of targets)target.root.setEnabled(false);
     const estimates=new Map((Array.isArray(remotePosition)?remotePosition:remotePosition?[remotePosition]:[]).map(p=>[p.id,p]));const ids=new Set(state.players.filter(p=>p.id!==id&&!p.abandoned).map(p=>p.id));for(const key of remotes.keys())if(!ids.has(key))removeRemote(key);
     for(const other of state.players){if(other.id===id||other.abandoned)continue;let rig=remotes.get(other.id);
       if(!rig||rig.type!==other.character){removeRemote(other.id);const parent=new TransformNode('online-player-'+other.id,scene);parent.parent=remoteParent;const model=remoteModels.create(parent,other.character,other.weaponId!=='pistol'),body=model.meshes;
-       const fx=createRobotImpact(scene,model.root,body,{particleLimit:12});fx.setQuality(onlineQualityHigh);const marker=MeshBuilder.CreateBox('team-marker',{width:.45,height:.07,depth:.1},scene);marker.parent=parent;marker.position.y=2.95;marker.isPickable=false;rig={model,fx,parent,type:other.character,health:other.health,marker,castsShadow:false};remotes.set(other.id,rig);parent.position.set(other.x,(other.y??0)+other.jump.height,other.z);
+       const fx=createRobotImpact(scene,model.root,body,{particleLimit:12});fx.setQuality(onlineQualityHigh);fx.setEffectsEnabled(combatEffectsEnabled);const marker=MeshBuilder.CreateBox('team-marker',{width:.45,height:.07,depth:.1},scene);marker.parent=parent;marker.position.y=2.95;marker.isPickable=false;rig={model,fx,parent,type:other.character,health:other.health,marker,castsShadow:false};remotes.set(other.id,rig);parent.position.set(other.x,(other.y??0)+other.jump.height,other.z);
       }
       if(rig.health===0&&other.health>0){rig.fx.reset();rig.parent.position.set(other.x,(other.y??0)+other.jump.height,other.z);}const target=estimates.get(other.id)??other,factor=1-Math.exp(-dt*35);rig.parent.position.x+=(target.x-rig.parent.position.x)*factor;rig.parent.position.z+=(target.z-rig.parent.position.z)*factor;rig.parent.position.y+=((target.y??other.y??0)+other.jump.height-rig.parent.position.y)*factor;rig.parent.rotation.y+=Math.atan2(Math.sin(other.yaw-rig.parent.rotation.y),Math.cos(other.yaw-rig.parent.rotation.y))*factor;rig.model.root.rotation.x=other.stance==='prone'?Math.PI/2:0;rig.model.root.position.y=other.stance==='prone'?.5:0;rig.model.root.scaling.y=other.stance==='crouch'?.6:1;rig.marker.position.y=stanceStats(other.stance).height+.45;rig.marker.material=me.team!==undefined&&me.team===other.team?friendMat:enemyMat;rig.fx.update(dt);rig.parent.setEnabled(other.connected&&other.playing!==false&&(!other.guest||!!other.nickname)&&(other.health>0||rig.fx.showingDeath));rig.health=other.health;
       const shadowRadius=onlineQualityHigh?40:24;
@@ -883,20 +890,22 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     inventoryState(){syncSlot(inventory,weapon,cooldown);return {inventory,pickups};},
     pickup(p:Point,id:string,replace?:number){if(preview||reference||(battleState().playerHealth===0||!!battleState().winner))return 'unavailable';syncSlot(inventory,weapon,cooldown);const crate=pickups.find(c=>c.id===id);if(crate?.equipmentId)return takeEquipmentPickup(localActor.gear,p,pickups,id)?'added':'unavailable';const result=takePickup(inventory,p,pickups,id,replace);if(result==='added')equip();return result;},
     switchWeapon(slot:number){if(preview||reference||(battleState().playerHealth===0||!!battleState().winner))return false;syncSlot(inventory,weapon,cooldown);if(!switchSlot(inventory,slot))return false;equip();return true;},
-    reload,resetPractice,practiceState,
+    setPracticeRange,reload,resetPractice,practiceState,
     onlineNameplates(state:MatchState,id:string){const me=state.players.find(p=>p.id===id);if(!me||me.health<=0)return [];const width=engine.getRenderWidth(),height=engine.getRenderHeight(),viewport=camera.viewport.toGlobal(width,height),transform=camera.getViewMatrix().multiply(camera.getProjectionMatrix());return state.players.filter(p=>p.id!==id&&p.connected&&!p.abandoned&&p.playing!==false&&p.health>0&&(!p.guest||!!p.nickname)).flatMap(p=>{const point=new Vector3(p.x,(p.y??0)+p.jump.height+stanceStats(p.stance).height+.4,p.z);if(Vector3.DistanceSquared(camera.position,point)>60*60||!unobstructed(geometry,doors,{x:camera.position.x,y:camera.position.y,z:camera.position.z},{x:p.x,y:(p.y??0)+p.jump.height+1.8,z:p.z}))return [];const v=Vector3.Project(point,Matrix.Identity(),transform,viewport);if(v.z<0||v.z>1||v.x<0||v.x>width||v.y<0||v.y>height)return [];return [{id:p.id,name:playerName(p),x:v.x/width,y:v.y/height,health:p.health,ally:me.team!==undefined&&me.team===p.team}];});},
     renderOnline,endOnline,
     effectsState:effects.stats,
     impactState:()=>({...robotImpact.stats(),recoil:recoil.read()}),
-    setReducedShots(value:boolean){reducedShots=value;effects.setReduced(value);botEffects.setReduced(value||lowPerformance);},
+    setCombatEffects(value:boolean){combatEffectsEnabled=value;effects.setEnabled(value);botEffects.setEnabled(value);toolVisuals.setEffectsEnabled(value);robotImpact.setEffectsEnabled(value);for(const rig of botRigs.slice(1))rig.fx.setEffectsEnabled(value);for(const rig of remotes.values())rig.fx.setEffectsEnabled(value);syncEffectQuality();},
+    setReducedShots(value:boolean){reducedShots=value;effects.setReduced(value);botEffects.setReduced(value||lowPerformance);syncEffectQuality();},
+    setMotionReduced(value:boolean){motionReduced=value;},
     setShake(level:ShakeLevel){recoil.setShake(level);},
     setShadows(enabled:boolean){requestedShadows=enabled;scene.shadowsEnabled=enabled&&!lowPerformance;},
     setSnowfall(enabled:boolean){snowfallEnabled=enabled;if(!enabled)snowfall?.stop();},
     snowfallState:()=>snowfall?.state()??null,
-    setPerformanceLow(enabled:boolean){if(lowPerformance===enabled)return;lowPerformance=enabled;snowfall?.setLow(enabled);scene.shadowsEnabled=requestedShadows&&!enabled;botEffects.setReduced(reducedShots||enabled);atmosphere.setLow(enabled);const loading=mapArt?.setPerformanceLow(enabled);applySurfaceQuality();return loading;},
+    setPerformanceLow(enabled:boolean){if(lowPerformance===enabled)return;lowPerformance=enabled;syncEffectQuality();snowfall?.setLow(enabled);scene.shadowsEnabled=requestedShadows&&!enabled;botEffects.setReduced(reducedShots||enabled);atmosphere.setLow(enabled);const loading=mapArt?.setPerformanceLow(enabled);applySurfaceQuality();return loading;},
     setQuality(high:boolean){
       snowfall?.setQuality(high);
-      onlineQualityHigh=high;for(const r of remotes.values())r.fx.setQuality(high);atmosphere.setQuality(high);robotImpact.setQuality(high);for(const rig of botRigs.slice(1))rig.fx.setQuality(high);
+      onlineQualityHigh=high;syncEffectQuality();for(const r of remotes.values())r.fx.setQuality(high);atmosphere.setQuality(high);robotImpact.setQuality(high);for(const rig of botRigs.slice(1))rig.fx.setQuality(high);
       if(mapArt&&!expansion)setHarborSky(high);
       const mapSize=high?2048:1024;if(shadows.mapSize!==mapSize)shadows.mapSize=mapSize;
       applySurfaceQuality();

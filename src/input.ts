@@ -2,9 +2,9 @@ import {type Stance} from './stance.ts';
 import { normalized } from './world.ts';
 import { createLookMotion } from './view.ts';
 
-export function createInput(canvas: HTMLCanvasElement, options: {requestMouseLock?:()=>boolean;mouseScale?:()=>number;smoothLook?:boolean} = {}) {
+export function createInput(canvas: HTMLCanvasElement, options: {requestMouseLock?:()=>boolean;mouseScale?:()=>number;smoothLook?:boolean;mapKey?:(code:string)=>string} = {}) {
   let enabled = true;let stance:Stance='stand';const toggleStance=(next:Stance)=>{if(enabled)stance=stance===next?'stand':next;};
-  for(const [id,next] of [['crouch','crouch'],['prone','prone']] as const)document.querySelector('#'+id)?.addEventListener('click',()=>toggleStance(next));
+  for(const [id,next] of [['crouch','crouch'],['prone','prone']] as const){const button=document.querySelector('#'+id);button?.addEventListener('pointerdown',event=>{event.preventDefault();toggleStance(next);});button?.addEventListener('click',event=>{if((event as MouseEvent).detail===0)toggleStance(next);});}
   let touchSensitivity = 1,mouseSensitivity=1;
   const mouseRate=()=>.0025*mouseSensitivity*(options.mouseScale?.()??1);
   const keys = new Set<string>();
@@ -43,19 +43,20 @@ export function createInput(canvas: HTMLCanvasElement, options: {requestMouseLoc
     jumps = 0;dashes=0;
   };
   window.addEventListener('keydown', event => {
-    if (!enabled) return;
+    if (!enabled||event.ctrlKey||event.metaKey||event.altKey) return;
+    const code=options.mapKey?.(event.code)??event.code;
     const tag=(event.target as HTMLElement|null)?.tagName;
-    if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'||(tag==='BUTTON'&&event.code==='Space'))return;
-    if((event.code==='KeyC'||event.code==='KeyZ')&&!event.ctrlKey&&!event.metaKey&&!event.altKey){event.preventDefault();if(!event.repeat)toggleStance(event.code==='KeyC'?'crouch':'prone');return;}
-    if(event.code==='KeyF'&&!event.ctrlKey&&!event.metaKey&&!event.altKey){event.preventDefault();if(!event.repeat)dashes++;return;}
-    if(event.code==='ShiftLeft'||event.code==='ShiftRight'){event.preventDefault();keys.add(event.code);return;}
-    if(jumpKey&&event.code===jumpKey){event.preventDefault();if(!event.repeat)jumps++;return;}
-    if(event.code==='KeyR') { event.preventDefault();if(!event.repeat)reloads++;return; }
-    if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) {
-      event.preventDefault(); keys.add(event.code);
+    if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'||(tag==='BUTTON'&&code==='Space'))return;
+    if((code==='KeyC'||code==='KeyZ')&&!event.ctrlKey&&!event.metaKey&&!event.altKey){event.preventDefault();if(!event.repeat)toggleStance(code==='KeyC'?'crouch':'prone');return;}
+    if(code==='KeyF'&&!event.ctrlKey&&!event.metaKey&&!event.altKey){event.preventDefault();if(!event.repeat)dashes++;return;}
+    if(code==='ShiftLeft'||code==='ShiftRight'){event.preventDefault();keys.add(code);return;}
+    if(code===(options.mapKey?'Space':jumpKey)){event.preventDefault();if(!event.repeat)jumps++;return;}
+    if(code==='KeyR') { event.preventDefault();if(!event.repeat)reloads++;return; }
+    if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(code)) {
+      event.preventDefault(); keys.add(code);
     }
   });
-  window.addEventListener('keyup', event => keys.delete(event.code));
+  window.addEventListener('keyup', event => keys.delete(options.mapKey?.(event.code)??event.code));
   window.addEventListener('blur', reset);
   document.addEventListener('visibilitychange', () => { if (document.hidden) reset(); });
   window.addEventListener('orientationchange', reset);
@@ -122,7 +123,8 @@ export function createInput(canvas: HTMLCanvasElement, options: {requestMouseLoc
     stick = normalized((event.clientX - rect.left - rect.width / 2) / radius,
       -(event.clientY - rect.top - rect.height / 2) / radius);
     if (Math.hypot(stick.x, stick.y) < 0.12) stick = { x: 0, y: 0 };
-    thumb.style.transform = `translate(${stick.x * radius}px, ${-stick.y * radius}px)`;
+    const localRadius=(joystick.offsetWidth||rect.width)*.33;
+    thumb.style.transform = `translate(${stick.x * localRadius}px, ${-stick.y * localRadius}px)`;
   };
   joystick.addEventListener('pointerdown', event => {
     if (!enabled) return;

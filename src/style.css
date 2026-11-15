@@ -273,3 +273,4 @@ body { position:fixed; inset:0; }
 #app .account-panel, #app .game-choice-overlay, #app .results-panel { position:absolute; }
 
 #posture-controls{position:fixed;right:1rem;bottom:10rem;display:flex;gap:.4rem;z-index:5}#elevated-alert{position:fixed;top:7rem;left:50%;transform:translateX(-50%);padding:.6rem 1rem;background:#37251b;color:#ffe5b0;z-index:10;pointer-events:none}
+.playtest-metrics{display:block;flex-basis:100%;white-space:pre-line;font-variant-numeric:tabular-nums;line-height:1.7;color:#edf6e9;border-left:2px solid #82c9b4;padding-left:7px;font-size:10px}

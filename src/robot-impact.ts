@@ -24,8 +24,9 @@ export function createRobotImpact(scene:Scene,root:TransformNode,body:Mesh[],opt
     mesh.isPickable=false;mesh.setEnabled(false);
     return {mesh,kind,velocity:Vector3.Zero(),life:0,total:1};
   });
-  let flash=0,hitAge=1,hitSide=1,deathAge=-1,high=true,emissions=0;
+  let flash=0,hitAge=1,hitSide=1,deathAge=-1,high=true,emissions=0,effectsEnabled=true;
   const spawn=(point:Vector3,death:boolean)=>{
+    if(!effectsEnabled)return;
     emissions++;
     for(let i=0;i<particles.length;i++){
       const p=particles[i]!;
@@ -49,7 +50,7 @@ export function createRobotImpact(scene:Scene,root:TransformNode,body:Mesh[],opt
   }
   function hit(point:Vector3,side:number,killed:boolean){
     if(deathAge>=0)return;
-    hitAge=0;hitSide=side<0?-1:1;flash=.11;
+    hitAge=0;hitSide=side<0?-1:1;flash=effectsEnabled?.11:0;
     if(killed){deathAge=0;flash=0;}
     spawn(point,killed);
   }
@@ -77,6 +78,6 @@ export function createRobotImpact(scene:Scene,root:TransformNode,body:Mesh[],opt
     }
   }
   reset();
-  return {hit,update,reset,clearParticles,dispose(){for(const p of particles)p.mesh.dispose();for(const {mat} of materials.values())mat.dispose();for(const mat of [electric,gold,metal,smoke])mat.dispose();},setQuality(value:boolean){high=value;},get showingDeath(){return deathAge>=0&&deathAge<1.15;},
+  return {hit,update,reset,clearParticles,setEffectsEnabled(value:boolean){effectsEnabled=value;if(!value)clearParticles();},dispose(){for(const p of particles)p.mesh.dispose();for(const {mat} of materials.values())mat.dispose();for(const mat of [electric,gold,metal,smoke])mat.dispose();},setQuality(value:boolean){high=value;},get showingDeath(){return deathAge>=0&&deathAge<1.15;},
     stats:()=>({active:particles.filter(p=>p.life>0).length,dead:deathAge>=0,deathAge}),meshes:particles.map(p=>p.mesh)};
 }

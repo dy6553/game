@@ -1,5 +1,11 @@
 import {MAPS,normalizeMap,canAccessMap,isExpansionMap} from './maps.ts';
+import {installCombatTools} from './combat-tools.ts';
+import {weaponSlotMarkup,combatIcon} from './combat-ui.ts';
+import {navigationLocation} from './wayfinding.ts';
+import {createControlSettings} from './control-settings.ts';
+import {installControlEditor} from './control-editor.ts';
 import {chooseOnlineNickname} from './member-nickname-entry.ts';
+import {installFullscreen} from './fullscreen.ts';
 import {stanceStats} from './stance.ts';
 import {createOnlineEvents} from './online-events.ts';
 import type {ShotEvent} from './network-game.ts';
@@ -13,7 +19,7 @@ import {NICKNAME_MARKUP,createNicknameDialog} from './nickname-dialog.ts';
 import {WAITING_ROOM_MARKUP,createWaitingRoom,needsWaiting,rankedPlayers} from './waiting-room.ts';
 import {normalizeNickname,playerName} from './nickname.ts';
 import {createNameplates} from './nameplates.ts';
-import {COMBAT_HUD_MARKUP,combatContacts,drawCombatMap,type Contact} from './combat-hud.ts';
+import {COMBAT_HUD_MARKUP,combatContacts,drawCombatMap,hitFeedback,type Contact} from './combat-hud.ts';
 import {EQUIPMENT,createGear,type EquipmentId} from './equipment.ts';
 import {growth} from './progression.ts';
 import {ACCOUNT_MARKUP,createAccountView} from './account-view.ts';
@@ -58,6 +64,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <header class="topbar">
     <div class="brand"><span class="eyebrow">HARBOR / FIRST PERSON</span><h1>항구의 밤<span>1인칭</span></h1></div>
     <button id="menu-toggle" aria-expanded="false" aria-controls="game-toolbar">메뉴</button>
+    <button id="fullscreen-toggle" type="button" aria-label="전체 화면" aria-pressed="false" title="전체 화면">⛶</button><span id="fullscreen-status" role="status"></span>
     <div id="game-toolbar" class="toolbar" aria-label="화면 설정">
       <button id="home-open">홈으로</button><button id="online-copy" hidden>초대 링크 복사</button><button id="character-open">캐릭터 선택</button>
       <button id="pause-open">일시정지</button><button id="pointer-lock" class="mouse-only">마우스 고정</button>
@@ -84,7 +91,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <p>맵을 남쪽 상점 거리와 양옆 골목으로 넓혔습니다. 중앙 거리 양쪽의 열린 출입구와 남쪽 거리의 상점, 총 6곳의 1층에 들어갈 수 있습니다. 문 버튼 없이 걸어서 출입합니다.</p>
     <p>시작 무기는 메뉴에서 선택하며 변경하면 경기를 새로 시작합니다. 기관총은 발사 버튼을 누르고 있거나 PC 마우스 고정 상태에서 왼쪽 버튼을 누르면 연사합니다. 산탄총은 탄알 6개가 퍼지며, 저격총은 확대 버튼 또는 PC Q키로 조준합니다.</p>
     <p>야경 개선: 젖은 노면의 빛, 수면 반짝임, 벽·지붕 표면과 금속 광택을 추가했습니다. 자동 화질은 지속적인 프레임 저하가 있을 때 렌더 해상도를 조절합니다. 높음은 수동 고화질, 균형은 낮은 부하 설정입니다.</p>
-    <fieldset class="audio-settings"><legend>소리</legend><label><input id="audio-mute" type="checkbox"> 음소거</label><label>전체<input id="audio-master" type="range" min="0" max="100" aria-label="전체 음량"></label><label>효과음<input id="audio-effects" type="range" min="0" max="100" aria-label="효과음 음량"></label><label>환경음<input id="audio-environment" type="range" min="0" max="100" aria-label="환경음 음량"></label><button id="audio-test" type="button">좌우 소리 확인</button><small>이어폰으로 왼쪽 → 오른쪽 소리를 확인하세요.</small><small id="audio-status">시작 버튼을 누르면 소리를 켭니다.</small></fieldset>
+    <fieldset class="audio-settings"><legend>소리</legend><label><input id="audio-mute" type="checkbox"> 음소거</label><label>전체<input id="audio-master" type="range" min="0" max="100" aria-label="전체 음량"></label><label>효과음<input id="audio-effects" type="range" min="0" max="100" aria-label="효과음 음량"></label><label>환경음<input id="audio-environment" type="range" min="0" max="100" aria-label="환경음 음량"></label><label><input id="audio-music-enabled" type="checkbox" checked> 배경 음악 켜기</label><label>BGM<input id="audio-music" type="range" min="0" max="100" aria-label="배경 음악 음량"></label><button id="audio-test" type="button">좌우 소리 확인</button><small>이어폰으로 왼쪽 → 오른쪽 소리를 확인하세요.</small><small id="audio-status">시작 버튼을 누르면 소리를 켭니다.</small></fieldset>
     <label class="graphics-setting">사격 효과<select id="shot-effects"><option value="low">안정 · 섬광/화면 흔들림 최소</option><option value="full">기본 · 전체 효과</option></select></label><label class="graphics-setting">화면 흔들림<select id="screen-shake"><option value="off">끄기</option><option value="low" selected>약하게</option><option value="normal">보통</option></select></label><p>총기 반동·로봇 피격·처치 연출을 추가했습니다. 화면 흔들림은 조절할 수 있으며, 조준 방향과 무기 피해량은 바꾸지 않습니다.</p>
     <label class="sensitivity-setting">모바일 조준 감도 <output id="look-sensitivity-value">1.00배</output><input id="look-sensitivity" type="range" min="25" max="200" step="5" value="100" aria-label="모바일 조준 감도"></label>
     <details class="developer-settings"><summary>개발용 도구</summary><button id="reference-open" aria-pressed="false">시안 비교</button><p>배경 시안과 현재 맵을 비교합니다.</p></details>
@@ -98,9 +105,10 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <button id="reload" class="reload-button" aria-label="무기 재장전">재장전</button>
     <button id="scope" class="scope-button" hidden aria-pressed="false">확대</button>
     <button id="dash" class="dash-button" aria-label="대시 · F키 · 재사용 대기 3초">대시</button>
-    <button id="jump" class="jump-button" aria-label="점프">점프</button>
+    <button id="jump" class="jump-button" aria-label="점프">점프</button><div id="posture-controls"><button id="crouch">앉기 · C</button><button id="prone">엎드리기 · Z</button></div>
   </div>
-  <section id="inventory-ui" aria-label="무기 소지와 획득"><div id="pickup-panel" hidden><span id="pickup-label"></span><button id="pickup-action">획득 · E</button><button id="pickup-cancel" hidden>취소</button></div><div id="door-panel" hidden><span>출입 가능 · 2층 / 옥상</span><button id="door-action">문 열기 · E</button></div><div id="posture-controls"><button id="crouch">앉기 · C</button><button id="prone">엎드리기 · Z</button></div><div id="equipment-slots"><button data-equipment="grenade" aria-label="수류탄"><span>수류탄</span><b>0</b><small>G</small></button><button data-equipment="flash" aria-label="섬광탄"><span>섬광탄</span><b>0</b><small>B</small></button><button data-equipment="medkit" aria-label="회복키트"><span>회복키트</span><b>0</b><small>H</small></button></div><p id="equipment-status" role="status"></p><progress id="heal-progress" max="2" value="0" hidden aria-label="회복키트 사용 진행"></progress><div id="weapon-slots"><button data-slot="0" aria-label="무기 슬롯 1">1</button><button data-slot="1" aria-label="무기 슬롯 2">2</button><button data-slot="2" aria-label="무기 슬롯 3">3</button></div></section>
+  <section id="inventory-ui" aria-label="무기 소지와 획득"><p id="equipment-status" role="status"></p><progress id="heal-progress" max="2" value="0" hidden aria-label="회복키트 사용 진행"></progress><div id="combat-slots" aria-label="무기와 장비 6칸"><div id="weapon-slots"><button data-slot="0" aria-label="무기 슬롯 1">1</button><button data-slot="1" aria-label="무기 슬롯 2">2</button><button data-slot="2" aria-label="무기 슬롯 3">3</button></div><div id="equipment-slots"><button data-equipment="grenade" aria-label="수류탄"><span>수류탄</span><b>0</b><small>4</small></button><button data-equipment="flash" aria-label="섬광탄"><span>섬광탄</span><b>0</b><small>5</small></button><button data-equipment="medkit" aria-label="회복키트"><span>회복키트</span><b>0</b><small>6</small></button></div></div></section>
+  <div id="interaction-prompts"><div id="pickup-panel" hidden><span id="pickup-label"></span><button id="pickup-action">획득 · E</button><button id="pickup-cancel" hidden>취소</button></div><div id="door-panel" hidden><span>출입 가능 · 2층 / 옥상</span><button id="door-action">문 열기 · E</button></div></div>
   ${COMBAT_HUD_MARKUP}<p id="elevated-alert" role="status" hidden></p><div id="spawn-protection" role="status" hidden></div><div id="scope-overlay" hidden aria-hidden="true"><i></i></div>
   <aside id="match-roster" aria-label="온라인 실시간 현황" hidden><strong id="roster-title"></strong><div id="roster-lines"></div></aside><div id="flash-overlay" aria-hidden="true"></div><details id="online-scoreboard" hidden><summary>온라인 순위표 <span id="online-population"></span></summary><ol id="online-player-list"></ol></details><div id="damage-overlay" aria-hidden="true"><i id="damage-direction"></i></div><div id="impact-marker" aria-hidden="true">×</div>
   <div class="crosshair" aria-hidden="true"><i></i><b></b></div>
@@ -142,6 +150,7 @@ async function start() {
   const mobile=matchMedia('(pointer: coarse)').matches;
   let settingsStorage:Storage|null=null;try{settingsStorage=localStorage;}catch{}const preferences=createEnvironmentPreferences(settingsStorage),frameLimit=createFrameLimit(preferences.value.fps);
   const savePreference=(value:Partial<EnvironmentPreferences>)=>{const next=preferences.patch(value);document.querySelector('#environment-save-status')!.textContent=preferences.saved?'설정은 이 브라우저에 자동 저장됩니다.':'저장할 수 없어 이번 접속에만 적용됩니다.';return next;};
+  const controls=createControlSettings(settingsStorage,preferences.value.jump,mobile?(Math.min(screen.width,screen.height)>=600?'tablet':'phone'):'desktop');
   let graphicsMode=preferences.value.graphics;
   const densityCap=()=>Math.min(window.devicePixelRatio||1,graphicsMode==='high'?2:graphicsMode==='balanced'?1:graphicsMode==='low'?.7:1);
   let budget=createRenderBudget(densityCap()),qualityHigh=graphicsMode==='high';
@@ -151,7 +160,6 @@ async function start() {
   const harborArtSource=(profile:'low'|'balanced')=>'/maps/harbor-full-'+profile+'.glb';
   let world = createHarborScene(engine,{mapArtSource:harborArtSource});
   const nearbyDoor=(p:Point,doors:Parameters<typeof world.geometry.nearbyDoor>[1])=>(world.geometry??harborWorld).nearbyDoor(p,doors);
-  const indoorAt=(p:Point)=>(world.geometry??harborWorld).indoorAt(p);
   function applyGraphicsProfile(high:boolean,low:boolean){
     if(high){world.setQuality(true);world.setPerformanceLow?.(low);}
     else{world.setPerformanceLow?.(low);world.setQuality(false);}
@@ -167,8 +175,9 @@ async function start() {
     engine.setHardwareScalingLevel(1/budget.density);qualityHigh=graphicsMode==='high';
     applyGraphicsProfile(qualityHigh,graphicsMode==='low');engine.resize();world.resize();
   });
+  const combatEffectsCheck=document.querySelector<HTMLInputElement>('#combat-effects-enabled')!;combatEffectsCheck.checked=preferences.value.combatEffects;world.setCombatEffects(combatEffectsCheck.checked);combatEffectsCheck.addEventListener('change',()=>{savePreference({combatEffects:combatEffectsCheck.checked});world.setCombatEffects(combatEffectsCheck.checked);});
   const effectsSetting=document.querySelector<HTMLSelectElement>('#shot-effects')!;let reducedShots=mobile;try{const saved=localStorage.getItem('harbor-shot-effects');if(saved)reducedShots=saved==='low';}catch{}effectsSetting.value=reducedShots?'low':'full';world.setReducedShots?.(reducedShots);effectsSetting.addEventListener('change',()=>{reducedShots=effectsSetting.value==='low';world.setReducedShots?.(reducedShots);try{localStorage.setItem('harbor-shot-effects',effectsSetting.value);}catch{}});
-  const input = createInput(canvas,{mouseScale:()=>world.scoped?.3:1,requestMouseLock:()=>requestGameplayMouseLock(),smoothLook:true});
+  const input = createInput(canvas,{mouseScale:()=>world.scoped?.3:1,requestMouseLock:()=>requestGameplayMouseLock(),smoothLook:true,mapKey:code=>controls.mapCode(code)});
   input.setEnabled(false);input.setInvertY(preferences.value.invertY);input.setMouseSensitivity?.(preferences.value.mouse);input.setJumpKey(preferences.value.jump);document.querySelector<HTMLSelectElement>('#jump-key')!.value=preferences.value.jump;
   const sensitivity=document.querySelector<HTMLInputElement>('#look-sensitivity')!;
   const setSensitivity=(value:number)=>{
@@ -183,12 +192,15 @@ async function start() {
   sensitivity.addEventListener('input',()=>{const next=setSensitivity(Number(sensitivity.value)/100);try{localStorage.setItem('harbor-touch-sensitivity',String(next));}catch{}});
   const journal=createResultJournal({getItem:key=>localStorage.getItem(key),setItem:(key,value)=>localStorage.setItem(key,value)}),resultTracker=createResultTracker();
   let shownResult='';let localDash=createDash(),predictionDash=false,predictionJump=false;
-  const audio=createGameAudio();const reducedLobbyMotion=matchMedia('(prefers-reduced-motion: reduce)');
+  const audio=createGameAudio();const reducedLobbyMotion=matchMedia('(prefers-reduced-motion: reduce)');world.setMotionReduced(reducedLobbyMotion.matches);reducedLobbyMotion.addEventListener('change',()=>world.setMotionReduced(reducedLobbyMotion.matches));
+  const unlockAudio=()=>{void audio.unlock();};window.addEventListener('pointerdown',unlockAudio,{once:true,passive:true});window.addEventListener('keydown',unlockAudio,{once:true});
   const lobbyCue=(kind:'ui'|'deploy')=>{void audio.unlock().then(()=>{if(!document.hidden&&document.hasFocus())audio.playInterface(kind);});};
   document.addEventListener('pointerdown',()=>{void audio.unlock();});
   document.addEventListener('keydown',()=>{void audio.unlock();});
-  for(const key of ['master','effects','environment'] as const){const slider=document.querySelector<HTMLInputElement>(`#audio-${key}`)!;slider.value=String(audio.settings[key]*100);slider.addEventListener('input',()=>audio.configure({[key]:Number(slider.value)/100}));}
+  for(const key of ['master','effects','environment','music'] as const){const slider=document.querySelector<HTMLInputElement>(`#audio-${key}`)!;slider.value=String(audio.settings[key]*100);slider.addEventListener('input',()=>audio.configure({[key]:Number(slider.value)/100}));}
+  const musicToggle=document.querySelector<HTMLInputElement>('#audio-music-enabled')!;musicToggle.checked=audio.settings.musicEnabled;musicToggle.addEventListener('change',()=>audio.configure({musicEnabled:musicToggle.checked}));
   const mute=document.querySelector<HTMLInputElement>('#audio-mute')!;mute.checked=audio.settings.muted;mute.addEventListener('change',()=>audio.configure({muted:mute.checked}));
+  document.querySelector('#weapon-sound-preview')!.addEventListener('click',()=>{const id=document.querySelector<HTMLSelectElement>('#weapon-sound-choice')!.value;if(isWeaponId(id))void audio.unlock().then(()=>audio.previewWeapon(id));});
   document.querySelector('#audio-test')!.addEventListener('click',()=>{void audio.unlock().then(()=>{if(!document.hidden&&document.hasFocus())audio.preview();});});
   document.addEventListener('visibilitychange',()=>{if(document.hidden){audio.pause(true);audio.setInterfaceActive(false);}});
   window.addEventListener('blur',()=>{audio.pause(true);audio.setInterfaceActive(false);});
@@ -196,7 +208,7 @@ async function start() {
 
   document.querySelector<HTMLSelectElement>('#jump-key')!.addEventListener('change',event=>{
     const code=(event.currentTarget as HTMLSelectElement).value;
-    if(code==='Space'||code==='KeyJ'){input.reset();input.setJumpKey(code);savePreference({jump:code});if(!settingsView.isOpen)canvas.focus();}
+    if(code==='Space'||code==='KeyJ'){input.reset();input.setJumpKey(code);controls.bind('jump',code);savePreference({jump:code});if(!settingsView.isOpen)canvas.focus();}
   });
   const onlineShots=createOnlineEvents<ShotEvent>(),onlineTools=createOnlineEvents<ToolEvent>();
   let elevatedAlertUntil=0,lastRevealEvent=-1;
@@ -221,12 +233,14 @@ async function start() {
     roomWaiting=needsWaiting(state,id)||!!me?.guest&&!normalizeNickname(me.nickname);
     if(!onlineActive){onlineActive=true;homeOpen=false;home.hidden=true;onlineLobby.hidden=true;picker.hidden=true;manualPaused=false;pausePanel.hidden=true;document.body.classList.remove('at-home');gameChoices.close();}
     document.body.classList.toggle('in-waiting-room',roomWaiting);
-    if(roomWaiting){waitingView.show(state,id,onlineCode,online.connected);nameplates.clear();input.reset();input.setEnabled(false);if(!wasWaiting){world.endOnline();world.setPreview(true,true);}}
+    if(roomWaiting){waitingView.show(state,id,onlineCode,online.connected);nameplates.clear();input.reset();input.setEnabled(false);if(!wasWaiting){world.endOnline();world.setMotionReduced(reducedLobbyMotion.matches);world.setPreview(true,true);}}
     else{waitingView.hide();if(!wasActive||wasWaiting){switchMap(normalizeMap(state.map),me?.character??'robot');lobbyPolish.deploy();lobbyCue('deploy');world.setPreview(false);if(me){world.selectCharacter(me.character);world.selectWeapon(me.weaponId);input.resetLook();input.setLook(me.yaw,me.pitch);}hasPlayed=true;canvas.focus();}}
     if(me?.guest&&!normalizeNickname(me.nickname)&&online.connected&&!guestPromptPending){guestPromptPending=true;void nicknameDialog.open(false).then(name=>{if(!onlineActive)return;if(!name){openHome();return;}online.control('nickname',name);});}else if(me?.nickname)guestPromptPending=false;
     for(const cue of onlineAudio.update(state,id,input.look.yaw,canUseInventory()&&online.connected))audio.play(cue.kind,cue.pan,cue.volume);
     observeOnlineResult(state,id);
   },status=>{if(status!=='대전 중'&&status!=='경기 종료')resultOnlineReady=false;onlineStatus=status;document.querySelector('#online-message')!.textContent=status;document.querySelector('#waiting-status')!.textContent=status;if(status.startsWith('연결 복구 중')||status.startsWith('방 연결 종료')){for(const p of onlineState?.players??[])if(p.guest)delete p.nickname;nameplates.clear();document.querySelector('#online-player-list')!.replaceChildren();document.querySelector('#roster-lines')!.replaceChildren();nicknameDialog.cancel();guestPromptPending=false;if(onlineState&&roomWaiting)waitingView.show(onlineState,onlineId,onlineCode,false);}},session=>{onlineShots.reset();onlineTools.reset();onlineToolEventId=-1;onlineAudio.reset();predictionDash=predictionJump=false;onlineCode=session.code;resultTracker.start();shownResult='';resultOnlineTick=null;resultOnlineReady=false;resultView.hide();},()=>accountView.token());
+  let combatTools:ReturnType<typeof installCombatTools>|undefined;
+  let pendingPing:Command['ping'],pingSentAt=-Infinity;
   let pendingDoor:string|undefined;
   let pendingEquipment:EquipmentId|undefined;let onlineToolEventId=-1;
   let onlineBoardKey='';const onlineBoard=document.querySelector<HTMLDetailsElement>('#online-scoreboard')!;onlineBoard.addEventListener('toggle',()=>{if(onlineBoard.open){onlineBoardKey='';input.reset();}});
@@ -236,7 +250,7 @@ async function start() {
     if(onlineActive&&onlineState){const me=onlineState.players.find(p=>p.id===onlineId)!;return {inventory:me.inventory??createInventory(me.weaponId),pickups:onlineState.pickups??[],position:me,ready:!!me.inventory&&!!onlineState.pickups,blocked:me.health===0||!!onlineState.winner||!onlinePlaying(onlineState,onlineId)||!online.connected};}
     const battle=world.duelState();return {...world.inventoryState(),position,ready:true,blocked:battle.playerHealth===0||!!battle.winner};
   }
-  function canUseInventory(){return !settingsView.isOpen&&!roomWaiting&&!nicknameDialog.isOpen&&!onlineBoard.open&&!lobbyPolish.deploying&&!gameChoices.isOpen&&!resultView.isOpen&&!homeOpen&&!manualPaused&&picker.hidden&&!menuOpen&&help.hidden&&!comparing&&!document.hidden&&document.hasFocus()&&!matchMedia('(pointer: coarse) and (orientation: portrait)').matches;}
+  function canUseInventory(){return !combatTools?.isOpen&&!settingsView.isOpen&&!roomWaiting&&!nicknameDialog.isOpen&&!onlineBoard.open&&!lobbyPolish.deploying&&!gameChoices.isOpen&&!resultView.isOpen&&!homeOpen&&!manualPaused&&picker.hidden&&!menuOpen&&help.hidden&&!comparing&&!document.hidden&&document.hasFocus()&&!matchMedia('(pointer: coarse) and (orientation: portrait)').matches;}
   function requestPickup(replace?:number){
     if(!canUseInventory())return;const data=inventoryData(),crate=nearbyPickup(data.position,data.pickups);if(data.blocked||!data.ready||!crate)return;
     if(!crate.equipmentId&&data.inventory.slots.some(s=>s.id===crate.weaponId)){notice='이미 가진 무기입니다';noticeTime=1;return;}
@@ -255,19 +269,20 @@ async function start() {
     if(onlineActive)pendingDoor=door.id;else world.toggleDoor(data.position,door.id);
   }
   bindInventoryAction(document.querySelector<HTMLButtonElement>('#door-action')!,requestDoor);
+  for(const button of document.querySelectorAll<HTMLButtonElement>('[data-equipment]'))button.insertAdjacentHTML('afterbegin',combatIcon(button.dataset.equipment!));
   slotButtons.forEach((button,i)=>bindInventoryAction(button,()=>requestSlot(i)));
   bindInventoryAction(document.querySelector<HTMLButtonElement>('#pickup-action')!,()=>requestPickup());
   bindInventoryAction(document.querySelector<HTMLButtonElement>('#pickup-cancel')!,()=>{choosePickupId=undefined;});
-  window.addEventListener('keydown',event=>{const tag=(event.target as HTMLElement|null)?.tagName;if(['INPUT','SELECT','TEXTAREA'].includes(tag??''))return;if(event.code==='Escape')choosePickupId=undefined;if(!canUseInventory()||event.repeat)return;if(event.code==='KeyE'){event.preventDefault();const data=inventoryData();if(nearbyPickup(data.position,data.pickups))requestPickup();else requestDoor();}if(/^Digit[123]$/.test(event.code)){event.preventDefault();requestSlot(Number(event.code.slice(-1))-1);}});
+  window.addEventListener('keydown',event=>{const tag=(event.target as HTMLElement|null)?.tagName;if(['INPUT','SELECT','TEXTAREA'].includes(tag??''))return;if(controls.mapCode(event.code)==='Escape')choosePickupId=undefined;if(!canUseInventory()||event.repeat||event.ctrlKey||event.metaKey||event.altKey)return;if(controls.mapCode(event.code)==='KeyE'){event.preventDefault();const data=inventoryData();if(nearbyPickup(data.position,data.pickups))requestPickup();else requestDoor();}if(/^Digit[123]$/.test(controls.mapCode(event.code))){event.preventDefault();requestSlot(Number(controls.mapCode(event.code).slice(-1))-1);}});
   function refreshInventory(){
     inventoryUi.hidden=homeOpen||!picker.hidden||comparing;if(inventoryUi.hidden)return;
     const data=inventoryData(),crate=nearbyPickup(data.position,data.pickups)??data.pickups.filter(c=>c.remaining>0&&Math.abs((c.y??0)-(data.position.y??0))<1.5&&Math.hypot(c.x-data.position.x,c.z-data.position.z)<=2.5).sort((a,b)=>Math.hypot(a.x-data.position.x,a.z-data.position.z)-Math.hypot(b.x-data.position.x,b.z-data.position.z))[0];if(!crate||crate.remaining>0||crate.id!==choosePickupId||data.blocked)choosePickupId=undefined;
-    slotButtons.forEach((button,i)=>{const slot=data.inventory.slots[i],text=slot?`${i+1} · ${WEAPONS[slot.id].name}${choosePickupId?' 버리기':''}`:`${i+1} · 비어 있음`;if(button.textContent!==text)button.textContent=text;button.disabled=!slot||data.blocked||!canUseInventory()||!data.ready;button.setAttribute('aria-pressed',String(i===data.inventory.active));});
+    slotButtons.forEach((button,i)=>{const slot=data.inventory.slots[i],key=controls.label(('slot'+(i+1)) as 'slot1'|'slot2'|'slot3'),name=slot?WEAPONS[slot.id].name+(choosePickupId?' · 버리기':''):'비어 있음',cacheKey=key+':'+name;if(button.dataset.card!==cacheKey){button.innerHTML=weaponSlotMarkup(name,key,slot?.id);button.dataset.card=cacheKey;}button.disabled=!slot||data.blocked||!canUseInventory()||!data.ready;button.setAttribute('aria-pressed',String(i===data.inventory.active));button.setAttribute('aria-label',`${key} · ${name}`);});
     const doors=onlineActive?onlineState?.doors:world.doorState?.(),door=doors?nearbyDoor(data.position,doors):undefined;
     const doorPanel=document.querySelector<HTMLElement>('#door-panel')!,doorAction=document.querySelector<HTMLButtonElement>('#door-action')!;
-    doorPanel.hidden=!door||!!crate||data.blocked||!canUseInventory();doorAction.disabled=data.blocked;doorAction.textContent=door&&doors?.[door.id]?'문 닫기 · E':'문 열기 · E';
+    doorPanel.hidden=!door||!!crate||data.blocked||!canUseInventory();doorAction.disabled=data.blocked;doorAction.textContent=door&&doors?.[door.id]?'문 닫기 · '+controls.label('interact'):'문 열기 · '+controls.label('interact');
     const panel=document.querySelector<HTMLElement>('#pickup-panel')!;panel.hidden=!crate||data.blocked||!canUseInventory()||!data.ready;
-    if(crate){const duplicate=crate.equipmentId?(readGear().gear[crate.equipmentId]>=2):data.inventory.slots.some(s=>s.id===crate.weaponId),waiting=crate.remaining>0,name=crate.equipmentId?EQUIPMENT[crate.equipmentId].name:WEAPONS[crate.weaponId].name;document.querySelector('#pickup-label')!.textContent=waiting?`${name} 보급 상자 · ${Math.ceil(crate.remaining)}초 후 재보급`:choosePickupId?'버릴 무기를 아래에서 고르세요':`${name} 보급 상자${duplicate?' · 이미 소지 중':''}`;const action=document.querySelector<HTMLButtonElement>('#pickup-action')!;action.disabled=waiting||duplicate||!!choosePickupId;action.textContent=waiting?'재보급 대기':'획득 · E';document.querySelector<HTMLElement>('#pickup-cancel')!.hidden=!choosePickupId;}
+    if(crate){const duplicate=crate.equipmentId?(readGear().gear[crate.equipmentId]>=2):data.inventory.slots.some(s=>s.id===crate.weaponId),waiting=crate.remaining>0,name=crate.equipmentId?EQUIPMENT[crate.equipmentId].name:WEAPONS[crate.weaponId].name;document.querySelector('#pickup-label')!.textContent=waiting?`${name} 보급 상자 · ${Math.ceil(crate.remaining)}초 후 재보급`:choosePickupId?'버릴 무기를 아래에서 고르세요':`${name} 보급 상자${duplicate?' · 이미 소지 중':''}`;const action=document.querySelector<HTMLButtonElement>('#pickup-action')!;action.disabled=waiting||duplicate||!!choosePickupId;action.textContent=waiting?'재보급 대기':'획득 · '+controls.label('interact');document.querySelector<HTMLElement>('#pickup-cancel')!.hidden=!choosePickupId;}
   }
   let onlineControlsActive=false;const updateOnlineControls=(active:boolean)=>{if(active===onlineControlsActive)return;onlineControlsActive=active;document.querySelector<HTMLElement>('#online-copy')!.hidden=!active;for(const id of ['character-open','game-mode','bot-difficulty','weapon-select','practice-reset','reset'])document.querySelector<HTMLButtonElement>('#'+id)!.disabled=active;};
   document.querySelector('#online-copy')!.addEventListener('click',async()=>{const url=new URL(location.href);url.searchParams.set('room',onlineCode);try{await navigator.clipboard.writeText(url.href);document.querySelector('#online-copy')!.textContent='초대 링크 복사됨';}catch{document.querySelector('#online-copy')!.textContent=`방 코드 ${onlineCode}`;}});
@@ -281,6 +296,7 @@ async function start() {
   let manualPaused=false,hasPlayed=false,wasLocked=false;
   let mouseLockPending=false,mouseLockFallback=false;
   const pausePanel=document.querySelector<HTMLElement>('#pause-panel')!;
+  const pauseDescription=document.querySelector<HTMLElement>('#pause-description')!,pauseIndicator=document.querySelector<HTMLElement>('#pause-indicator')!,postureButtons=(['crouch','prone'] as const).map(id=>({id,node:document.querySelector<HTMLButtonElement>('#'+id)!}));let lastPosture='';
   const aimHint=document.querySelector<HTMLElement>('#mouse-aim-hint')!;
   const lockStatus=document.querySelector<HTMLElement>('#pause-lock-status')!;
   const retryLock=document.querySelector<HTMLButtonElement>('#resume-locked')!;
@@ -332,9 +348,10 @@ async function start() {
   document.addEventListener('visibilitychange',()=>{if(document.hidden)pauseGame();});
   let menuOpen=false;
   const menuButton=document.querySelector<HTMLButtonElement>('#menu-toggle')!;
+  installFullscreen(document.querySelector<HTMLButtonElement>('#fullscreen-toggle')!,document.querySelector<HTMLElement>('#fullscreen-status')!,document);
   const closeMenu=()=>{menuOpen=false;document.body.classList.remove('menu-open');menuButton.setAttribute('aria-expanded','false');menuButton.textContent='메뉴';input.reset();};
   function canOpenGameMenu(){
-    return hasPlayed&&!homeOpen&&!roomWaiting&&picker.hidden&&!settingsView.isOpen&&!resultView.isOpen&&!gameChoices.isOpen;
+    return !combatTools?.isOpen&&hasPlayed&&!homeOpen&&!roomWaiting&&picker.hidden&&!settingsView.isOpen&&!resultView.isOpen&&!gameChoices.isOpen;
   }
   function openGameMenu(){
     manualPaused=false;pausePanel.hidden=true;menuOpen=true;
@@ -386,7 +403,7 @@ async function start() {
   const refreshCharacter = () => choices.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.character === world.characterType)));
   const openPicker = () => { picker.hidden=false;setComparison(false);input.setEnabled(false);document.querySelector<HTMLSelectElement>('#start-mode')!.value=document.querySelector<HTMLSelectElement>('#game-mode')!.value;document.querySelector<HTMLSelectElement>('#start-difficulty')!.value=document.querySelector<HTMLSelectElement>('#bot-difficulty')!.value;document.querySelector<HTMLSelectElement>('#start-weapon')!.value=document.querySelector<HTMLSelectElement>('#weapon-select')!.value;input.reset();world.setPreview(true);refreshCharacter();choices[0]!.focus(); };
   const home=document.querySelector<HTMLElement>('#home-screen')!;
-  const openHome=()=>{settingsView.close();roomWaiting=false;guestPromptPending=false;nicknameDialog.cancel();waitingView.hide();nameplates.clear();document.querySelector('#online-player-list')!.replaceChildren();document.querySelector('#roster-lines')!.replaceChildren();document.body.classList.remove('in-waiting-room');onlineBoard.open=false;pendingEquipment=undefined;onlineToolEventId=-1;void accountView.refreshGrowth().catch(()=>{});predictionDash=predictionJump=false;localDash=cancelDash(localDash);lobbyPolish.cancelDeploy();lobbyPolish.cancelDrag();gameChoices.close();syncHomeSelection();resultTracker.cancel();resultView.hide();online.leave();onlineMotion.reset();remoteMotion.reset();onlineAudio.reset();pendingDoor=undefined;pendingSlot=undefined;pendingTake=undefined;choosePickupId=undefined;onlineActive=false;onlineState=null;onlineShots.reset();onlineTools.reset();onlineId='';onlineEventId=-1;world.endOnline();onlineLobby.hidden=true;updateOnlineControls(false);homeOpen=true;home.hidden=false;document.body.classList.add('at-home');manualPaused=false;pausePanel.hidden=true;closeMenu();document.querySelector<HTMLElement>('#help')!.hidden=true;picker.hidden=true;setComparison(false);input.setEnabled(false);world.setPreview(true,true);document.querySelector<HTMLButtonElement>('#home-start')!.focus();};
+  const openHome=()=>{settingsView.close();roomWaiting=false;guestPromptPending=false;nicknameDialog.cancel();waitingView.hide();nameplates.clear();document.querySelector('#online-player-list')!.replaceChildren();document.querySelector('#roster-lines')!.replaceChildren();document.body.classList.remove('in-waiting-room');onlineBoard.open=false;pendingEquipment=undefined;onlineToolEventId=-1;void accountView.refreshGrowth().catch(()=>{});predictionDash=predictionJump=false;localDash=cancelDash(localDash);lobbyPolish.cancelDeploy();lobbyPolish.cancelDrag();gameChoices.close();syncHomeSelection();resultTracker.cancel();resultView.hide();online.leave();onlineMotion.reset();remoteMotion.reset();onlineAudio.reset();pendingPing=undefined;pendingDoor=undefined;pendingSlot=undefined;pendingTake=undefined;choosePickupId=undefined;onlineActive=false;onlineState=null;onlineShots.reset();onlineTools.reset();onlineId='';onlineEventId=-1;world.endOnline();onlineLobby.hidden=true;updateOnlineControls(false);homeOpen=true;home.hidden=false;document.body.classList.add('at-home');manualPaused=false;pausePanel.hidden=true;closeMenu();document.querySelector<HTMLElement>('#help')!.hidden=true;picker.hidden=true;setComparison(false);input.setEnabled(false);world.setPreview(true,true);document.querySelector<HTMLButtonElement>('#home-start')!.focus();};
   document.querySelector('#online-back')!.addEventListener('click',openHome);
   document.querySelector('#home-open')!.addEventListener('click',openHome);
   document.querySelector('#setup-home')!.addEventListener('click',openHome);
@@ -419,7 +436,7 @@ async function start() {
     mouseLockFallback=false;requestGameplayMouseLock();
   };
   startButton.addEventListener('click',beginGame);
-  function switchMap(map:MapId,type=world.characterType){if(map===selectedMap)return;world.scene.dispose();world=createHarborScene(engine,{map,mapArtSource:harborArtSource});selectedMap=map;world.selectCharacter(type);applyGraphicsProfile(qualityHigh,graphicsMode==='low'||graphicsMode==='auto'&&budget.density<=.85);world.setShadows?.(preferences.value.shadows);world.setSnowfall(preferences.value.snowfall);world.setReducedShots?.(reducedShots);world.setShake(shake.value==='off'||shake.value==='normal'?shake.value:'low');world.setPreview(true,true);}
+  function switchMap(map:MapId,type=world.characterType){if(map===selectedMap)return;world.scene.dispose();world=createHarborScene(engine,{map,mapArtSource:harborArtSource});selectedMap=map;world.selectCharacter(type);applyGraphicsProfile(qualityHigh,graphicsMode==='low'||graphicsMode==='auto'&&budget.density<=.85);world.setShadows?.(preferences.value.shadows);world.setSnowfall(preferences.value.snowfall);world.setReducedShots?.(reducedShots);world.setCombatEffects(preferences.value.combatEffects);world.setShake(shake.value==='off'||shake.value==='normal'?shake.value:'low');world.setMotionReduced(reducedLobbyMotion.matches);world.setPreview(true,true);}
   const homeView=createHomeScreen({
     selectCharacter(type){world.selectCharacter(type);refreshCharacter();lobbyCue('ui');if(!reducedLobbyMotion.matches)document.querySelector('#home-character-name')?.animate?.([{opacity:.3},{opacity:1}],{duration:180});},
     selectWeapon(id){world.setLobbyWeapon(id);lobbyCue('ui');if(!reducedLobbyMotion.matches)document.querySelector('#home-equipped-art')?.animate?.([{opacity:.3,transform:'translateX(-6px)'},{opacity:1,transform:'translateX(0)'}],{duration:180});},
@@ -454,6 +471,8 @@ async function start() {
   const hits = document.querySelector('#hits')!;
   const crosshair = document.querySelector('.crosshair')!;
   const shotFeedback=document.querySelector<HTMLElement>('#shot-feedback')!;
+  function showHitFeedback(hit:Parameters<typeof hitFeedback>[0]){const f=hitFeedback(hit),marker=document.querySelector<HTMLElement>('#impact-marker')!;shotFeedback.textContent=f.text;shotFeedback.dataset.kind=f.kind;marker.dataset.kind=f.kind;marker.textContent=f.kind==='protected'?'◇':f.kind==='head'?'✳':'×';marker.classList.toggle('kill',!!hit.killed&&!hit.protected);}
+
   const ammo=document.querySelector('#ammo')!;
   const destroyed=document.querySelector('#destroyed')!;
   const weaponStatus=document.querySelector('#weapon-status')!;
@@ -537,7 +556,7 @@ async function start() {
   function readGear(){if(onlineActive&&onlineState){const me=onlineState.players.find(p=>p.id===onlineId);if(me)return {gear:me.gear??createGear(),health:me.health,flash:me.flash??0,healing:me.healing??0,cooldown:me.gearCooldown??0};}return world.gearState?.()??{gear:createGear(),health:100,flash:0,healing:0,cooldown:0};}
   function requestEquipment(kind:EquipmentId){if(!canUseInventory()||inventoryData().blocked)return;if(onlineActive)pendingEquipment=kind;else world.useEquipment?.(kind,position,input.look);}
   for(const b of document.querySelectorAll<HTMLButtonElement>('[data-equipment]'))bindInventoryAction(b,()=>requestEquipment(b.dataset.equipment as EquipmentId));
-  window.addEventListener('keydown',event=>{if(event.repeat||!canUseInventory())return;const kind=event.code==='KeyG'?'grenade':event.code==='KeyB'?'flash':event.code==='KeyH'?'medkit':null;if(kind){event.preventDefault();requestEquipment(kind);}});
+  window.addEventListener('keydown',event=>{if(event.repeat||event.ctrlKey||event.metaKey||event.altKey||!canUseInventory())return;const kind=controls.mapCode(event.code)==='KeyG'?'grenade':controls.mapCode(event.code)==='KeyB'?'flash':controls.mapCode(event.code)==='KeyH'?'medkit':null;if(kind){event.preventDefault();requestEquipment(kind);}});
   function refreshEquipment(){const g=readGear(),blocked=!canUseInventory()||inventoryData().blocked;for(const b of document.querySelectorAll<HTMLButtonElement>('[data-equipment]')){const kind=b.dataset.equipment as EquipmentId,count=g.gear[kind];b.querySelector('b')!.textContent=String(count);b.disabled=blocked||count<=0||g.cooldown>0||(kind==='medkit'&&(g.health>=100||g.healing>0));b.setAttribute('aria-label',`${EQUIPMENT[kind].name} · ${count}개`);}const healing=document.querySelector<HTMLProgressElement>('#heal-progress')!;healing.hidden=g.healing<=0;healing.value=2-g.healing;document.querySelector('#equipment-status')!.textContent=g.healing>0?`회복 중 ${g.healing.toFixed(1)}초 · 사격/피격 시 취소`:g.flash>.05?'섬광 · 시야 회복 중':g.health>0&&g.health<100?`HP ${Math.ceil(g.health)}`:'';document.querySelector<HTMLElement>('#flash-overlay')!.style.opacity=String(Math.min(.94,g.flash/1.5));
    onlineBoard.hidden=!onlineActive;if(onlineActive&&onlineState){document.querySelector('#online-population')!.textContent=`${onlineState.players.filter(p=>p.connected&&!p.abandoned).length}/${onlineState.capacity??2}`;const boardKey=JSON.stringify(onlineState.players.map(p=>[p.id,p.nickname,p.kills,p.deaths,p.team,p.connected,p.abandoned]));if(onlineBoard.open&&boardKey!==onlineBoardKey){onlineBoardKey=boardKey;const list=document.querySelector('#online-player-list')!,rows=[...onlineState.players].sort((a,b)=>b.kills-a.kills);list.replaceChildren();for(const p of rows){const li=document.createElement('li'),index=onlineState.players.indexOf(p)+1;li.textContent=`${p.id===onlineId?'나 · ':''}${playerName(p,`대원 ${index}`)} ${p.team===undefined?'':p.team===0?'· 블루':'· 레드'} · ${p.kills}킬 / ${p.deaths??0}데스${p.abandoned?' · 이탈':!p.connected?' · 재접속 중':''}`;li.classList.toggle('is-me',p.id===onlineId);list.append(li);}}for(const e of onlineState.toolEvents??[])if(e.id>onlineToolEventId){onlineToolEventId=e.id;const me=onlineState.players.find(p=>p.id===onlineId)!;const sound=spatialSound(e.x-me.x,e.z-me.z,input.look.yaw);if(!blocked)audio.play(e.kind,sound.pan,sound.gain);}}
   }
@@ -556,7 +575,11 @@ async function start() {
     else if(battle.active)actors=battle.mode==='duel'?[{...battle.position,id:'bot-1',revealed:world.isBotRevealed?.('bot-1'),name:'적 봇',health:battle.botHealth}]:battle.bots.map(b=>({...b.position,id:b.id,revealed:world.isBotRevealed?.(b.id),name:b.name,health:b.health,active:!!b.position}));
     else actors=world.targetContacts?.()??[];
     const view=combatContacts(geometry,doors,p,input.look.yaw,input.look.pitch,actors),target=health>0?view.target:undefined;card.hidden=!target;if(target){document.querySelector('#target-name')!.textContent=target.name;document.querySelector('#target-hp')!.textContent=String(Math.ceil(target.health));document.querySelector<HTMLProgressElement>('#target-hp-bar')!.value=target.health;}
-    if(showMinimap)drawCombatMap(document.querySelector<HTMLCanvasElement>('#minimap')!,geometry,p,input.look.yaw,view.radar);
+    const navigation=navigationLocation(geometry,me??position),locationLabel=document.querySelector<HTMLElement>('#map-location')!;if(locationLabel.textContent!==navigation.label)locationLabel.textContent=navigation.label;locationLabel.style.borderColor=navigation.color;
+    const pings=onlineState?.pings?.filter(q=>q.expires>(onlineState?.tick??0))??[];
+    combatTools?.updateTeam({enabled:onlineActive&&online.connected&&onlineState?.mode==='team'&&health>0,world:geometry,me:p,yaw:input.look.yaw,pings});
+    const pingNotice=document.querySelector<HTMLElement>('#map-ping-alert')!,latest=pings.at(-1),pingText=latest?`${latest.kind==='enemy'?'! 적 발견':latest.kind==='help'?'+ 지원 요청':'◆ 이동'} · ${playerName(onlineState!.players.find(p=>p.id===latest.player)!,'아군')}`:'';if(pingNotice.textContent!==pingText)pingNotice.textContent=pingText;pingNotice.hidden=!latest;
+    if(showMinimap)drawCombatMap(document.querySelector<HTMLCanvasElement>('#minimap')!,geometry,p,input.look.yaw,view.radar,pings);
     nameplates.update(onlineActive&&onlineState&&online.connected?(world.onlineNameplates?.(onlineState,onlineId)??[]):[]);refreshRoster();
   }
   const reset = () => { position = { ...PROTOTYPE.spawn }; input.resetLook();world.resetJump(); };
@@ -600,7 +623,7 @@ async function start() {
   }
   window.addEventListener('keydown',event=>{
     const tag=(event.target as HTMLElement|null)?.tagName;
-    if(event.code==='KeyQ'&&!event.repeat&&!event.ctrlKey&&!event.altKey&&!event.metaKey&&!['INPUT','SELECT','TEXTAREA'].includes(tag??'')){event.preventDefault();toggleScope();}
+    if(controls.mapCode(event.code)==='KeyQ'&&!event.repeat&&!event.ctrlKey&&!event.altKey&&!event.metaKey&&!['INPUT','SELECT','TEXTAREA'].includes(tag??'')){event.preventDefault();toggleScope();}
   });
   document.querySelector<HTMLButtonElement>('#scope')!.addEventListener('pointerdown',event=>{if(event.button!==0)return;event.preventDefault();toggleScope();});
   document.querySelector<HTMLButtonElement>('#scope')!.addEventListener('click',event=>{if(event.detail===0)toggleScope();});
@@ -613,7 +636,7 @@ async function start() {
     (event.currentTarget as HTMLElement).setAttribute('aria-expanded', String(!help.hidden));
   });
   window.addEventListener('keydown',event=>{
-    if(event.code!=='Escape'||event.repeat||!canOpenGameMenu())return;
+    if(controls.mapCode(event.code)!=='Escape'||event.repeat||!canOpenGameMenu())return;
     if(!help.hidden){event.preventDefault();closeHelp();canvas.focus();}
     else if(comparing){event.preventDefault();setComparison(false);}
     else if(menuOpen){event.preventDefault();}
@@ -649,9 +672,9 @@ async function start() {
   function applyInterface(){const p=preferences.value,style=document.documentElement.style;style.setProperty('--combat-text-scale',p.hud==='large'?'1.2':'1');style.setProperty('--touch-opacity',String(p.opacity));style.setProperty('--reticle-color',p.crosshairColor==='green'?'#83ffb3':p.crosshairColor==='gold'?'#ffe38b':'#e7fcff');style.setProperty('--reticle-size',p.crosshairSize==='large'?'1.5':'1');document.querySelector('#controls-opacity-value')!.textContent=Math.round(p.opacity*100)+'%';}
   hudSelect.value=preferences.value.hud;opacitySlider.value=String(preferences.value.opacity*100);colorSelect.value=preferences.value.crosshairColor;crossSize.value=preferences.value.crosshairSize;applyInterface();
   for(const [node,key,event] of [[hudSelect,'hud','change'],[colorSelect,'crosshairColor','change'],[crossSize,'crosshairSize','change'],[opacitySlider,'opacity','input']] as const)node.addEventListener(event,()=>{savePreference({[key]:key==='opacity'?Number(node.value)/100:node.value} as Partial<EnvironmentPreferences>);applyInterface();});
-  for(const id of ['audio-master','audio-effects','audio-environment'] as const){const node=document.querySelector<HTMLInputElement>('#'+id)!,output=document.createElement('output');output.id=id+'-value';node.parentElement!.append(output);const label=()=>{output.textContent=Math.round(Number(node.value))+'%';};label();node.addEventListener('input',label);}
+  for(const id of ['audio-master','audio-effects','audio-environment','audio-music'] as const){const node=document.querySelector<HTMLInputElement>('#'+id)!,output=document.createElement('output');output.id=id+'-value';node.parentElement!.append(output);const label=()=>{output.textContent=Math.round(Number(node.value))+'%';};label();node.addEventListener('input',label);}
   const changeSelect=(id:string,value:string)=>{const node=document.querySelector<HTMLSelectElement>('#'+id)!;node.value=value;node.dispatchEvent(new window.Event('change',{bubbles:true}));};
-  function resetEnvironment(){const p=preferences.reset();for(const [id,value] of [['graphics-quality',p.graphics],['frame-target',String(p.fps)],['hud-size',p.hud],['crosshair-color',p.crosshairColor],['crosshair-size',p.crosshairSize],['jump-key',p.jump],['shot-effects',mobile?'low':'full'],['screen-shake',mobile?'off':'low']])changeSelect(id!,value!);invertCheck.checked=p.invertY;invertCheck.dispatchEvent(new window.Event('change',{bubbles:true}));minimapCheck.checked=p.minimap;minimapCheck.dispatchEvent(new window.Event('change',{bubbles:true}));snowfallCheck.checked=p.snowfall;snowfallCheck.dispatchEvent(new window.Event('change',{bubbles:true}));shadowCheck.checked=p.shadows;shadowCheck.dispatchEvent(new window.Event('change',{bubbles:true}));for(const [node,value] of [[mouseSlider,100],[opacitySlider,100],[sensitivity,100]] as const){node.value=String(value);node.dispatchEvent(new window.Event('input',{bubbles:true}));}audio.configure({master:.7,effects:.85,environment:.16,muted:false});for(const key of ['master','effects','environment'] as const){const node=document.querySelector<HTMLInputElement>('#audio-'+key)!;node.value=String(audio.settings[key]*100);node.dispatchEvent(new window.Event('input',{bubbles:true}));}mute.checked=false;gameChoices.refresh();document.querySelector('#environment-save-status')!.textContent=preferences.saved?'기본 설정으로 복원했습니다. 게임 기록은 유지됩니다.':'저장할 수 없어 이번 접속에만 기본값을 적용합니다.';}
+  function resetEnvironment(){const p=preferences.reset();controlEditor.reset();combatEffectsCheck.checked=p.combatEffects;world.setCombatEffects(p.combatEffects);for(const [id,value] of [['graphics-quality',p.graphics],['frame-target',String(p.fps)],['hud-size',p.hud],['crosshair-color',p.crosshairColor],['crosshair-size',p.crosshairSize],['jump-key',p.jump],['shot-effects',mobile?'low':'full'],['screen-shake',mobile?'off':'low']])changeSelect(id!,value!);invertCheck.checked=p.invertY;invertCheck.dispatchEvent(new window.Event('change',{bubbles:true}));minimapCheck.checked=p.minimap;minimapCheck.dispatchEvent(new window.Event('change',{bubbles:true}));snowfallCheck.checked=p.snowfall;snowfallCheck.dispatchEvent(new window.Event('change',{bubbles:true}));shadowCheck.checked=p.shadows;shadowCheck.dispatchEvent(new window.Event('change',{bubbles:true}));for(const [node,value] of [[mouseSlider,100],[opacitySlider,100],[sensitivity,100]] as const){node.value=String(value);node.dispatchEvent(new window.Event('input',{bubbles:true}));}audio.configure({master:.7,effects:.85,environment:.16,music:.18,musicEnabled:true,muted:false});musicToggle.checked=true;for(const key of ['master','effects','environment','music'] as const){const node=document.querySelector<HTMLInputElement>('#audio-'+key)!;node.value=String(audio.settings[key]*100);node.dispatchEvent(new window.Event('input',{bubbles:true}));}mute.checked=false;gameChoices.refresh();document.querySelector('#environment-save-status')!.textContent=preferences.saved?'기본 설정으로 복원했습니다. 게임 기록은 유지됩니다.':'저장할 수 없어 이번 접속에만 기본값을 적용합니다.';}
   document.querySelector('#environment-low-preset')!.addEventListener('click',()=>{
     for(const [id,value] of [['graphics-quality','low'],['frame-target','30'],['shot-effects','low'],['screen-shake','off']])changeSelect(id!,value!);
     shadowCheck.checked=false;shadowCheck.dispatchEvent(new window.Event('change',{bubbles:true}));gameChoices.refresh();
@@ -659,12 +682,20 @@ async function start() {
   });
   for(const id of ['home-settings','environment-open','waiting-settings-open'])document.querySelector('#'+id)!.addEventListener('click',()=>settingsView.open());
   const gameChoices=createGameChoices({opened(){lobbyPolish.cancelDrag();input.setEnabled(false);input.reset();if(document.pointerLockElement)document.exitPointerLock();}});
+  const controlEditor=installControlEditor(controls,()=>{input.reset();document.querySelector('#crouch')!.textContent='앉기 · '+controls.label('crouch');document.querySelector('#prone')!.textContent='엎드리기 · '+controls.label('prone');for(const kind of ['grenade','flash','medkit'] as const)document.querySelector('[data-equipment="'+kind+'"] small')!.textContent=controls.label(kind);});
+  combatTools=installCombatTools({
+    beforeOpen(){input.reset();input.setEnabled(false);if(document.pointerLockElement)document.exitPointerLock();},
+    afterClose(){input.reset();},
+    practice:()=>!onlineActive&&!world.duelState().active&&!homeOpen,
+    setRange(distance,moving){if(world.setPracticeRange(distance,moving)){localDash=createDash();choosePickupId=undefined;position={...world.geometry.PROTOTYPE.spawn};input.resetLook();refreshHud();}},
+    ping(ping){const me=onlineState?.players.find(p=>p.id===onlineId);if(!onlineActive||!online.connected||onlineState?.mode!=='team'||!me||me.health<=0||performance.now()-pingSentAt<1500)return false;pendingPing=ping;pingSentAt=performance.now();return true;},
+  });
   world.update(position, 1);
   await world.scene.whenReadyAsync();
   loading.hidden = true;
   openHome();
   const invited=new URLSearchParams(window.location?.search??'').get('room');if(invited&&/^[0-9A-F]{8}$/.test(invited.toUpperCase())){document.querySelector<HTMLInputElement>('#online-code')!.value=invited.toUpperCase();openOnlineLobby();}
-  function onlineCanPlay(){return !settingsView.isOpen&&!roomWaiting&&!nicknameDialog.isOpen&&!onlineBoard.open&&!lobbyPolish.deploying&&!gameChoices.isOpen&&!resultView.isOpen&&!homeOpen&&!manualPaused&&!document.hidden&&!matchMedia('(pointer: coarse) and (orientation: portrait)').matches&&picker.hidden&&!comparing&&!menuOpen&&help.hidden&&document.hasFocus();}
+  function onlineCanPlay(){return !combatTools?.isOpen&&!settingsView.isOpen&&!roomWaiting&&!nicknameDialog.isOpen&&!onlineBoard.open&&!lobbyPolish.deploying&&!gameChoices.isOpen&&!resultView.isOpen&&!homeOpen&&!manualPaused&&!document.hidden&&!matchMedia('(pointer: coarse) and (orientation: portrait)').matches&&picker.hidden&&!comparing&&!menuOpen&&help.hidden&&document.hasFocus();}
   let retained:Partial<Command>={};
   const inputPump=createOnlinePump(()=>{
     if(!onlineActive||!onlineState||roomWaiting){retained={};return;}
@@ -672,9 +703,9 @@ async function start() {
     const can=onlineCanPlay();
     if(!can)retained={};
     const command:Omit<Command,'seq'>={stance:input.stance,x:can?input.move.x:0,y:can?input.move.y:0,yaw:input.look.yaw,pitch:input.look.pitch,fire:can&&input.firing,shot:can&&(input.consumeShots()>0||!!retained.shot),reload:can&&(input.consumeReloads()>0||!!retained.reload),jump:can&&(input.consumeJumps()>0||!!retained.jump),sprint:can&&input.sprintingRequested,scope:world.practiceState().scoped,dash:can&&(input.consumeDashes()>0||!!retained.dash)};
-    if(can){command.door=pendingDoor??retained.door;command.slot=pendingSlot??retained.slot;command.pickup=pendingTake?.pickup??retained.pickup;command.replace=pendingTake?.replace??retained.replace;command.equipment=pendingEquipment??retained.equipment;}
+    if(can){command.ping=pendingPing??retained.ping;command.door=pendingDoor??retained.door;command.slot=pendingSlot??retained.slot;command.pickup=pendingTake?.pickup??retained.pickup;command.replace=pendingTake?.replace??retained.replace;command.equipment=pendingEquipment??retained.equipment;}
     const seq=online.send(command);
-    if(seq!==null){onlineMotion.sent(seq,command);predictionDash ||=!!command.dash;predictionJump ||=command.jump;retained={};pendingDoor=undefined;pendingSlot=undefined;pendingTake=undefined;pendingEquipment=undefined;}else retained={...command};
+    if(seq!==null){onlineMotion.sent(seq,command);predictionDash ||=!!command.dash;predictionJump ||=command.jump;retained={};pendingPing=undefined;pendingDoor=undefined;pendingSlot=undefined;pendingTake=undefined;pendingEquipment=undefined;}else retained={...command};
   });
   let networkTimer:ReturnType<typeof setInterval>|null=null;
   const startNetworkTimer=()=>{if(networkTimer===null)networkTimer=setInterval(()=>inputPump.pump(),25);};startNetworkTimer();
@@ -688,18 +719,18 @@ async function start() {
   engine.runRenderLoop(() => {
     const elapsed=resetClock?0:Math.max(0,engine.getDeltaTime()/1000);resetClock=false;
     const dt = Math.min(elapsed, 0.05);
-    world.setStance?.(input.stance);for(const posture of ['crouch','prone'])document.querySelector('#'+posture)?.setAttribute('aria-pressed',String(input.stance===posture));
+    world.setStance?.(input.stance);if(lastPosture!==input.stance){lastPosture=input.stance;for(const {id,node} of postureButtons)node.setAttribute('aria-pressed',String(input.stance===id));}
     const drawFrame=!roomWaiting&&!settingsView.isOpen&&frameLimit.shouldRender(performance.now());
     if(!onlineActive||!onlineState||roomWaiting)onlineVisualTime=0;
     const uiTick=performance.now()-uiRefreshAt>=50;if(uiTick)uiRefreshAt=performance.now();
     const portraitTouch = matchMedia('(pointer: coarse) and (orientation: portrait)').matches;
     lobbyPolish.update();world.setLobbyMotion(!reducedLobbyMotion.matches&&!settingsView.isOpen&&!document.hidden&&document.hasFocus()&&!gameChoices.isOpen&&!resultView.isOpen);audio.setInterfaceActive(!document.hidden&&document.hasFocus());
-    const canPlay=!settingsView.isOpen&&!roomWaiting&&!nicknameDialog.isOpen&&!onlineBoard.open&&!lobbyPolish.deploying&&!gameChoices.isOpen&&!resultView.isOpen&&!homeOpen&&!manualPaused&&!document.hidden&&!portraitTouch&&picker.hidden&&!comparing&&!menuOpen&&help.hidden&&document.hasFocus();
+    const canPlay=!combatTools?.isOpen&&!settingsView.isOpen&&!roomWaiting&&!nicknameDialog.isOpen&&!onlineBoard.open&&!lobbyPolish.deploying&&!gameChoices.isOpen&&!resultView.isOpen&&!homeOpen&&!manualPaused&&!document.hidden&&!portraitTouch&&picker.hidden&&!comparing&&!menuOpen&&help.hidden&&document.hasFocus();
     input.setEnabled(canPlay);
     input.advanceLook(elapsed);
     aimHint.hidden=!canPlay||document.pointerLockElement===canvas;
-    document.querySelector('#pause-description')!.textContent=onlineActive?'내 조작만 멈춥니다. 상대의 경기는 계속됩니다.':'전투와 이동이 멈췄습니다.';
-    document.querySelector<HTMLElement>('#pause-indicator')!.hidden=manualPaused||!picker.hidden||comparing||portraitTouch||(!menuOpen&&help.hidden);
+    const pauseText=onlineActive?'내 조작만 멈춥니다. 상대의 경기는 계속됩니다.':'전투와 이동이 멈췄습니다.';if(pauseDescription.textContent!==pauseText)pauseDescription.textContent=pauseText;
+    pauseIndicator.hidden=manualPaused||!picker.hidden||comparing||portraitTouch||(!menuOpen&&help.hidden);
     if(uiTick)refreshEquipment();
     // Count drawn frames, not the extra callbacks skipped by the FPS cap.
     playFrameTime=canPlay?playFrameTime+elapsed:0;
@@ -729,7 +760,7 @@ async function start() {
       if(drawFrame){
         const frameState={...onlineState,events:onlineShots.drain(),toolEvents:onlineTools.drain()};
         world.renderOnline(frameState,onlineId,input.look,Math.min(onlineVisualTime,.1),predictedPosition,remoteMotion.sampleAll(performance.now(),online.network.rttMs),onlineMotion.jump);
-        for(const event of frameState.events)if(event.id>onlineEventId){onlineEventId=event.id;if(event.hit&&event.player===onlineId){impactTime=.2;feedbackTime=.35;shotFeedback.textContent=event.headshot?(event.killed?'헤드샷 · 처치':'헤드샷'):(event.killed?'상대 처치':'명중');document.querySelector('#impact-marker')!.classList.toggle('kill',event.killed);}}
+        for(const event of frameState.events)if(event.id>onlineEventId){onlineEventId=event.id;if((event.hit||event.protected)&&event.player===onlineId){impactTime=.2;feedbackTime=.55;showHitFeedback(event);}}
         onlineVisualTime=0;
       }
     } else if (canPlay) {
@@ -764,13 +795,12 @@ async function start() {
         for (const shot of attempts) {
           if(shot.fired){shotTime=0.08;audio.play(world.practiceState().weaponId);if(shot.hit)audio.play(shot.eliminated?'kill':'hit',0,.6);else if('impact' in shot&&shot.impact)audio.play('wall',0,.35);}
           if(!shot.fired&&'reason' in shot&&shot.reason==='empty'&&performance.now()>emptyAt){audio.play('empty');emptyAt=performance.now()+500;}
-          if (shot.hit) {impactTime=0.2;document.querySelector('#impact-marker')!.classList.toggle('kill','eliminated' in shot&&!!shot.eliminated);hitTime=0.16;feedbackTime=0.35;shotFeedback.textContent='eliminated' in shot&&shot.eliminated?(world.duelState().active?'봇 처치':'표적 파괴'):`명중 −${'damage' in shot?shot.damage:0}`;}
+          if (shot.hit) {impactTime=.2;hitTime=.16;feedbackTime=.55;showHitFeedback({headshot:'headshot' in shot&&!!shot.headshot,killed:'eliminated' in shot&&!!shot.eliminated,damage:'damage' in shot?shot.damage:0});}
           else if(!shot.fired && 'reason' in shot && shot.reason!=='cooldown'){notice=shot.reason==='empty'?'탄창이 비었습니다 · 재장전하세요':'재장전 중에는 발사할 수 없습니다';noticeTime=0.8;}
         }
         observeOfflineResult(step);if(resultView.isOpen)break;
       }
-      const building=indoorAt(position);zone.textContent = building?`${isExpansionMap(selectedMap)?'1층':(position.y??0)>=building.height-.1?'옥상':(position.y??0)>=3.3?'2층':'1층'} · 출입 가능 건물`:isExpansionMap(selectedMap)?MAPS[selectedMap].name:selectedMap==='factory'?'폐공장 · 산업 지구':position.z < -28?'남쪽 상점 거리':position.z > 28 ? '항구 산책로' : Math.abs(position.x) > 20 ? '건물 사이 골목'
-        : Math.abs(position.z) < 11 && Math.abs(position.x) < 11 ? '중앙 광장' : '해안 거리';
+      zone.textContent=isExpansionMap(selectedMap)?(world.geometry.indoorAt(position)?'1층 · 출입 가능 건물':MAPS[selectedMap].name):navigationLocation(world.geometry??harborWorld,position).label;
     } else { localDash=cancelDash(localDash);input.consumeDashes();input.consumeShots();input.consumeReloads();input.consumeJumps();world.update(position, dt, input.look,true);world.consumeSounds(); }
     const dashButton=document.querySelector<HTMLButtonElement>('#dash')!,onlineMe=onlineState?.players.find(p=>p.id===onlineId),dashState=onlineActive?onlineMe?.dash:localDash;
     const dashGrounded=onlineActive?!!onlineMe&&onlineMe.jump.height===0&&onlineMe.jump.velocity===0:world.practiceState().grounded;

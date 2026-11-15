@@ -24,15 +24,15 @@ test('scene personal mode shows three damageable robots, pause freezes all and r
  const e=new NullEngine({renderWidth:640,renderHeight:360,textureSize:512,deterministicLockstep:false,lockstepMaxSteps:4});try{
   const world=createHarborScene(e,{randomSpawns:false});world.setMode('ffa','hard');const p={x:0,z:10};world.update(p,0);world.scene.render();assert.equal(world.duelState().active,true,'personal mode is combat, not practice');assert.equal(world.duelState().bots.length,3);
   for(const id of ['opponent','opponent-bot-2','opponent-bot-3'])assert.equal(world.scene.getTransformNodeByName(id).isEnabled(),true);
-  world.selectWeapon('sniper');world.update(p,0,{yaw:0,pitch:0});world.scene.render();assert.equal(world.shoot().eliminated,true);assert.equal(world.duelState().playerKills,1);
+  world.selectWeapon('sniper');world.update(p,0,{yaw:0,pitch:0});world.scene.render();assert.equal(world.shoot().eliminated,false);finishBot(world,p,'bot-1');assert.equal(world.duelState().playerKills,1);
   const before=world.duelState().bots.map(b=>({...b.position}));world.update(p,5,undefined,true);assert.deepEqual(world.duelState().bots.map(b=>b.position),before);
   world.resetPractice();assert.equal(world.duelState().playerKills,0);assert.equal(world.duelState().difficulty,'hard');world.setMode('practice');world.update(p,0);assert.equal(world.scene.getTransformNodeByName('opponent-bot-2').isEnabled(),false);world.scene.dispose();
  }finally{e.dispose();}
 });
 test('individual bot hitboxes award separate kills and repeated mode changes keep mesh pools bounded',()=>{
  const e=new NullEngine({renderWidth:640,renderHeight:360,textureSize:512,deterministicLockstep:false,lockstepMaxSteps:4});try{
-  const world=createHarborScene(e,{randomSpawns:false});world.setMode('ffa','normal');world.selectWeapon('sniper');const p={x:0,z:10};world.update(p,0);world.scene.render();assert.equal(world.shoot().eliminated,true);
-  p.z=0;for(const id of ['bot-2','bot-3']){world.update(p,1.6);const target=world.duelState().bots.find(b=>b.id===id)!;world.update(p,0,{yaw:Math.atan2(target.position.x-p.x,target.position.z-p.z),pitch:0});world.scene.render();assert.equal(world.shoot().eliminated,true,id+' must have its own damageable body');assert.equal(world.duelState().bots.find(b=>b.id===id)!.health,0);}
+  const world=createHarborScene(e,{randomSpawns:false});world.setMode('ffa','normal');world.selectWeapon('sniper');const p={x:0,z:10};world.update(p,0);world.scene.render();assert.equal(world.shoot().eliminated,false);finishBot(world,p,'bot-1');
+  p.z=0;for(const id of ['bot-2','bot-3']){world.update(p,1.6);const target=world.duelState().bots.find(b=>b.id===id)!;world.update(p,0,{yaw:Math.atan2(target.position.x-p.x,target.position.z-p.z),pitch:0});world.scene.render();assert.equal(world.shoot().eliminated,false);finishBot(world,p,id);assert.equal(world.duelState().bots.find(b=>b.id===id)!.health,0);}
   assert.equal(world.duelState().playerKills,3);const meshes=world.scene.meshes.length,materials=world.scene.materials.length;for(let i=0;i<5;i++){world.setMode('duel');world.setMode('ffa');world.update(p,0);}assert.equal(world.scene.meshes.length,meshes);assert.equal(world.scene.materials.length,materials);world.scene.dispose();
  }finally{e.dispose();}
 });
@@ -40,6 +40,8 @@ test('real three-bot player respawn moves the camera and restores only the selec
  const e=new NullEngine({renderWidth:640,renderHeight:360,textureSize:512,deterministicLockstep:false,lockstepMaxSteps:4});try{
   const world=createHarborScene(e,{randomSpawns:false});world.setMode('ffa','hard');world.selectWeapon('sniper');const p={x:0,z:-4};world.update(p,0);assert.equal(world.pickup(p,'crate-machinegun'),'added');assert.equal(world.inventoryState().inventory.slots.length,2);
   p.z=10;world.update(p,0);world.scene.render();for(let i=0;i<800&&world.duelState().playerHealth>0;i++)world.update(p,.025);assert.equal(world.duelState().playerHealth,0);
-  world.update(p,3);assert.equal(world.duelState().playerHealth,100);assert.deepEqual(p,world.duelState().playerPosition);assert.ok(canStand(p,PROTOTYPE.radius));assert.equal(world.practiceState().weaponId,'sniper');assert.equal(world.inventoryState().inventory.slots.length,1);world.scene.dispose();
+  world.update(p,3);assert.equal(world.duelState().playerHealth,100);assert.deepEqual({x:p.x,z:p.z},world.duelState().playerPosition);assert.equal((p as {fallSpeed?:number}).fallSpeed,0);assert.ok(canStand(p,PROTOTYPE.radius));assert.equal(world.practiceState().weaponId,'sniper');assert.equal(world.inventoryState().inventory.slots.length,1);world.scene.dispose();
  }finally{e.dispose();}
 });
+
+function finishBot(world:any,p:{x:number;z:number},id:string){if(world.practiceState().ammo===0){world.reload();world.update(p,2.5);}world.update(p,1.5);const target=world.duelState().bots.find((b:any)=>b.id===id)!;world.update(p,0,{yaw:Math.atan2(target.position.x-p.x,target.position.z-p.z),pitch:0});world.scene.render();assert.equal(world.shoot().eliminated,true);}

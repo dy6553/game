@@ -42,7 +42,7 @@ test('scene switches modes, robot receives real ray hits, pause freezes duel, re
     const world=createHarborScene(engine,{randomSpawns:false}),position={x:0,z:10};world.setMode('duel');
     world.update(position,0,{yaw:0,pitch:0});world.scene.render();
     assert.equal(world.scene.getTransformNodeByName('target-root-0')!.isEnabled(),false);
-    for(let i=0;i<3;i++){const b=world.duelState().position;world.update(position,i?.25:0,{yaw:Math.atan2(b.x-position.x,b.z-position.z),pitch:0});assert.equal(world.shoot().hit,true);}
+    for(let i=0;i<4;i++){const b=world.duelState().position;world.update(position,i?.25:0,{yaw:Math.atan2(b.x-position.x,b.z-position.z),pitch:0});assert.equal(world.shoot().hit,true);}
     assert.equal(world.duelState().playerKills,1);assert.equal(world.duelState().botHealth,0);
     world.update(position,10,{yaw:0,pitch:0},true);assert.equal(world.duelState().botDead,1.5);
     world.update(position,3,{yaw:0,pitch:0});assert.equal(world.duelState().botHealth,100);
@@ -67,7 +67,7 @@ test('actual scene blocks enemy fire through buildings and allows visible fire; 
     assert.equal(world.duelState().playerHealth,0);assert.equal(world.duelState().botKills,1);
     assert.equal(world.shoot().fired,false);assert.equal(world.jump(),false);assert.equal(world.reload(),false);
     world.update(position,3);assert.equal(world.duelState().playerHealth,100);
-    assert.deepEqual(position,world.duelState().playerPosition);assert.equal(world.duelState().protection,3);assert.equal(world.practiceState().ammo,12);
+    assert.deepEqual({x:position.x,z:position.z},world.duelState().playerPosition);assert.equal((position as {fallSpeed?:number}).fallSpeed,0);assert.equal(world.duelState().protection,3);assert.equal(world.practiceState().ammo,12);
     world.scene.dispose();
   }finally{engine.dispose();}
 });
