@@ -1,3 +1,4 @@
+import {MAPS,normalizeMap} from './maps.ts';
 import {isCharacterType,type CharacterType} from './characters.ts';
 import {isWeaponId,upgradedWeapon,type WeaponId} from './weapons.ts';
 import {isSurvivalDifficulty,type SurvivalDifficulty} from './duel.ts';
@@ -17,7 +18,7 @@ export const HOME_MARKUP=`
   </aside>
   <section id="lobby-model-stage" class="lobby-model-stage" tabindex="0" aria-label="캐릭터 회전: 좌우 드래그 또는 방향키, Home 키로 초기화"><div class="operator-nameplate"><span class="operator-connection"><i></i> 대원 준비 완료</span><h2 id="home-character-name">소형 로봇</h2><span id="home-character-code">UNIT / 01</span></div><div class="operator-caption"><span class="operator-status">✓ 준비 완료</span><div class="lobby-rotate-hint">드래그해서 회전 <button id="lobby-rotation-reset" aria-label="캐릭터 회전 초기화">↺</button></div><p id="home-character-description">항구의 밤으로 출격할 준비가 됐습니다.</p></div></section>
   <section class="lobby-match-dock" aria-label="매치 설정과 출격"><div class="match-dock-heading"><span class="eyebrow">출격 설정</span><span class="match-signal"><i></i><i></i><i></i></span></div>
-   <div class="home-map-setting"><label>전장<select id="home-map"><option value="harbor">항구 지구</option><option value="factory" disabled>폐공장 · Lv3 해금</option></select></label></div><div class="home-mode-tabs" role="group" aria-label="플레이 종류"><button id="home-bot" aria-pressed="true">봇 대전</button><button id="home-online" aria-pressed="false">온라인</button><button id="home-practice" aria-pressed="false">연습</button></div>
+   <div class="home-map-setting"><label>전장<select id="home-map"><option value="harbor">항구 지구</option><option value="factory" disabled>폐공장 · Lv3 해금</option><option value="snow" disabled>설원 연구소 · Lv3 해금</option><option value="moon" disabled>달 기지 · Lv3 해금</option></select></label></div><div class="home-mode-tabs" role="group" aria-label="플레이 종류"><button id="home-bot" aria-pressed="true">봇 대전</button><button id="home-online" aria-pressed="false">온라인</button><button id="home-practice" aria-pressed="false">연습</button></div>
    <div id="home-bot-settings" class="home-match-settings"><label>게임 모드<select id="home-mode"><option value="duel">봇 1대1</option><option value="ffa">봇 3명 개인전</option><option value="survival">웨이브 생존</option></select></label><label>난이도<select id="home-difficulty"><option value="easy">쉬움</option><option value="normal">보통</option><option value="hard">어려움</option><option value="auto" disabled hidden>자동 · 생존 9단계</option></select></label></div>
    <p id="home-mode-summary" class="home-mode-summary" role="status"></p>
    <div class="home-start-actions"><button id="home-start"><span>게임 시작</span><span aria-hidden="true">→</span></button></div>
@@ -36,7 +37,7 @@ export function createHomeScreen(actions:{selectCharacter(type:CharacterType):vo
   const auto=difficulty.querySelector<HTMLOptionElement>('option[value="auto"]')!;auto.disabled=auto.hidden=mode.value!=='survival';if(auto.disabled&&difficulty.value==='auto')difficulty.value='normal';
   el('home-bot-settings').hidden=category!=='bot';
   for(const [id,value] of [['home-bot','bot'],['home-online','online'],['home-practice','practice']])el(id!).setAttribute('aria-pressed',String(value===category));
-  el('home-map-name').textContent=map.value==='factory'?'폐공장':'항구 지구';el('home-map-description').textContent=map.value==='factory'?'다층 공장과 산업 엄폐물 · Lv3 전장':'도심 골목과 옥상을 오가는 야간 전투';
+  el('home-map-name').textContent=MAPS[normalizeMap(map.value)].name;el('home-map-description').textContent=MAPS[normalizeMap(map.value)].description;
   const selection=read();el('home-character-name').textContent=characterNames[selection.character];el('home-character-code').textContent=selection.character==='robot'?'UNIT / 01':selection.character==='welder'?'UNIT / 03':'UNIT / 02';
   const spec=upgradedWeapon(selection.weapon,tier,category==='bot');el('home-equipped-art').innerHTML=weaponArt(selection.weapon);el('home-loadout-summary').textContent=`${spec.name} · 피해 ${spec.pellets>1?Number(spec.damage.toFixed(2))+'×'+spec.pellets:Number(spec.damage.toFixed(2))} · ${spec.magazineSize}발 · 재장전 ${Number(spec.reloadSeconds.toFixed(2))}초`;
   el('home-mode-summary').textContent=category==='online'?'개인전·팀전 1~20명 · 경기 중 참가':category==='practice'?'표적 3개 · 이동과 조준 연습':mode.value==='survival'?`생명 3개 · ${difficulty.value==='hard'?30:difficulty.value==='easy'?10:20}웨이브${difficulty.value==='auto'?' · 자동 5/9단계 시작':''}`:mode.value==='ffa'?'나와 봇 3명 · 먼저 10킬':'봇 1대1 · 먼저 10킬';

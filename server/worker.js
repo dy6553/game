@@ -1,7 +1,7 @@
 import {createServerClock} from '../src/server-clock.ts';
 import {statePacket,privatePacket} from '../src/network-wire.ts';
 import { DurableObject } from 'cloudflare:workers';
-import { createNetworkGame,onlinePlaying,normalizeNickname } from '../src/network-game.ts';
+import { createNetworkGame,onlinePlaying,normalizeNickname,normalizeMap,canAccessMap,MAPS } from '../src/network-game.ts';
 import {createIdentityVerifier} from './account-auth.js';
 import {captureOfficialResult,createResultOutbox} from './official-records.js';
 import {createRecordStore} from './record-store.js';
@@ -33,8 +33,8 @@ export class Room extends DurableObject {
    if(input.action==='join'&&!this.game.state.players.some(p=>!p.abandoned))return json({error:'방이 없거나 경기가 종료되었습니다.'},404);
    if(this.game.state.players.length>=(this.game.state.capacity??2)||this.game.state.winner)return json({error:'입장할 수 없는 방입니다.'},409);
    const id=crypto.randomUUID(),token=crypto.randomUUID();
-   const map=this.game.state.players.length?this.game.state.map:(input.map==='factory'?'factory':'harbor');
-   if(map==='factory'&&(!input.accountSubject||!(input.accountLevel>=3)))return json({error:'폐공장은 로그인 후 Lv3에 해금됩니다.'},403);
+   const map=this.game.state.players.length?this.game.state.map:normalizeMap(input.map);
+   if(!canAccessMap(map,!!input.accountSubject,input.accountLevel))return json({error:MAPS[map].name+' 전장은 로그인 후 Lv3에 해금됩니다.'},403);
    if(!this.game.state.players.length)this.game=createNetworkGame(undefined,map,{mode:input.mode??'duel',randomPickups:true,waitingRoom:true,clock:()=>Date.now()});
    if(input.accountSubject&&Object.values(this.accounts).includes(input.accountSubject))return json({error:'같은 계정으로 양쪽에 입장할 수 없습니다.'},409);
    const p=this.game.join(id,input.weapon,input.character,{nickname:normalizeNickname(input.nickname)??'대원',guest:!input.accountSubject});if(input.accountSubject)this.accounts[id]=input.accountSubject;p.connected=false;this.disconnects[id]=Date.now();this.sessions[token]=id;this.last=Date.now();await this.save();await this.ctx.storage.setAlarm(Date.now()+120000);return json({id,token,mode:this.game.state.mode,players:this.game.state.players.length,capacity:this.game.state.capacity,phase:this.game.state.phase,accepting:this.game.state.players.length<this.game.state.capacity});
@@ -90,7 +90,7 @@ export class Lobby extends DurableObject {
   const rate=this.rates.get(ip)??{at:now,count:0};if(++rate.count>60)return json({error:'잠시 후 다시 시도해 주세요.'},429);this.rates.set(ip,rate);
   const body=await request.json();let roomCode=body.code?.toUpperCase();
   if(body.action==='join'&&!/^[0-9A-F]{8}$/.test(roomCode??''))return json({error:'방 코드 8자리를 확인해 주세요.'},400);
-  const waitingKey=(body.mode??'duel')==='duel'?(body.map==='factory'?'waiting-factory':'waiting'):`waiting:${body.mode}:${body.map}`;
+  const waitingKey=(body.mode??'duel')==='duel'?(body.map==='harbor'?'waiting':body.map==='factory'?'waiting-factory':`waiting:duel:${body.map}`):`waiting:${body.mode}:${body.map}`;
   if(body.action==='quick'){const pending=await this.ctx.storage.get(waitingKey);if(pending&&((body.mode??'duel')!=='duel'||now-pending.at<(pending.phase==='waiting'?600000:60000)))roomCode=pending.code;await this.ctx.storage.delete(waitingKey);}
   if(!roomCode)roomCode=code();
   const hint=request.headers.get('X-Harbor-Location');
@@ -103,7 +103,7 @@ export class Lobby extends DurableObject {
   await this.ctx.storage.put('room:'+roomCode,{at:now,ttl:session.phase?600000:(session.mode??body.mode??'duel')==='duel'?120000:600000});if(body.action==='quick'&&(session.accepting??!known))await this.ctx.storage.put(waitingKey,{code:roomCode,at:now,phase:session.phase});
   await this.ctx.storage.setAlarm(now+180000);return json({...session,code:roomCode});
  });}
- async alarm(){const rooms=await this.ctx.storage.list({prefix:'room:'});for(const [key,at] of rooms)if(Date.now()-(typeof at==='number'?at:at.at)>(at.ttl??120000))await this.ctx.storage.delete(key);await this.ctx.storage.delete('waiting');await this.ctx.storage.delete('waiting-factory');const waiting=await this.ctx.storage.list({prefix:'waiting:'});for(const [key,v] of waiting)if(!/^waiting:(ffa|team):(harbor|factory)$/.test(key)&&Date.now()-v.at>600000)await this.ctx.storage.delete(key);}
+ async alarm(){const rooms=await this.ctx.storage.list({prefix:'room:'});for(const [key,at] of rooms)if(Date.now()-(typeof at==='number'?at:at.at)>(at.ttl??120000))await this.ctx.storage.delete(key);await this.ctx.storage.delete('waiting');await this.ctx.storage.delete('waiting-factory');const waiting=await this.ctx.storage.list({prefix:'waiting:'});for(const [key,v] of waiting)if(!/^waiting:(duel|ffa|team):(harbor|factory|snow|moon)$/.test(key)&&Date.now()-v.at>600000)await this.ctx.storage.delete(key);}
 }
 export default {async fetch(request,env){
  const origin=request.headers.get('Origin'),allowed=env.ALLOWED_ORIGINS.split(',');
@@ -122,9 +122,9 @@ export default {async fetch(request,env){
    let subject;try{subject=await createIdentityVerifier(env)(request);}catch{response=json({error:'로그인이 만료되었거나 올바르지 않습니다. 다시 로그인하세요.'},401);}
    if(response){const result=new Response(response.body,response);for(const [key,value] of Object.entries(headers))result.headers.set(key,value);return result;}
    delete body.accountSubject;delete body.userId;delete body.accountLevel;
-   body.map=body.map==='factory'?'factory':'harbor';body.mode=['duel','ffa','team'].includes(body.mode)?body.mode:'duel';
+   body.map=normalizeMap(body.map);body.mode=['duel','ffa','team'].includes(body.mode)?body.mode:'duel';
    if(subject){if(env.ACCOUNTS_ENABLED!=='true')throw Error('Accounts not ready');const profile=await createRecordStore(env).account(subject);body.nickname=profile.nickname;body.accountSubject=subject;body.accountLevel=(await createRecordStore(env).progression(subject)).level;}
-   if(body.action!=='join'&&body.map==='factory'&&(!subject||body.accountLevel<3)){const denied=json({error:'폐공장은 로그인 후 Lv3에 해금됩니다.'},403);for(const [key,value] of Object.entries(headers))denied.headers.set(key,value);return denied;}
+   if(body.action!=='join'&&!canAccessMap(body.map,!!subject,body.accountLevel)){const denied=json({error:MAPS[body.map].name+' 전장은 로그인 후 Lv3에 해금됩니다.'},403);for(const [key,value] of Object.entries(headers))denied.headers.set(key,value);return denied;}
    if(body.character==='welder'&&(!subject||body.accountLevel<3)){
     const denied=json({error:'용접 로봇은 로그인 후 Lv3에 해금됩니다.'},403);for(const [key,value] of Object.entries(headers))denied.headers.set(key,value);return denied;
    }

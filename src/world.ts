@@ -1,16 +1,19 @@
 import {stanceStats,type Stance} from './stance.ts';
 import {advanceJump,createJump,type JumpState} from './jump.ts';
+import {expansionLayouts} from './expansion-layouts.ts';
+import {isExpansionMap,type MapId} from './maps.ts';
+export type {MapId} from './maps.ts';
 export type Point = { x: number; z: number; y?:number;fallSpeed?:number;stance?:Stance };
 export type Rect = { id: string; x: number; z: number; width: number; depth: number; height?:number; yMin?:number;yMax?:number;jumpClearance?:boolean;slope?:{start:Point&{y:number};end:Point&{y:number}} };
 export type Building = Rect & { height: number; palette: number; enterable?:boolean };
 export type Doors=Record<string,boolean>;
 export type Stairway={building:string;start:Point&{y:number};end:Point&{y:number};width:number};
-export type MapId='harbor'|'factory';
 export function createWorld(map:MapId='harbor'){
+const expansion=isExpansionMap(map)?expansionLayouts[map]:undefined;
 
 // Exploration values only; these are not final combat balance or map dimensions.
 const PROTOTYPE = {
-  halfWidth: 64, halfDepth: 60, maxZ:34, radius: 0.55, speed: 7,
+  halfWidth: expansion?expansion.width/2:64, halfDepth: expansion?expansion.depth/2:60, maxZ:expansion?expansion.depth/2:34, radius: 0.55, speed: 7,
   spawn: { x: 0, z: -8 },
 };
 
@@ -27,9 +30,11 @@ BUILDINGS.push(...[-45,-17,17,45].map((x,i)=>({id:`south-${i}`,x,z:-45,width:12,
 if(map==='factory')BUILDINGS.splice(0,BUILDINGS.length,
  ...[-22,22].flatMap((z,row)=>[-24,24].map((x,col)=>({id:`factory-hall-${row}-${col}`,x,z,width:18,depth:18,height:9,palette:(row+col)%3,enterable:true}))),
  ...[-49,49].flatMap((x,col)=>[-43,20].map((z,row)=>({id:`factory-store-${row}-${col}`,x,z,width:13,depth:17,height:11,palette:2,enterable:false}))));
+if(expansion)BUILDINGS.splice(0,BUILDINGS.length,...expansion.rooms.map(b=>({...b,palette:0,enterable:true})));
 const ENTERABLE_BUILDINGS=BUILDINGS.filter(b=>b.enterable);
 const DOOR_WIDTH=3.2;
 function buildingWalls(b:Building):Rect[]{
+ if(expansion)return expansion.solids.filter(r=>r.id.startsWith(b.id+' wall')||r.id.startsWith(b.id+' lintel'));
  const front=b.z<0?1:-1,t=.4,segment=(b.width-DOOR_WIDTH)/2;
  return [
  {id:b.id+'-west',x:b.x-b.width/2+t/2,z:b.z,width:t,depth:b.depth},
@@ -37,7 +42,7 @@ function buildingWalls(b:Building):Rect[]{
  {id:b.id+'-back',x:b.x,z:b.z-front*(b.depth/2-t/2),width:b.width,depth:t},
  ...[-1,1].map(side=>({id:b.id+'-front-'+side,x:b.x+side*(DOOR_WIDTH/2+segment/2),z:b.z+front*(b.depth/2-t/2),width:segment,depth:t}))];
 }
-function interiorFurniture(b:Building):Rect[]{return [
+function interiorFurniture(b:Building):Rect[]{if(expansion)return [];return [
  {id:b.id+'-counter',x:b.x+b.width/2-1.3,z:b.z,width:1.4,depth:4},
  {id:b.id+'-table',x:b.x-1.5,z:b.z+(b.z<0?1:-1)*2,width:1.5,depth:1.5}];}
 function indoorAt(p:Point){return BUILDINGS.find(b=>b.enterable&&Math.abs(p.x-b.x)<b.width/2-.4&&Math.abs(p.z-b.z)<b.depth/2-.4);}
@@ -62,7 +67,8 @@ if(map==='factory')COVERS.splice(0,COVERS.length,
  {id:`factory-generator-${side}`,x:side*37,z:0,width:3.5,depth:5,height:2.4},
  {id:`factory-boiler-${side}`,x:side*14,z:-42,width:4,depth:4,height:3},
  ]));
-const SOLIDS: Rect[] = [...BUILDINGS.flatMap(b=>b.enterable?[...buildingWalls(b),...interiorFurniture(b)]:[b]), ...COVERS];
+if(expansion)COVERS.splice(0,COVERS.length,...expansion.solids.filter(r=>!expansion.rooms.some(b=>r.id.startsWith(b.id))).map(r=>({...r,height:r.yMax})));
+const SOLIDS: Rect[] = expansion?[...expansion.solids,...expansion.rooms.map(b=>({id:b.id+' roof',x:b.x,z:b.z,width:b.width+1.1,depth:b.depth+1.1,yMin:b.height,yMax:b.height+.44}))]:[...BUILDINGS.flatMap(b=>b.enterable?[...buildingWalls(b),...interiorFurniture(b)]:[b]), ...COVERS];
 const collisionCellSize=8;
 const emptyCollisionCell:readonly Rect[]=[];
 let openSolids:readonly Rect[]|undefined;
@@ -202,9 +208,10 @@ function advanceFall(p:Point,dt:number):Point{
  return {...p,y:Math.max(floor,next),fallSpeed:next<=floor?0:speed};
 }
 function doorRect(b:Building):Rect{return {id:b.id+'-door',x:b.x,z:b.z+(b.z<0?1:-1)*(b.depth/2-.2),width:DOOR_WIDTH,depth:.4,yMin:0,yMax:3.2};}
-function createDoors():Doors{return Object.fromEntries(ENTERABLE_BUILDINGS.map(b=>[b.id,false]));}
+function createDoors():Doors{return expansion?{}:Object.fromEntries(ENTERABLE_BUILDINGS.map(b=>[b.id,false]));}
 const solidCache=new Map<string,Rect[]>();
 function worldSolids(doors?:Doors):Rect[]{
+ if(expansion){openSolids=SOLIDS;return SOLIDS;}
  const key=doors?ENTERABLE_BUILDINGS.map(b=>doors[b.id]?'1':'0').join(''):'open';const cached=solidCache.get(key);if(cached)return cached;
  const result=[...SOLIDS.map(r=>{const b=BUILDINGS.find(b=>r.id===b.id||r.id.startsWith(b.id+'-'));return {...r,yMin:0,yMax:r.id.endsWith('-counter')?1.4:r.id.endsWith('-table')?1:b?.height??r.height??(r.id==='van'?2.15:1.05)};}),
  ...BUILDINGS.filter(b=>b.enterable&&doors&&doors[b.id]!==true).map(doorRect),
@@ -221,7 +228,7 @@ function toggleDoor(doors:Doors,id:string,p:Point,actors:readonly Point[]):boole
  doors[id]=!doors[id];return true;
 }
 const stairCache=new WeakMap<Building,readonly Stairway[]>();
-function stairways(b:Building):readonly Stairway[]{const cached=stairCache.get(b);if(cached)return cached;const f=b.z<0?1:-1,z0=b.z+f*(b.depth/2-2.2),z1=b.z-f*(b.depth/2-2.2);const result:Stairway[]=[
+function stairways(b:Building):readonly Stairway[]{if(expansion)return [];const cached=stairCache.get(b);if(cached)return cached;const f=b.z<0?1:-1,z0=b.z+f*(b.depth/2-2.2),z1=b.z-f*(b.depth/2-2.2);const result:Stairway[]=[
  {building:b.id,width:1.8,start:{x:b.x-b.width/2+1.5,z:z0,y:0},end:{x:b.x-b.width/2+1.5,z:z1,y:SECOND_FLOOR}},
  {building:b.id,width:1.8,start:{x:b.x+b.width/2-1.5,z:z1,y:SECOND_FLOOR},end:{x:b.x+b.width/2-1.5,z:z0,y:b.height}},
  ];for(const stair of result){Object.freeze(stair.start);Object.freeze(stair.end);Object.freeze(stair);}Object.freeze(result);stairCache.set(b,result);return result;}
@@ -246,6 +253,7 @@ function elevatedStep(from:Point,to:Point,radius:number):Point{
 }
 const floorCache=new WeakMap<Building,Map<number,readonly Rect[]>>();
 function floorPanels(b:Building,y:number):readonly Rect[]{
+ if(expansion)return [];
  let levels=floorCache.get(b);if(!levels){levels=new Map();floorCache.set(b,levels);}const cached=levels.get(y);if(cached)return cached;
  const [a,c]=stairways(b),w=a!.width+.1,filled=y===SECOND_FLOOR?c!:a!;const result:Rect[]=[...(hasBalcony(y)?[balcony(b,y)]:[]),
  {id:b.id+'-floor-side',x:filled.start.x,z:b.z,width:w,depth:b.depth-.8,yMin:y-.12,yMax:y},
@@ -256,7 +264,7 @@ function floorPanels(b:Building,y:number):readonly Rect[]{
 let outdoorCandidates:Point[]|undefined;
 function randomOutdoorSpawn(others:readonly Point[],random:()=>number=Math.random):Point{
  const candidates:Point[]=outdoorCandidates??[];
- if(!outdoorCandidates)for(let x=-60;x<=60;x+=4)for(let z=-56;z<=30;z+=4){const p={x,z};if(canStand(p,PROTOTYPE.radius)&&!BUILDINGS.some(b=>Math.abs(x-b.x)<b.width/2+1&&Math.abs(z-b.z)<b.depth/2+1))candidates.push(p);}
+ if(!outdoorCandidates)for(let x=-PROTOTYPE.halfWidth+4;x<=PROTOTYPE.halfWidth-4;x+=4)for(let z=-PROTOTYPE.halfDepth+4;z<=PROTOTYPE.maxZ-4;z+=4){const p={x,z};if(canStand(p,PROTOTYPE.radius)&&!BUILDINGS.some(b=>Math.abs(x-b.x)<b.width/2+1&&Math.abs(z-b.z)<b.depth/2+1))candidates.push(p);}
  outdoorCandidates=candidates;
  const distance=(p:Point)=>others.length?Math.min(...others.map(o=>Math.hypot(p.x-o.x,p.z-o.z))):100;
  const safe=candidates.filter(p=>distance(p)>=12);const pool=safe.length?safe:candidates.sort((a,b)=>distance(b)-distance(a)).slice(0,10);

@@ -1,6 +1,9 @@
 import {stanceStats,type Stance} from './stance.ts';
 import {createRemoteModels,type RemoteModel} from './remote-models.ts';
 import {createHarborMapArt,type HarborArtSource} from './harbor-map-art.ts';
+import {createExpansionMapArt,type ExpansionArtSource} from './expansion-map-art.ts';
+import {isExpansionMap} from './maps.ts';
+import {createSnowfall} from './snowfall.ts';
 import {unobstructed,firstShotBox} from './combat-geometry.ts';
 import {playerName} from './nickname.ts';
 import type {Sound} from './audio.ts';
@@ -44,8 +47,9 @@ import type { Point } from './world.ts';
 import { createCharacter } from './characters.ts';
 import type { CharacterType } from './characters.ts';
 
-export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;map?:MapId;mapArtSource?:HarborArtSource}={}) {
-  const geometry=options.map==='factory'?createWorld('factory'):harborWorld;
+export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;map?:MapId;mapArtSource?:HarborArtSource;expansionArtSource?:ExpansionArtSource}={}) {
+  const expansion=isExpansionMap(options.map)?options.map:undefined;
+  const geometry=options.map&&options.map!=='harbor'?createWorld(options.map):harborWorld;
   const {PROTOTYPE,BUILDINGS,COVERS,buildingWalls,interiorFurniture,DOOR_WIDTH,SECOND_FLOOR,createDoors,worldSolids,moveWithCollisions,doorRect,toggleDoor,randomOutdoorSpawn,shotBoxes}=geometry;
   const {createDuel,createBotMatch,createSurvivalMatch}=createBotRules(geometry);
   const scene = new Scene(engine);
@@ -89,12 +93,15 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
   const foliage = material('foliage', '#35574d');
   const petals = material('petals', '#b6a0c2');
   const litWindow = [material('window-gold','#bb9165','#8e6237'),material('window-soft','#b19b7e','#60452e'),material('window-dark','#3d3d47','#0a0b10')];
+  if(!expansion){
   const windowTexture=createSurface(scene,'window');warm.diffuseTexture=windowTexture;
   litWindow[0]!.diffuseTexture=windowTexture;litWindow[1]!.diffuseTexture=windowTexture;
+  }
   const awningMats=[material('awning-linen','#b9a78f'),material('awning-burgundy','#845d5a'),material('awning-blue','#68798d')];
   const canopyMat=material('tree-canopy','#4b634b');
   const roofMat = material('roof', '#30465b');
   const bodyMaterials = ['#c4b19e', '#b8a18e', '#aa9f94'].map((color, i) => material(`facade-${i}`, color));
+  if(!expansion){
   stone.diffuseTexture = createSurface(scene, 'paving');
   asphalt.diffuseTexture = createSurface(scene, 'road');
   roofMat.diffuseTexture = createSurface(scene, 'roof');
@@ -103,10 +110,11 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
   const wallNormal=createSurfaceNormals(scene,'wall');
   for(const mat of bodyMaterials){mat.bumpTexture=wallNormal;mat.specularPower=24;}
   roofMat.bumpTexture=createSurfaceNormals(scene,'stone');
+  }
   metal.specularColor=Color3.FromHexString('#708494');metal.specularPower=100;
   glass.specularColor=Color3.FromHexString('#abc5db');glass.specularPower=128;
   const streetLights: PointLight[] = [];
-  for (const [x,z] of [[-9,-9],[9,9],[-10,22],[10,-22]]) {
+  if(!expansion)for (const [x,z] of [[-9,-9],[9,9],[-10,22],[10,-22]]) {
     const lamp = new PointLight('warm-streetlight', new Vector3(x!,4,z!), scene);
     lamp.diffuse = Color3.FromHexString('#ffd4a0'); lamp.intensity=2.2;lamp.range=24;streetLights.push(lamp);
   }
@@ -124,6 +132,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     mesh.isPickable = false;
     return mesh;
   };
+  if(!expansion){
   createNightGround(scene,stone,'ground',0,-13,132,100,0);
   createNightGround(scene,asphalt,'main-road',0,0,128,10,0.012);
   createNightGround(scene,asphalt,'cross-road',0,-13,10,94,0.016);
@@ -147,9 +156,10 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
       box('factory-hazard-strip',b.x,.025,b.z+(b.z<0?1:-1)*(b.depth/2+.8),b.width,.03,.35,warning);
     }
   }
+  }
   const interiorLights:{building:(typeof BUILDINGS)[number];light:PointLight}[]=[];
   const interiorFloor=material('interior-floor','#957454','#18140f');
-  interiorFloor.diffuseTexture=createSurface(scene,'interior-wood');
+  if(!expansion)interiorFloor.diffuseTexture=createSurface(scene,'interior-wood');
   interiorFloor.specularColor=Color3.Black();
   function easeLight(value:number){
     const t=Math.max(0,Math.min(1,value));
@@ -192,12 +202,12 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
   const doorMeshes=new Map<string,Mesh>();
   const entryMat=material('enterable-entry','#0c8e67','#23c992');
   const entrySignMat=material('entry-sign-material','#ffffff','#ffffff');
-  if(typeof document!=='undefined'&&typeof document.createElement('canvas').getContext==='function'){
+  if(!expansion&&typeof document!=='undefined'&&typeof document.createElement('canvas').getContext==='function'){
     const texture=new DynamicTexture('entry-sign-text',{width:512,height:128},scene,false);
     texture.drawText('출입 가능 · 2F / 옥상',null,78,'bold 36px sans-serif','#dcfff4','#084a3a',true,true);entrySignMat.diffuseTexture=texture;entrySignMat.emissiveTexture=texture;
   }else entrySignMat.diffuseColor=Color3.FromHexString('#23c992');
-  function syncDoors(){for(const b of BUILDINGS.filter(b=>b.enterable)){const mesh=doorMeshes.get(b.id)!;mesh.rotation.y=doors[b.id]?(b.z<0?1:-1)*Math.PI/2:0;mesh.isPickable=!doors[b.id];}mapArt?.syncDoors();}
-  for (const building of BUILDINGS) {
+  function syncDoors(){if(!expansion)for(const b of BUILDINGS.filter(b=>b.enterable)){const mesh=doorMeshes.get(b.id)!;mesh.rotation.y=doors[b.id]?(b.z<0?1:-1)*Math.PI/2:0;mesh.isPickable=!doors[b.id];}mapArt?.syncDoors();}
+  if(!expansion)for (const building of BUILDINGS) {
     const { id, x, z, width, depth, height, palette } = building;
     const meshes: Mesh[] = [];
     const part = (name: string, px: number, py: number, pz: number, w: number, h: number, d: number, mat: StandardMaterial) => {
@@ -314,7 +324,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     });
   }
 
-  for (const cover of COVERS) {
+  if(!expansion)for (const cover of COVERS) {
     if(cover.height){
       const h=cover.height,container=cover.id.includes('container'),mat=container?bodyMaterials[cover.x<0?1:2]!:cover.id.includes('monument')?stone:wood;
       const body=box(cover.id,cover.x,h/2,cover.z,cover.width,h,cover.depth,mat);shadows.addShadowCaster(body);
@@ -349,7 +359,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
       }
     }
   }
-  for(const [treeIndex,cover] of COVERS.filter(c=>c.id.startsWith('planter-')).entries()) {
+  if(!expansion)for(const [treeIndex,cover] of COVERS.filter(c=>c.id.startsWith('planter-')).entries()) {
     const trunk=MeshBuilder.CreateCylinder('tree-trunk',{diameterTop:0.16,diameterBottom:0.32,height:3.4,tessellation:12},scene);
     trunk.position.set(cover.x,2.7,cover.z);trunk.material=wood;trunk.isPickable=false;
     for(let branch=0;branch<4;branch++) {
@@ -374,7 +384,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
   }
   // Lamps are outside collision lanes; emissive pools avoid dozens of expensive lights.
   const poolMat = material('lamp-pool', '#e4b266', '#65431f'); poolMat.alpha = 0.09;
-  for (const x of [-43,-10.7, 10.7,43]) for (const z of [-52,-32,-29, -10, 10, 29]) {
+  if(!expansion)for (const x of [-43,-10.7, 10.7,43]) for (const z of [-52,-32,-29, -10, 10, 29]) {
     box('lamp-post', x, 2.2, z, 0.12, 4.4, 0.12, metal);
     box('lamp-base',x,0.16,z,0.38,0.32,0.38,metal);
     box('lamp-collar',x,3.9,z,0.21,0.09,0.21,wood);
@@ -387,11 +397,13 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     const pool = MeshBuilder.CreateDisc('lamp-pool', { radius: 3.5, tessellation: 32 }, scene);
     pool.rotation.x = Math.PI / 2; pool.position.set(x, 0.07, z); pool.material = poolMat; pool.isPickable = false;
   }
+  let waterNormals:ReturnType<typeof createSurfaceNormals>|undefined;
+  if(!expansion){
   box('harbor-wall', 0, 0.4, 35.5, 130, 0.8, 1, stone);
   box('railing', 0, 1.5, 35.3, 128, 0.08, 0.08, metal);
   for (let x = -63; x <= 63; x += 2) box('rail-post', x, 0.95, 35.3, 0.07, 1.25, 0.07, metal);
   const sea = material('sea', '#18374c', '#05101d');
-  const waterNormals=createSurfaceNormals(scene,'water');waterNormals.uScale=16;waterNormals.vScale=12;sea.bumpTexture=waterNormals;
+  waterNormals=createSurfaceNormals(scene,'water');waterNormals.uScale=16;waterNormals.vScale=12;sea.bumpTexture=waterNormals;
   sea.specularColor = new Color3(0.25, 0.3, 0.38); sea.specularPower = 90;
   box('sea', 0, -1, 99, 400, 0.3, 125, sea);
   const distant = material('distant-city', '#1e2a40');
@@ -421,6 +433,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     box('boat-cabin',x+5,0.5,51,1.2,1.1,1.8,wood);box('boat-window',x+5,0.65,49.99,0.8,0.4,0.04,warm);
   }
 
+  }
   const skyDome=MeshBuilder.CreateSphere('night-sky',{diameter:850,segments:32,sideOrientation:Mesh.BACKSIDE},scene);
   const skyMat=material('night-sky-material','#ffffff','#ffffff');skyMat.disableLighting=true;skyMat.specularColor.set(0,0,0);
   const positions=skyDome.getVerticesData('position')!;
@@ -514,7 +527,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     mesh.renderingGroupId=1;mesh.isPickable=false;mesh.receiveShadows=false;
   }
   const lobbyWeapons=createLobbyWeapons(scene);lobbyWeapons.attach(character.weaponSocket);for(const mesh of lobbyWeapons.meshes)shadows.addShadowCaster(mesh);
-  addStreetDetails(scene);
+  if(!expansion)addStreetDetails(scene);
   const buildingParts = new Set(occluders.flatMap(building => building.meshes));
   const dynamicDoors=new Set(doorMeshes.values());
   const staticMeshes=batch(scene.meshes.filter((mesh): mesh is Mesh => mesh instanceof Mesh
@@ -524,7 +537,37 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
   for (const mesh of scene.meshes) {
     if (mesh instanceof Mesh && !mesh.parent && mesh.material !== poolMat && mesh !== skyDome) mesh.isPickable = true;
   }
-  const mapArt = options.mapArtSource && options.map !== 'factory'
+  const legacyEnvironment=scene.meshes.filter(mesh=>!mesh.parent&&mesh!==skyDome);
+  const expansionFallback:Mesh[]=[];
+  if(expansion){
+    for(const mesh of legacyEnvironment){mesh.setEnabled(false);mesh.isPickable=false;shadows.removeShadowCaster(mesh,false);}
+    skyDome.setEnabled(expansion==='snow');scene.fogDensity=0;
+    if(expansion==='snow'){
+      const colors:number[]=[];
+      for(let i=0;i<positions.length;i+=3){
+        const t=Math.max(0,Math.min(1,positions[i+1]!/220));
+        colors.push(.79*(1-t)+.40*t,.77*(1-t)+.58*t,.76*(1-t)+.71*t,1);
+      }
+      skyDome.setVerticesData('color',colors);
+    }
+    scene.clearColor=expansion==='snow'?new Color4(.34,.48,.64,1):new Color4(.003,.005,.012,1);
+    sky.intensity=expansion==='snow'?.9:.35;moon.intensity=expansion==='snow'?.8:1.2;
+    moon.position.set(25,80,-35);moon.direction.set(-.45,-1,.25);
+    if(expansion==='moon'){
+      sky.intensity=.55;sky.diffuse=Color3.FromHexString('#b4c7df');sky.groundColor=Color3.FromHexString('#51627a');
+      moon.direction.set(-.55,-1,-.45);moon.diffuse=Color3.FromHexString('#ffe5bd');
+    }
+    const ground=box('expansion-ground',0,-.04,0,PROTOTYPE.halfWidth*2,.08,PROTOTYPE.maxZ+PROTOTYPE.halfDepth,expansion==='snow'?stone:asphalt);
+    ground.isPickable=true;expansionFallback.push(ground);
+    for(const r of worldSolids()){
+      const low=r.yMin??0,high=r.yMax??r.height??2;
+      const mesh=box('expansion-collider-'+r.id,r.x,(low+high)/2,r.z,r.width,high-low,r.depth,metal);
+      mesh.isPickable=true;expansionFallback.push(mesh);
+    }
+    // Hidden collider meshes still need their real transforms before the first shot.
+    for(const mesh of expansionFallback)mesh.freezeWorldMatrix();
+  }
+  const mapArt = expansion?createExpansionMapArt(scene,expansion,expansionFallback,options.expansionArtSource,shadows):options.mapArtSource && options.map !== 'factory'
     ? createHarborMapArt(scene, options.mapArtSource, scene.meshes.filter(mesh => !mesh.parent && mesh !== skyDome),
       BUILDINGS, () => doors, shadows)
     : undefined;
@@ -546,7 +589,11 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     return { mat: targetMat, flash: 0,root,healthBar,x:p.x,z:p.z,health:PRACTICE_RULES.maxHealth };
 
   });
-  const atmosphere=createAtmosphere(scene,options.map!=='factory');
+  const atmosphere:ReturnType<typeof createAtmosphere>=expansion
+    ? {update(){},setQuality(){},setLow(){},meshes:[]}
+    : createAtmosphere(scene,options.map!=='factory');
+  let snowfallEnabled=true;
+  const snowfall=expansion==='snow'?createSnowfall(scene):null;
   const botFlashes=new Map<string,number>();
   let botDifficulty:SurvivalDifficulty='easy';const fixedDifficulty=()=>botDifficulty==='auto'?'normal':botDifficulty;const environment={doors,randomSpawns:options.randomSpawns!==false};let duel=createDuel(fixedDifficulty(),environment.randomSpawns?randomOutdoorSpawn([PROTOTYPE.spawn]):{x:0,z:18},undefined,environment),ffa=createBotMatch(fixedDifficulty(),environment),survival=createSurvivalMatch(botDifficulty,undefined,environment),duelMode=false,ffaMode=false,survivalMode=false;
   function battleState(){if(survivalMode)return survival.state();if(ffaMode)return ffa.state();const state=duel.state();return {...state,mode:'duel' as const,winnerName:state.winner==='player'?'나':'봇',bots:[] as ReturnType<typeof ffa.state>['bots']};}
@@ -611,20 +658,23 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
   let animationTime = 0;
   function resize() { camera.getProjectionMatrix(true); }
   function setReference(value: boolean) {
+    if(value)snowfall?.stop();
     effects.clear();botEffects.clear();robotImpact.clearParticles();for(const rig of botRigs.slice(1))rig.fx.clearParticles();recoil.clear();reference=value;player.setEnabled(value);plinth.setEnabled(false);viewModel.setEnabled(!value);
     lobbyWeapons.show(lobbyWeaponId,false);character.poseLobby(false);
     camera.fov=value?0.95:1.25;camera.getProjectionMatrix(true);
   }
   function setPreview(value: boolean,lobby=false) {
+    if(value)snowfall?.stop();
     lobbyPreview=value&&lobby;lobbyYaw=0;lobbyTime=0;character.poseLobby(lobbyPreview,0,lobbyWeaponId!=='pistol');lobbyWeapons.show(lobbyWeaponId,lobbyPreview);
     effects.clear();botEffects.clear();robotImpact.clearParticles();for(const rig of botRigs.slice(1))rig.fx.clearParticles();recoil.clear();reference=false;preview = value;plinth.setEnabled(value); player.setEnabled(value); viewModel.setEnabled(!value);
     camera.fov=value?(lobbyPreview?.65:.85):1.25;camera.getProjectionMatrix(true);
     previewLight.setEnabled(value);
-    for(const light of streetLights) light.setEnabled(!value);
+    for(const light of streetLights) light.setEnabled(!value&&!expansion);
   }
   const autoShotResults:ReturnType<typeof shoot>[]=[];
   const highShotNotices:string[]=[];const botReveals=new Map<string,number>();let stance:Stance='stand';
   function update(p: Point, dt: number, look: Look = { yaw: 0, pitch: 0 }, paused=false) {
+    snowfall?.update(p,snowfallEnabled&&!paused&&!preview&&!reference&&!geometry.indoorAt(p),look.yaw);
     if(!paused){for(const [id,left] of botReveals){if(left<=dt)botReveals.delete(id);else botReveals.set(id,left-dt);}}
     if(!paused&&!preview&&!reference){
       if(stance==='stand')delete p.stance;else p.stance=stance;
@@ -635,7 +685,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     syncDoors();if(!paused)atmosphere.update(dt,p);
     const texel=64/shadows.mapSize;
     moon.position.set(Math.round((p.x+24.75)/texel)*texel,55,Math.round((p.z-13.75)/texel)*texel);
-    waterNormals.uOffset+=paused?0:Math.min(dt,.1)*.012;
+    if(waterNormals)waterNormals.uOffset+=paused?0:Math.min(dt,.1)*.012;
     const active=!paused&&!preview&&!reference;
     if(active){animationTime+=dt;recoil.update(dt);robotImpact.update(dt);if(ffaMode||survivalMode)for(const rig of botRigs.slice(1))rig.fx.update(dt);}
     const kick=recoil.read();
@@ -672,7 +722,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
       const state=battleState();
       if(state.mode==='survival'&&state.ammoRefreshVersion!==seenResupply){seenResupply=state.ammoRefreshVersion;syncSlot(inventory,weapon,cooldown);for(const slot of inventory.slots)slot.weapon=createWeapon(WEAPONS[slot.id]);weapon=inventory.slots[inventory.active]!.weapon;}
       if(wasBotDead&&state.botHealth>0){robotImpact.reset();botFlashes.delete('bot-1');}
-      if(state.respawnVersion!==seenRespawn){seenRespawn=state.respawnVersion;p.x=state.playerPosition.x;p.z=state.playerPosition.z;if(p.y!==undefined)p.y=0;p.fallSpeed=0;falling=false;weaponId=startWeapon;spec=localSpec(weaponId);inventory=createInventory(startWeapon);weapon=createWeapon(spec);if(survivalMode)pickups=pickups.map(c=>({...c,remaining:0}));localActor.gear=createGear();localActor.healing=0;localActor.flash=0;cooldown=0;scoped=false;jumpState=createJump();recoil.clear();}
+      if(state.respawnVersion!==seenRespawn){seenRespawn=state.respawnVersion;p.x=state.playerPosition.x;p.z=state.playerPosition.z;if(p.y!==undefined)p.y=0;delete p.fallSpeed;falling=false;weaponId=startWeapon;spec=localSpec(weaponId);inventory=createInventory(startWeapon);weapon=createWeapon(spec);if(survivalMode)pickups=pickups.map(c=>({...c,remaining:0}));localActor.gear=createGear();localActor.healing=0;localActor.flash=0;cooldown=0;scoped=false;jumpState=createJump();recoil.clear();}
     }
     if(!duelMode&&!paused&&!preview&&!reference){duel.update(dt,p,()=>false,()=>false,false);const d=duel.state();if(d.respawnVersion!==seenRespawn){seenRespawn=d.respawnVersion;p.x=d.playerPosition.x;p.z=d.playerPosition.z;p.y=0;inventory=createInventory(startWeapon);equip();localActor.gear=createGear();localActor.healing=0;localActor.flash=0;}}
     if(!paused&&!preview&&!reference){
@@ -841,10 +891,13 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     setReducedShots(value:boolean){reducedShots=value;effects.setReduced(value);botEffects.setReduced(value||lowPerformance);},
     setShake(level:ShakeLevel){recoil.setShake(level);},
     setShadows(enabled:boolean){requestedShadows=enabled;scene.shadowsEnabled=enabled&&!lowPerformance;},
-    setPerformanceLow(enabled:boolean){if(lowPerformance===enabled)return;lowPerformance=enabled;scene.shadowsEnabled=requestedShadows&&!enabled;botEffects.setReduced(reducedShots||enabled);atmosphere.setLow(enabled);const loading=mapArt?.setPerformanceLow(enabled);applySurfaceQuality();return loading;},
+    setSnowfall(enabled:boolean){snowfallEnabled=enabled;if(!enabled)snowfall?.stop();},
+    snowfallState:()=>snowfall?.state()??null,
+    setPerformanceLow(enabled:boolean){if(lowPerformance===enabled)return;lowPerformance=enabled;snowfall?.setLow(enabled);scene.shadowsEnabled=requestedShadows&&!enabled;botEffects.setReduced(reducedShots||enabled);atmosphere.setLow(enabled);const loading=mapArt?.setPerformanceLow(enabled);applySurfaceQuality();return loading;},
     setQuality(high:boolean){
+      snowfall?.setQuality(high);
       onlineQualityHigh=high;for(const r of remotes.values())r.fx.setQuality(high);atmosphere.setQuality(high);robotImpact.setQuality(high);for(const rig of botRigs.slice(1))rig.fx.setQuality(high);
-      if(mapArt)setHarborSky(high);
+      if(mapArt&&!expansion)setHarborSky(high);
       const mapSize=high?2048:1024;if(shadows.mapSize!==mapSize)shadows.mapSize=mapSize;
       applySurfaceQuality();
       return mapArt?.setQuality(high);

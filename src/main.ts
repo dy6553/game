@@ -1,3 +1,4 @@
+import {MAPS,normalizeMap,canAccessMap,isExpansionMap} from './maps.ts';
 import {chooseOnlineNickname} from './member-nickname-entry.ts';
 import {stanceStats} from './stance.ts';
 import {createOnlineEvents} from './online-events.ts';
@@ -155,7 +156,7 @@ async function start() {
     if(high){world.setQuality(true);world.setPerformanceLow?.(low);}
     else{world.setPerformanceLow?.(low);world.setQuality(false);}
   }
-  applyGraphicsProfile(qualityHigh,graphicsMode==='low');world.setShadows?.(preferences.value.shadows);document.querySelector<HTMLSelectElement>('#graphics-quality')!.value=graphicsMode;
+  applyGraphicsProfile(qualityHigh,graphicsMode==='low');world.setShadows?.(preferences.value.shadows);world.setSnowfall(preferences.value.snowfall);document.querySelector<HTMLSelectElement>('#graphics-quality')!.value=graphicsMode;
   world.setMode('duel');
   const shake=document.querySelector<HTMLSelectElement>('#screen-shake')!;
   const setShake=(value:string)=>{const level=value==='off'||value==='normal'?value:'low';shake.value=level;world.setShake(level);return level;};
@@ -204,7 +205,7 @@ async function start() {
   const onlineLobby=document.querySelector<HTMLElement>('#online-lobby')!;
   let currentGrowth=growth(0),growthLoggedIn=false;
   const accountView=createAccountView(import.meta.env?.VITE_NEON_AUTH_URL??'',import.meta.env?.VITE_ONLINE_URL??'',undefined,(g,loggedIn)=>{
-   currentGrowth=g;growthLoggedIn=loggedIn;const factory=document.querySelector<HTMLOptionElement>('#home-map option[value=factory]')!;factory.disabled=!loggedIn||g.level<3;factory.textContent=factory.disabled?'폐공장 · Lv3 해금':'폐공장';if(factory.disabled)document.querySelector<HTMLSelectElement>('#home-map')!.value='harbor';homeView.setTier(loggedIn?g.tier:0);
+   currentGrowth=g;growthLoggedIn=loggedIn;for(const map of ['factory','snow','moon'] as const){const option=document.querySelector<HTMLOptionElement>('#home-map option[value='+map+']')!;option.disabled=!canAccessMap(map,loggedIn,g.level);option.textContent=MAPS[map].name+(option.disabled?' · Lv3 해금':'');}const mapSelect=document.querySelector<HTMLSelectElement>('#home-map')!;if(!canAccessMap(mapSelect.value,loggedIn,g.level))mapSelect.value='harbor';homeView.setTier(loggedIn?g.tier:0);
    document.querySelector('#growth-summary')!.textContent=loggedIn?`Lv${g.level} · ${g.xp.toLocaleString('ko-KR')} XP ▾`:'성장 기록 · 로그인 ▾';
    document.querySelector<HTMLProgressElement>('#growth-progress')!.value=g.within;document.querySelector('#growth-next')!.textContent=loggedIn?`다음 레벨까지 ${200-g.within} XP · 봇 강화 ${g.tier}단계`:'로그인하면 성장 기록을 서버에 저장합니다.';
    for(const option of document.querySelectorAll<HTMLOptionElement>('option[value=welder]')){option.disabled=!loggedIn||g.level<3;option.textContent=option.disabled?'용접 로봇 · Lv3 해금':'용접 로봇';if(option.disabled&&option.selected){(option.parentElement as HTMLSelectElement).value='robot';if(world.characterType==='welder')world.selectCharacter('robot');}}
@@ -221,7 +222,7 @@ async function start() {
     if(!onlineActive){onlineActive=true;homeOpen=false;home.hidden=true;onlineLobby.hidden=true;picker.hidden=true;manualPaused=false;pausePanel.hidden=true;document.body.classList.remove('at-home');gameChoices.close();}
     document.body.classList.toggle('in-waiting-room',roomWaiting);
     if(roomWaiting){waitingView.show(state,id,onlineCode,online.connected);nameplates.clear();input.reset();input.setEnabled(false);if(!wasWaiting){world.endOnline();world.setPreview(true,true);}}
-    else{waitingView.hide();if(!wasActive||wasWaiting){switchMap(state.map==='factory'?'factory':'harbor',me?.character??'robot');lobbyPolish.deploy();lobbyCue('deploy');world.setPreview(false);if(me){world.selectCharacter(me.character);world.selectWeapon(me.weaponId);input.resetLook();input.setLook(me.yaw,me.pitch);}hasPlayed=true;canvas.focus();}}
+    else{waitingView.hide();if(!wasActive||wasWaiting){switchMap(normalizeMap(state.map),me?.character??'robot');lobbyPolish.deploy();lobbyCue('deploy');world.setPreview(false);if(me){world.selectCharacter(me.character);world.selectWeapon(me.weaponId);input.resetLook();input.setLook(me.yaw,me.pitch);}hasPlayed=true;canvas.focus();}}
     if(me?.guest&&!normalizeNickname(me.nickname)&&online.connected&&!guestPromptPending){guestPromptPending=true;void nicknameDialog.open(false).then(name=>{if(!onlineActive)return;if(!name){openHome();return;}online.control('nickname',name);});}else if(me?.nickname)guestPromptPending=false;
     for(const cue of onlineAudio.update(state,id,input.look.yaw,canUseInventory()&&online.connected))audio.play(cue.kind,cue.pan,cue.volume);
     observeOnlineResult(state,id);
@@ -270,7 +271,7 @@ async function start() {
   }
   let onlineControlsActive=false;const updateOnlineControls=(active:boolean)=>{if(active===onlineControlsActive)return;onlineControlsActive=active;document.querySelector<HTMLElement>('#online-copy')!.hidden=!active;for(const id of ['character-open','game-mode','bot-difficulty','weapon-select','practice-reset','reset'])document.querySelector<HTMLButtonElement>('#'+id)!.disabled=active;};
   document.querySelector('#online-copy')!.addEventListener('click',async()=>{const url=new URL(location.href);url.searchParams.set('room',onlineCode);try{await navigator.clipboard.writeText(url.href);document.querySelector('#online-copy')!.textContent='초대 링크 복사됨';}catch{document.querySelector('#online-copy')!.textContent=`방 코드 ${onlineCode}`;}});
-  const openOnlineLobby=()=>{document.querySelector('#online-map')!.textContent='선택 전장 · '+(selectedMap==='factory'?'폐공장 · Lv3':'항구 지구');gameChoices.close();home.hidden=true;onlineLobby.hidden=false;document.querySelector('#online-message')!.textContent=online.available?'방을 만들거나 친구의 코드를 입력하세요.':'온라인 서버 연결 준비 중입니다. 봇 대전과 표적 연습은 바로 이용할 수 있습니다.';for(const id of ['online-create','online-join','online-quick'])document.querySelector<HTMLButtonElement>('#'+id)!.disabled=!online.available;};
+  const openOnlineLobby=()=>{document.querySelector('#online-map')!.textContent='선택 전장 · '+MAPS[selectedMap].name;gameChoices.close();home.hidden=true;onlineLobby.hidden=false;document.querySelector('#online-message')!.textContent=online.available?'방을 만들거나 친구의 코드를 입력하세요.':'온라인 서버 연결 준비 중입니다. 봇 대전과 표적 연습은 바로 이용할 수 있습니다.';for(const id of ['online-create','online-join','online-quick'])document.querySelector<HTMLButtonElement>('#'+id)!.disabled=!online.available;};
   for(const [id,action] of [['online-create','create'],['online-join','join'],['online-quick','quick']] as const)document.querySelector('#'+id)!.addEventListener('click',async()=>{
     const buttons=['online-create','online-join','online-quick'].map(id=>document.querySelector<HTMLButtonElement>('#'+id)!);buttons.forEach(button=>button.disabled=true);
     try{const identity=await accountView.onlineIdentity();const nickname=await chooseOnlineNickname(identity,(member,save,initial)=>nicknameDialog.open(member,save,initial),name=>accountView.saveNickname(name));if(!nickname)return;await online.enter(action,document.querySelector<HTMLInputElement>('#online-code')!.value.trim().toUpperCase(),document.querySelector<HTMLSelectElement>('#online-weapon')!.value,document.querySelector<HTMLSelectElement>('#online-character')!.value,selectedMap,document.querySelector<HTMLSelectElement>('#online-mode')!.value,nickname);}catch(error){document.querySelector('#online-message')!.textContent=error instanceof Error?error.message:'방에 입장하지 못했습니다.';}finally{buttons.forEach(button=>button.disabled=!online.available);}
@@ -418,13 +419,13 @@ async function start() {
     mouseLockFallback=false;requestGameplayMouseLock();
   };
   startButton.addEventListener('click',beginGame);
-  function switchMap(map:MapId,type=world.characterType){if(map===selectedMap)return;world.scene.dispose();world=createHarborScene(engine,{map,mapArtSource:harborArtSource});selectedMap=map;world.selectCharacter(type);applyGraphicsProfile(qualityHigh,graphicsMode==='low'||graphicsMode==='auto'&&budget.density<=.85);world.setShadows?.(preferences.value.shadows);world.setReducedShots?.(reducedShots);world.setShake(shake.value==='off'||shake.value==='normal'?shake.value:'low');world.setPreview(true,true);}
+  function switchMap(map:MapId,type=world.characterType){if(map===selectedMap)return;world.scene.dispose();world=createHarborScene(engine,{map,mapArtSource:harborArtSource});selectedMap=map;world.selectCharacter(type);applyGraphicsProfile(qualityHigh,graphicsMode==='low'||graphicsMode==='auto'&&budget.density<=.85);world.setShadows?.(preferences.value.shadows);world.setSnowfall(preferences.value.snowfall);world.setReducedShots?.(reducedShots);world.setShake(shake.value==='off'||shake.value==='normal'?shake.value:'low');world.setPreview(true,true);}
   const homeView=createHomeScreen({
     selectCharacter(type){world.selectCharacter(type);refreshCharacter();lobbyCue('ui');if(!reducedLobbyMotion.matches)document.querySelector('#home-character-name')?.animate?.([{opacity:.3},{opacity:1}],{duration:180});},
     selectWeapon(id){world.setLobbyWeapon(id);lobbyCue('ui');if(!reducedLobbyMotion.matches)document.querySelector('#home-equipped-art')?.animate?.([{opacity:.3,transform:'translateX(-6px)'},{opacity:1,transform:'translateX(0)'}],{duration:180});},
     start(selection){
       const map=document.querySelector<HTMLSelectElement>('#home-map')!.value;
-      const nextMap:MapId=growthLoggedIn&&currentGrowth.level>=3&&map==='factory'?'factory':'harbor';
+      const nextMap:MapId=canAccessMap(map,growthLoggedIn,currentGrowth.level)?normalizeMap(map):'harbor';
       switchMap(nextMap,selection.character);
 
       if(selection.mode==='online'){
@@ -637,6 +638,7 @@ async function start() {
     const fps=frameSelect.value==='auto'?'auto':Number(frameSelect.value) as EnvironmentPreferences['fps'];
     frameLimit.setTarget(savePreference({fps}).fps);
   });
+  const snowfallCheck=document.querySelector<HTMLInputElement>('#snowfall-enabled')!;snowfallCheck.checked=preferences.value.snowfall;snowfallCheck.addEventListener('change',()=>world.setSnowfall(savePreference({snowfall:snowfallCheck.checked}).snowfall));
   const shadowCheck=document.querySelector<HTMLInputElement>('#shadows-enabled')!;shadowCheck.checked=preferences.value.shadows;shadowCheck.addEventListener('change',()=>world.setShadows?.(savePreference({shadows:shadowCheck.checked}).shadows));
   const invertCheck=document.querySelector<HTMLInputElement>('#invert-y')!,minimapCheck=document.querySelector<HTMLInputElement>('#minimap-enabled')!;
   invertCheck.checked=preferences.value.invertY;minimapCheck.checked=preferences.value.minimap;
@@ -649,7 +651,7 @@ async function start() {
   for(const [node,key,event] of [[hudSelect,'hud','change'],[colorSelect,'crosshairColor','change'],[crossSize,'crosshairSize','change'],[opacitySlider,'opacity','input']] as const)node.addEventListener(event,()=>{savePreference({[key]:key==='opacity'?Number(node.value)/100:node.value} as Partial<EnvironmentPreferences>);applyInterface();});
   for(const id of ['audio-master','audio-effects','audio-environment'] as const){const node=document.querySelector<HTMLInputElement>('#'+id)!,output=document.createElement('output');output.id=id+'-value';node.parentElement!.append(output);const label=()=>{output.textContent=Math.round(Number(node.value))+'%';};label();node.addEventListener('input',label);}
   const changeSelect=(id:string,value:string)=>{const node=document.querySelector<HTMLSelectElement>('#'+id)!;node.value=value;node.dispatchEvent(new window.Event('change',{bubbles:true}));};
-  function resetEnvironment(){const p=preferences.reset();for(const [id,value] of [['graphics-quality',p.graphics],['frame-target',String(p.fps)],['hud-size',p.hud],['crosshair-color',p.crosshairColor],['crosshair-size',p.crosshairSize],['jump-key',p.jump],['shot-effects',mobile?'low':'full'],['screen-shake',mobile?'off':'low']])changeSelect(id!,value!);invertCheck.checked=p.invertY;invertCheck.dispatchEvent(new window.Event('change',{bubbles:true}));minimapCheck.checked=p.minimap;minimapCheck.dispatchEvent(new window.Event('change',{bubbles:true}));shadowCheck.checked=p.shadows;shadowCheck.dispatchEvent(new window.Event('change',{bubbles:true}));for(const [node,value] of [[mouseSlider,100],[opacitySlider,100],[sensitivity,100]] as const){node.value=String(value);node.dispatchEvent(new window.Event('input',{bubbles:true}));}audio.configure({master:.7,effects:.85,environment:.16,muted:false});for(const key of ['master','effects','environment'] as const){const node=document.querySelector<HTMLInputElement>('#audio-'+key)!;node.value=String(audio.settings[key]*100);node.dispatchEvent(new window.Event('input',{bubbles:true}));}mute.checked=false;gameChoices.refresh();document.querySelector('#environment-save-status')!.textContent=preferences.saved?'기본 설정으로 복원했습니다. 게임 기록은 유지됩니다.':'저장할 수 없어 이번 접속에만 기본값을 적용합니다.';}
+  function resetEnvironment(){const p=preferences.reset();for(const [id,value] of [['graphics-quality',p.graphics],['frame-target',String(p.fps)],['hud-size',p.hud],['crosshair-color',p.crosshairColor],['crosshair-size',p.crosshairSize],['jump-key',p.jump],['shot-effects',mobile?'low':'full'],['screen-shake',mobile?'off':'low']])changeSelect(id!,value!);invertCheck.checked=p.invertY;invertCheck.dispatchEvent(new window.Event('change',{bubbles:true}));minimapCheck.checked=p.minimap;minimapCheck.dispatchEvent(new window.Event('change',{bubbles:true}));snowfallCheck.checked=p.snowfall;snowfallCheck.dispatchEvent(new window.Event('change',{bubbles:true}));shadowCheck.checked=p.shadows;shadowCheck.dispatchEvent(new window.Event('change',{bubbles:true}));for(const [node,value] of [[mouseSlider,100],[opacitySlider,100],[sensitivity,100]] as const){node.value=String(value);node.dispatchEvent(new window.Event('input',{bubbles:true}));}audio.configure({master:.7,effects:.85,environment:.16,muted:false});for(const key of ['master','effects','environment'] as const){const node=document.querySelector<HTMLInputElement>('#audio-'+key)!;node.value=String(audio.settings[key]*100);node.dispatchEvent(new window.Event('input',{bubbles:true}));}mute.checked=false;gameChoices.refresh();document.querySelector('#environment-save-status')!.textContent=preferences.saved?'기본 설정으로 복원했습니다. 게임 기록은 유지됩니다.':'저장할 수 없어 이번 접속에만 기본값을 적용합니다.';}
   document.querySelector('#environment-low-preset')!.addEventListener('click',()=>{
     for(const [id,value] of [['graphics-quality','low'],['frame-target','30'],['shot-effects','low'],['screen-shake','off']])changeSelect(id!,value!);
     shadowCheck.checked=false;shadowCheck.dispatchEvent(new window.Event('change',{bubbles:true}));gameChoices.refresh();
@@ -767,7 +769,7 @@ async function start() {
         }
         observeOfflineResult(step);if(resultView.isOpen)break;
       }
-      const building=indoorAt(position);zone.textContent = building?`${(position.y??0)>=building.height-.1?'옥상':(position.y??0)>=3.3?'2층':'1층'} · 출입 가능 건물`:selectedMap==='factory'?'폐공장 · 산업 지구':position.z < -28?'남쪽 상점 거리':position.z > 28 ? '항구 산책로' : Math.abs(position.x) > 20 ? '건물 사이 골목'
+      const building=indoorAt(position);zone.textContent = building?`${isExpansionMap(selectedMap)?'1층':(position.y??0)>=building.height-.1?'옥상':(position.y??0)>=3.3?'2층':'1층'} · 출입 가능 건물`:isExpansionMap(selectedMap)?MAPS[selectedMap].name:selectedMap==='factory'?'폐공장 · 산업 지구':position.z < -28?'남쪽 상점 거리':position.z > 28 ? '항구 산책로' : Math.abs(position.x) > 20 ? '건물 사이 골목'
         : Math.abs(position.z) < 11 && Math.abs(position.x) < 11 ? '중앙 광장' : '해안 거리';
     } else { localDash=cancelDash(localDash);input.consumeDashes();input.consumeShots();input.consumeReloads();input.consumeJumps();world.update(position, dt, input.look,true);world.consumeSounds(); }
     const dashButton=document.querySelector<HTMLButtonElement>('#dash')!,onlineMe=onlineState?.players.find(p=>p.id===onlineId),dashState=onlineActive?onlineMe?.dash:localDash;

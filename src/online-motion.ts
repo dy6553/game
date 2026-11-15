@@ -1,4 +1,5 @@
 import {harborWorld,createWorld} from './world.ts';
+import {normalizeMap} from './maps.ts';
 import type {DashState} from './dash.ts';
 import type {JumpState} from './jump.ts';
 import { advancePlayerMotion,onlinePlaying,type Command,type MatchState,type Player } from './network-game.ts';
@@ -15,7 +16,7 @@ export function createOnlineMotion(onCorrection:(meters:number)=>void=()=>{}){
   get jump(){return active?predictedJump:undefined;},
   reset(){me=null;active=false;pending=[];offset={x:0,z:0};age=0;predictedDash=undefined;predictedJump=undefined;},
   receive(state:MatchState,id:string){
-   const nextMap=state.map==='factory'?'factory':'harbor';if(nextMap!==map){map=nextMap;world=map==='factory'?createWorld('factory'):harborWorld;me=null;}
+   const nextMap=normalizeMap(state.map);if(nextMap!==map){map=nextMap;world=nextMap==='harbor'?harborWorld:createWorld(nextMap);me=null;}
    doors=state.doors;const next=state.players.find(p=>p.id===id);if(!next)return;
    const playing=onlinePlaying(state,id)&&next.health>0;
    const discontinuity=!me||me.id!==id||!active||!playing||(me.health===0)!==(next.health===0)||age>.5;

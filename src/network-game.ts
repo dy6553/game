@@ -6,6 +6,7 @@ import {createGear,launchRocket,useEquipment,advanceEquipment,isEquipmentId,type
 import {createDash,beginDash,advanceDash,cancelDash,type DashState} from './dash.ts';
 import {createInventory,createPickups,takeEquipmentPickup,syncSlot,advanceStowed,switchSlot,takePickup,tickPickups,type Inventory,type Pickup} from './inventory.ts';
 import {harborWorld,createWorld,type World,type MapId,type Doors,type Point} from './world.ts';
+import {normalizeMap} from './maps.ts';
 import { WEAPONS,pelletOffsets,isWeaponId,startBurst,advanceBurst,cancelBurst,type WeaponId } from './weapons.ts';
 import { createWeapon,beginReload,tryFire,type WeaponState } from './combat.ts';
 import { createJump,beginJump,type JumpState } from './jump.ts';
@@ -74,8 +75,8 @@ export function onlinePlaying(state:MatchState,id?:string){
 export function wonOnline(state:MatchState,id:string){return state.winningIds?state.winningIds.includes(id):state.winner===id;}
 export const ONLINE_MODES:OnlineMode[]=['duel','ffa','team'];
 export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:NetworkOptions={}){
- const mapId=saved?.map==='factory'||!saved&&map==='factory'?'factory':'harbor',mode=saved?.mode??options.mode??'duel';
- const world=mapId==='factory'?createWorld('factory'):harborWorld;
+ const mapId=normalizeMap(saved?.map??map),mode=saved?.mode??options.mode??'duel';
+ const world=mapId==='harbor'?harborWorld:createWorld(mapId);
  const state:MatchState=saved?structuredClone(saved):{players:[],winner:'',tick:0,events:[],pickups:options.randomPickups?createMatchPickups(world):createPickups()};
  if(!saved&&options.waitingRoom)state.phase='waiting';state.map=mapId;state.mode=mode;state.capacity=mode==='duel'?2:20;state.teamScores??=[0,0];state.projectiles??=[];state.toolEvents??=[];state.pickups??=createMatchPickups(world);state.doors??=world.createDoors();
  const inputs=new Map<string,{command:Command;at:number}>();let now=0,eventId=state.tick*1000;
@@ -123,3 +124,5 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
  };
  return api;
 }
+
+export {normalizeMap,canAccessMap,MAPS} from './maps.ts';

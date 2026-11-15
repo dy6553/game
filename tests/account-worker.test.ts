@@ -32,7 +32,7 @@ test('account deletion requires a verified login before opening the DB',async()=
 });
 test('factory and welding unlocks cannot be forged by guests; growth requires login',async()=>{
  let reserved=false;const env={ALLOWED_ORIGINS:'https://game.test',ACCOUNTS_ENABLED:'true',LOBBY:{idFromName(){},get(){return {fetch(){reserved=true;return Response.json({});}};}}};
- for(const body of [{action:'create',map:'factory',accountLevel:99,accountSubject:'victim'},{action:'create',character:'welder',accountLevel:99}]){
+ for(const body of [...['factory','snow','moon'].map(map=>({action:'create',map,accountLevel:99,accountSubject:'victim'})),{action:'create',character:'welder',accountLevel:99}]){
   const res=await worker.fetch(new Request('https://worker/session',{method:'POST',headers:{Origin:'https://game.test'},body:JSON.stringify(body)}),env);assert.equal(res.status,403);assert.equal(reserved,false);
  }
  for(const path of ['/growth/start','/growth/finish/00000000-0000-4000-8000-000000000000']){
@@ -52,3 +52,16 @@ test('factory room checks actual room map for joining and preserves map in check
 
 test('nickname saving requires verified login before accessing the database',async()=>{const env={ALLOWED_ORIGINS:'https://game.test',ACCOUNTS_ENABLED:'true'};const r=await worker.fetch(new Request('https://worker/account/nickname',{method:'POST',headers:{Origin:'https://game.test'},body:JSON.stringify({nickname:'남의이름',subject:'victim'})}),env);assert.equal(r.status,401);assert.equal(r.headers.get('Access-Control-Allow-Origin'),'https://game.test');});
 test('guest sessions reject missing or unsafe display names before room reservation',async()=>{let reserved=false;const env={ALLOWED_ORIGINS:'https://game.test',LOBBY:{idFromName(){},get(){return {fetch(){reserved=true;return Response.json({});}};}}};for(const nickname of [undefined,'<script>','a@example.com']){const r=await worker.fetch(new Request('https://worker/session',{method:'POST',headers:{Origin:'https://game.test'},body:JSON.stringify({action:'create',nickname})}),env);assert.equal(r.status,400);}assert.equal(reserved,false);});
+
+test('new map room reservations enforce Lv3 and preserve the actual map on joining',async()=>{
+ for(const map of ['snow','moon']){
+ const values=new Map();const ctx={storage:{async get(k){return values.get(k);},async put(k,v){values.set(k,v);},async setAlarm(){}},blockConcurrencyWhile(fn){return fn();},waitUntil(){}};
+ const room=new Room(ctx,{});await new Promise(r=>setTimeout(r,0));
+ const reserve=body=>room.fetch(new Request('https://room/reserve',{method:'POST',body:JSON.stringify(body)}));
+ assert.equal((await reserve({map,accountSubject:'a',accountLevel:2})).status,403);
+ assert.equal((await reserve({map,accountSubject:'a',accountLevel:3})).status,200);
+ assert.equal(values.get('checkpoint').state.map,map);
+ assert.equal((await reserve({map:'harbor',accountSubject:'b',accountLevel:1})).status,403);
+ assert.equal((await reserve({map:'harbor',accountSubject:'b',accountLevel:3})).status,200);
+ }
+});
