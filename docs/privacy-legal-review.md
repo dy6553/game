@@ -24,7 +24,7 @@
 - 진단 동의 표시 없는 서버 요청이 201로 저장되는 검사에서 실패를 확인한 뒤 400/저장0으로 바꿨다.
 - 필수 항목별 거절, 공개 거절 허용, 공개 철회, 구버전 동의 비공개, 서버 시각 사용, 428 제한과 본인 조회, 인증 헤더 등을 검증한다.
 - PC1280×800·가로640×320 실제 Chromium에서 가입 거절/성공, 선택 공개 기본 꺼짐, 공개/철회, 기존 회원 동의를 확인했다. 인증은 합성 응답이며 실제 사용자 계정/이메일로 가입하지 않았다.
-- Neon 검증 브랜치 `br-spring-frog-az377rkf` (`qa-privacy-20261117`)에서 추가 테이블 생성·RLS·PUBLIC 권한 없음·CASCADE와 실제 Postgres 쿼리 계획의 구문을 확인했다. 실제 회원 자료를 조회·수정하지 않았다. 임시 브랜치 삭제 도구의 명시적 승인 요구에 따라 삭제 승인을 별도로 요청했다.
+- Neon 검증 브랜치 `br-spring-frog-az377rkf` (`qa-privacy-20261117`)에서 추가 테이블 생성·RLS·PUBLIC 권한 없음·CASCADE와 실제 Postgres 쿼리 계획의 구문을 확인했다. 실제 회원 자료를 조회·수정하지 않았다. 사용자가 검증용 브랜치만 삭제하도록 명시적으로 승인했으며 운영 DB를 유지한 채 해당 검증 브랜치를 정리했다.
 - 최종 전체 자동검사403개/105파일 실패0, TypeScript·운영 빌드 통과. `/tmp/privacy-final-tests.log`, `/tmp/privacy-final-build.log` 및 `/workspace/qa/privacy/`에 결과를 보관한다. 운영 DB에는 검증한 추가 테이블만 적용했으며 기존 기록·프로필·인증 계정을 삭제/변경하지 않았다. 배포 결과는 별도 릴리스 기록에 남긴다.
 
 ## 실제 수집·보관 범위와 남는 법적 판단
@@ -48,3 +48,5 @@
 - Neon/Databricks: https://neon.com/platform-terms / https://www.databricks.com/legal/privacynotice
 - Cloudflare: https://www.cloudflare.com/privacypolicy/
 - Vercel: https://vercel.com/legal/privacy-notice / https://vercel.com/legal/dpa
+
+키보드 회귀: 약관 링크에서 Tab을 누르면 링크를 포커스 목록에서 빠뜨려 폼 처음으로 되돌아가던 실패를 재현하고, 링크를 목록에 포함해 동의 화면을 순서대로 이동하도록 수정했다.

@@ -16,7 +16,8 @@ if(process.argv.includes('--signup')){
  click('account-signup');await settle();
  assert.equal(validations,0,'registration entry must open before validating the login form');
  assert.equal(el('account-form').hidden,true);assert.equal(el('account-signup-form').hidden,false);assert.equal(el('account-title').textContent,'회원가입');assert.equal(registrations,0);
- assert.ok(document.activeElement===el('signup-age'));assert.equal(el('signup-password').getAttribute('autocomplete'),'new-password');
+ assert.ok(document.activeElement===el('signup-age'));
+ const legalLink=el('account-signup-form').querySelector('a');legalLink.focus();const tab=new window.Event('keydown',{bubbles:true,cancelable:true});Object.defineProperties(tab,{key:{value:'Tab'},shiftKey:{value:false}});el('account-panel').dispatchEvent(tab);assert.equal(tab.defaultPrevented,false,'Tab from a policy link must continue through the consent form');assert.equal(el('signup-password').getAttribute('autocomplete'),'new-password');
  el('signup-password').value='temporary-password';click('account-signup-back');assert.equal(el('account-form').hidden,false);assert.equal(el('account-signup-form').hidden,true);assert.equal(el('signup-password').value,'');
  click('account-signup');el('signup-nickname').value='가입대원';el('signup-email').value='new@example.com';el('signup-password').value='password';
  for(const id of ['signup-age','signup-privacy','signup-terms','signup-overseas']){assert.ok(!el(id).checked);el(id).checked=true;}assert.ok(!el('signup-public').checked);
