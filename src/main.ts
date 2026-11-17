@@ -1,3 +1,4 @@
+import {weatherMessage} from './snow-weather.ts';
 import {MAPS,normalizeMap,canAccessMap,isExpansionMap} from './maps.ts';
 import {installCombatTools} from './combat-tools.ts';
 import {weaponSlotMarkup,combatIcon} from './combat-ui.ts';
@@ -566,6 +567,7 @@ async function start() {
     const now=performance.now(),active=!settingsView.isOpen&&!roomWaiting&&!nicknameDialog.isOpen&&!homeOpen&&picker.hidden&&!comparing&&!document.body.classList.contains('results-open');
     document.querySelector<HTMLElement>('#combat-vitals')!.hidden=!active;
     document.querySelector<HTMLElement>('#combat-map')!.hidden=!active||!showMinimap;
+    const weatherNotice=document.querySelector<HTMLElement>('#weather-notice')!;if(!active)weatherNotice.hidden=true;
     const card=document.querySelector<HTMLElement>('#target-vitals')!;if(!active){card.hidden=true;nameplates.clear();document.querySelector<HTMLElement>('#match-roster')!.hidden=true;return;}if(now-combatHudAt<100)return;combatHudAt=now;
     const battle=world.duelState(),me=onlineActive?onlineState?.players.find(p=>p.id===onlineId):undefined,health=me?.health??(battle.active?battle.playerHealth:readGear().health),p=me?{...me,y:(me.y??0)+me.jump.height}:{...position,y:(position.y??0)+(world.practiceState().jumpHeight??0)},geometry=world.geometry??harborWorld,doors=(onlineActive?onlineState?.doors:world.doorState?.())??{};
     document.querySelector('#combat-hp')!.textContent=String(Math.ceil(health));document.querySelector<HTMLProgressElement>('#combat-hp-bar')!.value=health;document.querySelector('#combat-vitals')!.classList.toggle('critical',health<=25);
@@ -576,7 +578,7 @@ async function start() {
     else actors=world.targetContacts?.()??[];
     const view=combatContacts(geometry,doors,p,input.look.yaw,input.look.pitch,actors,world.weatherState()?.visibility??150),target=health>0?view.target:undefined;card.hidden=!target;if(target){document.querySelector('#target-name')!.textContent=target.name;document.querySelector('#target-hp')!.textContent=String(Math.ceil(target.health));document.querySelector<HTMLProgressElement>('#target-hp-bar')!.value=target.health;}
     const navigation=navigationLocation(geometry,me??position),locationLabel=document.querySelector<HTMLElement>('#map-location')!;if(locationLabel.textContent!==navigation.label)locationLabel.textContent=navigation.label;locationLabel.style.borderColor=navigation.color;
-    const weather=world.weatherState(),weatherLabel=document.querySelector<HTMLElement>('#weather-status')!,weatherText=weather?({clear:'맑음 · 주기적 폭설',building:'폭설이 다가옵니다',blizzard:'폭설 · 시야 제한',clearing:'폭설이 걷히고 있습니다'}[weather.phase]):'';weatherLabel.hidden=!weather;if(weatherLabel.textContent!==weatherText)weatherLabel.textContent=weatherText;
+    const weather=world.weatherState(),weatherLabel=document.querySelector<HTMLElement>('#weather-status')!,weatherText=weatherMessage(weather);weatherLabel.hidden=!weather;if(weatherLabel.textContent!==weatherText)weatherLabel.textContent=weatherText;weatherNotice.hidden=!weather?.warning;if(weatherNotice.textContent!==weatherText)weatherNotice.textContent=weatherText;
     const pings=onlineState?.pings?.filter(q=>q.expires>(onlineState?.tick??0))??[];
     combatTools?.updateTeam({enabled:onlineActive&&online.connected&&onlineState?.mode==='team'&&health>0,world:geometry,me:p,yaw:input.look.yaw,pings});
     const pingNotice=document.querySelector<HTMLElement>('#map-ping-alert')!,latest=pings.at(-1),pingText=latest?`${latest.kind==='enemy'?'! 적 발견':latest.kind==='help'?'+ 지원 요청':'◆ 이동'} · ${playerName(onlineState!.players.find(p=>p.id===latest.player)!,'아군')}`:'';if(pingNotice.textContent!==pingText)pingNotice.textContent=pingText;pingNotice.hidden=!latest;

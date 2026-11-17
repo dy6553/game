@@ -1,3 +1,4 @@
+import {newWeatherSeed} from './snow-weather.ts';
 import {firstShotBox} from './combat-geometry.ts';
 import {SNOW_LAYOUT_REVISION} from './igloo-layout.ts';
 import {rangedDamage} from './weapon-range.ts';
@@ -20,7 +21,7 @@ export type Command={ping?:Pick<TeamPing,'kind'|'x'|'z'>;stance?:Stance;seq:numb
 export type ShotEvent={id:number;player:string;weapon:WeaponId;from:{x:number;y:number;z:number};to:{x:number;y:number;z:number};hit:boolean;killed:boolean;target?:string;headshot?:boolean;protected?:boolean;elevated?:boolean};
 export type OnlineMode='duel'|'ffa'|'team';
 export type NetworkOptions={clock?:()=>number;waitingRoom?:boolean;mode?:OnlineMode;randomPickups?:boolean};
-export type MatchState={layoutRevision?:string;weatherTime?:number;pings?:TeamPing[];phase?:'waiting'|'playing';hostId?:string;mode?:OnlineMode;capacity?:number;started?:boolean;winningIds?:string[];teamScores?:number[];projectiles?:Projectile[];toolEvents?:ToolEvent[];map?:MapId;doors?:Doors;players:Player[];winner:string;tick:number;events:ShotEvent[];pickups:Pickup[]};
+export type MatchState={layoutRevision?:string;weatherTime?:number;weatherSeed?:number;pings?:TeamPing[];phase?:'waiting'|'playing';hostId?:string;mode?:OnlineMode;capacity?:number;started?:boolean;winningIds?:string[];teamScores?:number[];projectiles?:Projectile[];toolEvents?:ToolEvent[];map?:MapId;doors?:Doors;players:Player[];winner:string;tick:number;events:ShotEvent[];pickups:Pickup[]};
 const empty=():Command=>({seq:-1,x:0,y:0,yaw:0,pitch:0,fire:false,shot:false,reload:false,jump:false,sprint:false,scope:false});
 export function parseCommand(v:unknown,bounds:Pick<World['PROTOTYPE'],'halfWidth'|'halfDepth'|'maxZ'>=harborWorld.PROTOTYPE):Command|null{
  if(!v||typeof v!=='object')return null;const p=v as Record<string,unknown>;
@@ -84,7 +85,7 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
  const world=mapId==='harbor'?harborWorld:createWorld(mapId);
  const state:MatchState=saved?structuredClone(saved):{players:[],winner:'',tick:0,events:[],pickups:options.randomPickups?createMatchPickups(world):createPickups()};
  if(!saved&&options.waitingRoom)state.phase='waiting';state.map=mapId;state.mode=mode;state.capacity=mode==='duel'?2:20;state.teamScores??=[0,0];state.projectiles??=[];state.toolEvents??=[];state.pickups??=createMatchPickups(world);state.doors??=world.createDoors();
- if(mapId==='snow'){state.weatherTime??=0;state.layoutRevision=SNOW_LAYOUT_REVISION;}
+ if(mapId==='snow'){state.weatherTime??=0;state.weatherSeed??=newWeatherSeed();state.layoutRevision=SNOW_LAYOUT_REVISION;}
  const pingAt=new Map<string,number>();state.pings=[];
  const inputs=new Map<string,{command:Command;at:number}>();let now=0,eventId=state.tick*1000;
  const id=()=>++eventId;

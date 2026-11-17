@@ -99,5 +99,5 @@ test('snow rooms reject old layout clients and accept matching igloo clients',as
 test('snow clients receive the same authoritative weather time in both state protocols',async()=>{
  const r=await runtime();r.room.game=createNetworkGame(undefined,'snow',{mode:'team',waitingRoom:true});r.room.game.join('a');r.room.game.join('b');r.room.sessions={a:'a',b:'b'};
  const revision=r.room.game.state.layoutRevision,a=await r.connect('a',revision),b=await r.connect('b',revision);r.room.protocols.set(a,2);r.room.game.startMatch('a');for(let i=0;i<20;i++)r.advance(50);
- const sa=a.messages.filter((m:any)=>m.type==='state').at(-1).state,sb=b.messages.filter((m:any)=>m.type==='state').at(-1).state;assert.ok(sa.weatherTime>0);assert.equal(sa.weatherTime,sb.weatherTime);assert.equal(sa.layoutRevision,sb.layoutRevision);
+ const sa=a.messages.filter((m:any)=>m.type==='state').at(-1).state,sb=b.messages.filter((m:any)=>m.type==='state').at(-1).state;assert.ok(sa.weatherTime>0);assert.equal(sa.weatherTime,sb.weatherTime);assert.ok(Number.isInteger(sa.weatherSeed));assert.equal(sa.weatherSeed,sb.weatherSeed);assert.equal(sa.layoutRevision,sb.layoutRevision);
 });

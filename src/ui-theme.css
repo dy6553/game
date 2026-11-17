@@ -115,3 +115,11 @@
 /* Dash and posture share a right-side row above the fire/jump controls. */
 #dash.dash-button{left:auto;right:calc(max(16px,env(safe-area-inset-right)) + 176px);top:max(125px,calc(50% - 90px));bottom:auto}
 @media(max-height:430px){#posture-controls,#dash.dash-button{top:88px}}
+
+#weather-notice{position:absolute;top:160px;left:50%;transform:translateX(-50%);width:150px;box-sizing:border-box;max-width:38vw;padding:7px 12px;border:1px solid #e7ce8a99;border-radius:6px;background:#142936ec;color:#ffe1a3;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;text-align:center;pointer-events:none;z-index:5}
+#weather-notice[hidden]{display:none}
+@media(pointer:coarse),(max-width:900px),(max-height:550px){#weather-notice{top:140px;width:132px;font-size:11px;padding:5px 8px}}
+@media(any-pointer:coarse) and (min-width:900px){:root.tablet-device #weather-notice{top:176px;width:150px;font-size:13px;padding:7px 12px}}
+
+@media(max-height:420px){#weather-notice{top:136px;font-size:10px;line-height:14px;padding:0 8px}}
+body.at-home #weather-notice,body.results-open #weather-notice,.comparing #weather-notice,.menu-open #weather-notice,.choice-open #weather-notice,.in-waiting-room #weather-notice,.environment-open #weather-notice{display:none}

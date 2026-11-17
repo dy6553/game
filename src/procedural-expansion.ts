@@ -40,6 +40,11 @@ export function shellGeometry(vertices:readonly (readonly number[])[]){
  result.positions=positions;result.normals=normals;result.uvs=uvs;result.indices=indices;return result;
 }
 
+const SHELL_FACES=[[0,1,2,3],[4,7,6,5],[0,4,5,1],[3,2,6,7],[0,3,7,4],[1,5,6,2]];
+const shellFaceKey=(points:readonly (readonly number[])[])=>points.map(p=>p.map(n=>Math.round(n*1e6)).join(',')).sort().join(';');
+const shellFaceCounts=new Map<string,number>();
+for(const shell of snowShells)for(const face of SHELL_FACES){const key=shellFaceKey(face.map(i=>shell.vertices[i]!));shellFaceCounts.set(key,(shellFaceCounts.get(key)??0)+1);}
+
 export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:World,shadows?:ShadowGenerator){
  let high=false,low=false,root:TransformNode|undefined,owned:StandardMaterial[]=[],textures:RawTexture[]=[],meshes:Mesh[]=[],state:ProceduralMapState;
  const snow=map==='snow',bounds=world.PROTOTYPE;
@@ -69,7 +74,7 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
   for(const r of world.worldSolids()){
    if(snow&&(snowShellIds.has(r.id)||r.id.startsWith('igloo-pillar')))continue;
    const min=r.yMin??0,max=r.yMax??r.height??2,wall=/wall|lintel/.test(r.id),roof=r.id.endsWith(' roof'),isDark=!snow&&r.id.startsWith('Operations');
-   const tint=wall?(isDark?dark:white):roof?(snow?'#edf3f1':dark):/basalt/.test(r.id)?'#555a63':/console/.test(r.id)?dark:/support/.test(r.id)?dark:accent;
+   const tint=wall?(isDark?dark:white):roof?(snow?'#edf3f1':dark):/basalt/.test(r.id)?'#555a63':/console|igloo-workbench/.test(r.id)?dark:/support/.test(r.id)?dark:accent;
    box(r.x,(min+max)/2,r.z,r.width,max-min,r.depth,tint);
    if(wall&&min===0){
     // Inlays stay on solid walls; never bridge a walkable opening.
@@ -126,23 +131,46 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
    }
    for(const piece of snowShells){
     const center=[0,1,2].map(axis=>piece.vertices.reduce((sum,p)=>sum+p[axis]!,0)/8);
-    for(const face of [[0,1,2,3],[4,7,6,5],[0,4,5,1],[3,2,6,7],[0,3,7,4],[1,5,6,2]]){
-     const points=face.map(i=>piece.vertices[i]!);add(shellFace(points,center),0,0,0,'#a9c3ce');
-     if(face[0]===0&&face[1]===1)add(shellFace(points,center,.965,.012),0,0,0,'#e5edf0');
-     if(face[0]===4)add(shellFace(points,center,.97,.01),0,0,0,'#e7e5d9');
+    for(const [faceIndex,face] of SHELL_FACES.entries()){
+     // Lab cap tops are inside the existing vault roof, on the same plane.
+     if(faceIndex===3&&piece.id.includes('end-wall'))continue;
+     // Omit the ring cap where a tunnel is welded to a portal. The portal
+     // already owns this plane; drawing both causes depth flicker.
+     if(faceIndex===2||faceIndex===3){
+      const end=faceIndex===2?piece.vertices[0]!:piece.vertices[3]!;
+      if(piece.id.startsWith('igloo-link-')||(/^igloo-entry-/.test(piece.id)&&Math.abs(Math.abs(end[2]!)-15.1)<.001)||(/laboratory entry-/.test(piece.id)&&Math.abs(Math.abs(end[2]!)-26)<.001)||(/laboratory shell-/.test(piece.id)&&Math.abs(Math.abs(end[2]!)-26)<.001))continue;
+     }
+     const points=face.map(i=>piece.vertices[i]!);if((shellFaceCounts.get(shellFaceKey(points))??0)>1)continue;add(shellFace(points,center),0,0,0,'#c6d2d1');
+     if(face[0]===0&&face[1]===1)add(shellFace(points,center,.985,.016),0,0,0,'#edf1ed');
+     if(face[0]===4)add(shellFace(points,center,.988,.016),0,0,0,'#f2e6d0');
     }
    }
-   add(VertexData.CreateCylinder({diameter:2,height:.025,tessellation:32}),0,.008,0,'#9baaa7',0,0,0,0,new Vector3(17,1,14));
+   add(VertexData.CreateCylinder({diameter:2,height:.025,tessellation:32}),0,.008,0,'#a4b1ac',0,0,0,0,new Vector3(17,1,14));
    for(const b of world.BUILDINGS.slice(1))box(b.x,.012,0,10.4,.025,51,'#91a3a3');
    for(const side of [-1,1]){
     box(side*22.25,.015,0,11,.025,5.3,'#a0b1af');box(0,.015,side*17.5,6,.025,7,'#a0b1af');
     label(0,3.5,side*21.04,0,side<0?0:Math.PI,0,2.2,.45);
     for(const b of world.BUILDINGS.slice(1))label(b.x,3.3,side*30.96,b.x>0?1:2,side<0?0:Math.PI,0,1.8,.35);
     // Warm opaque inlays: a light source appearance without extra dynamic lights.
-    box(0,3.25,side*14.4,4.5,.10,.12,warm,1);
+    box(0,3.65,side*13.17,4.5,.10,.05,warm,1);
     for(const b of world.BUILDINGS.slice(1))box(b.x,5.35,side*10,.13,.10,8,warm,1);
    }
-   for(const side of [-1,1]){cylinder(side*9,4.4,3.5,.5,8.8,dark);cylinder(side*9,2.8,3.5,.51,.14,warm,1);}
+   // Warm ceiling inlays, a recessed floor guide and readable workstation faces.
+   // All details join existing opaque batches; no new lights or transparent layers.
+   const ring=quality==='low'?16:32;
+   for(let i=0;i<ring;i++){
+    const a=i/ring*Math.PI*2,x=Math.cos(a)*12.45,z=Math.sin(a)*10.3;
+    box(x,7.15,z,.65,.075,.13,warm,1,-a);
+   }
+   for(const side of [-1,1]){
+    cylinder(side*9,4.4,3.5,.5,8.8,'#d8d6c5');cylinder(side*9,2.8,3.5,.51,.14,warm,1);
+    for(const z of [-2,7]){
+     box(side*6,.72,z-.616,1.9,.42,.018,'#152f3b');
+     box(side*6,.75,z-.629,1.55,.22,.008,'#7bb5b7',1);
+     box(side*6,1.12,z,2.4,.025,.9,'#b7ab8e');
+    }
+    box(side*2.15,.039,0,.06,.008,18,warm,1);
+   }
    box(0,11.7,0,.12,1.4,.12,dark);box(0,12.35,0,1.8,.1,.1,warm,1);
 
   }else{

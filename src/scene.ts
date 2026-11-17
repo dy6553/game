@@ -1,4 +1,4 @@
-import {snowWeather,inWeatherRange} from './snow-weather.ts';
+import {snowWeather,inWeatherRange,newWeatherSeed} from './snow-weather.ts';
 import {rangedDamage} from './weapon-range.ts';
 import {viewmodelPose} from './viewmodel-motion.ts';
 import {createWayfindingSigns} from './wayfinding-signs.ts';
@@ -51,7 +51,7 @@ import type { Point } from './world.ts';
 import { createCharacter } from './characters.ts';
 import type { CharacterType } from './characters.ts';
 
-export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;map?:MapId;mapArtSource?:HarborArtSource;expansionArtSource?:ExpansionArtSource}={}) {
+export function createHarborScene(engine: Engine,options:{weatherSeed?:number;randomSpawns?:boolean;map?:MapId;mapArtSource?:HarborArtSource;expansionArtSource?:ExpansionArtSource}={}) {
   const expansion=isExpansionMap(options.map)?options.map:undefined;
   const geometry=options.map&&options.map!=='harbor'?createWorld(options.map):harborWorld;
   const {PROTOTYPE,BUILDINGS,COVERS,buildingWalls,interiorFurniture,DOOR_WIDTH,SECOND_FLOOR,createDoors,worldSolids,moveWithCollisions,doorRect,toggleDoor,randomOutdoorSpawn,shotBoxes}=geometry;
@@ -601,11 +601,11 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     : createAtmosphere(scene,options.map!=='factory');
   let snowfallEnabled=true;
   const snowfall=expansion==='snow'?createSnowfall(scene):null;
-  let weatherSeconds=0;
-  const weatherState=()=>expansion==='snow'?snowWeather(weatherSeconds):null;
-  function applyWeather(){const weather=weatherState();if(!weather)return;const showing=!preview&&!reference;scene.fogMode=showing&&weather.intensity>.001?Scene.FOGMODE_LINEAR:Scene.FOGMODE_NONE;scene.fogColor.set(.78,.85,.88);scene.fogStart=weather.visibility*.25;scene.fogEnd=weather.visibility;snowfall?.setStormIntensity(weather.intensity);}
+  let weatherSeconds=0,weatherSeed=options.weatherSeed??newWeatherSeed();
+  const weatherState=()=>expansion==='snow'?snowWeather(weatherSeconds,weatherSeed):null;
+  function applyWeather(){const weather=weatherState();if(!weather)return;const showing=!preview&&!reference;scene.fogMode=showing&&weather.intensity>.001?Scene.FOGMODE_LINEAR:Scene.FOGMODE_NONE;scene.fogColor.set(.78,.85,.88);scene.fogStart=weather.visibility*.5;scene.fogEnd=weather.visibility;snowfall?.setStormIntensity(weather.intensity);}
   const botFlashes=new Map<string,number>();
-  let botDifficulty:SurvivalDifficulty='easy';const fixedDifficulty=()=>botDifficulty==='auto'?'normal':botDifficulty;const environment={doors,randomSpawns:options.randomSpawns!==false,canDetect:(from:Point,to:Point)=>inWeatherRange(options.map,weatherSeconds,from,to)};let duel=createDuel(fixedDifficulty(),environment.randomSpawns?randomOutdoorSpawn([PROTOTYPE.spawn]):{x:0,z:18},undefined,environment),ffa=createBotMatch(fixedDifficulty(),environment),survival=createSurvivalMatch(botDifficulty,undefined,environment),duelMode=false,ffaMode=false,survivalMode=false;
+  let botDifficulty:SurvivalDifficulty='easy';const fixedDifficulty=()=>botDifficulty==='auto'?'normal':botDifficulty;const environment={doors,randomSpawns:options.randomSpawns!==false,canDetect:(from:Point,to:Point)=>inWeatherRange(options.map,weatherSeconds,from,to,weatherSeed)};let duel=createDuel(fixedDifficulty(),environment.randomSpawns?randomOutdoorSpawn([PROTOTYPE.spawn]):{x:0,z:18},undefined,environment),ffa=createBotMatch(fixedDifficulty(),environment),survival=createSurvivalMatch(botDifficulty,undefined,environment),duelMode=false,ffaMode=false,survivalMode=false;
   function battleState(){if(survivalMode)return survival.state();if(ffaMode)return ffa.state();const state=duel.state();return {...state,mode:'duel' as const,winnerName:state.winner==='player'?'나':'봇',bots:[] as ReturnType<typeof ffa.state>['bots']};}
   const botParent=new TransformNode('opponent',scene);
   const opponent=createCharacter(scene,botParent,'robot-cat');
@@ -717,11 +717,11 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
       const wasBotDead=battleState().botHealth===0;
       const updateBattle=survivalMode?survival.update:ffaMode?ffa.update:duel.update;
       updateBattle(dt,p,(point:Point,botId?:string)=>{
-        if((botFlashes.get(botId??'bot-1')??0)>.05||!inWeatherRange(options.map,weatherSeconds,point,p))return false;
+        if((botFlashes.get(botId??'bot-1')??0)>.05||!inWeatherRange(options.map,weatherSeconds,point,p,weatherSeed))return false;
         const from=new Vector3(point.x,1.8+(point.y??0),point.z),to=new Vector3(p.x,1.95+(p.y??0)+jumpState.height,p.z);
         return unobstructed(geometry,doors,from,to);
       },(point,target)=>{
-        if(!inWeatherRange(options.map,weatherSeconds,point,target))return false;
+        if(!inWeatherRange(options.map,weatherSeconds,point,target,weatherSeed))return false;
         if((point.y??0)>=3.35){const b=battleState(),actor=b.bots.find(a=>Math.hypot(a.position.x-point.x,a.position.z-point.z)<.1);botReveals.set(actor?.id??'bot-1',4);if(highShotNotices.length<8)highShotNotices.push('고층 사격 감지 · 미니맵에 4초간 표시');}
         const start=new Vector3(point.x,1.8+(point.y??0),point.z),end=new Vector3(target.x,1.8+(target.y??0),target.z);
         const delta=end.subtract(start);
@@ -835,7 +835,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     const next=beginReload(weapon,spec);const started=next!==weapon;weapon=started?cancelBurst(next):next;return started;
   }
   function resetPractice() {
-    weatherSeconds=0;
+    weatherSeconds=0;weatherSeed=options.weatherSeed??newWeatherSeed();
     localActor={id:'player',...PROTOTYPE.spawn,yaw:0,pitch:0,health:100,gear:createGear(),healing:0,flash:0,gearCooldown:0};localProjectiles=[];toolSequence=0;toolDamageVersion=0;lastToolHealth=100;botFlashes.clear();toolVisuals.clear();
     highShotNotices.length=0;botReveals.clear();autoShotResults.length=0;weaponId=startWeapon;spec=localSpec(weaponId);inventory=createInventory(startWeapon);pickups=matchPickups();weapon=createWeapon(spec);cooldown=0;scoped=false;jumpState=createJump();falling=false;hits=0;destroyed=0;shots=0;
     effects.clear();botEffects.clear();recoil.clear();robotImpact.reset();doors=createDoors();environment.doors=doors;duel=createDuel(fixedDifficulty(),environment.randomSpawns?randomOutdoorSpawn([PROTOTYPE.spawn]):{x:0,z:18},undefined,environment);ffa=createBotMatch(fixedDifficulty(),environment);survival=createSurvivalMatch(botDifficulty,undefined,environment);syncDoors();seenResupply=0;for(const rig of botRigs){rig.fx.reset();rig.health=100;}seenRespawn=0;syncBot();
@@ -859,7 +859,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     for(const texture of scene.textures)texture.anisotropicFilteringLevel=lowPerformance?2:onlineQualityHigh?8:4;
   }
   function renderOnline(state:MatchState,id:string,look:Look,dt:number,predictedPosition?:Point,remotePosition?:(Point&{id:string})|Array<Point&{id:string}>,predictedJump?:JumpState){
-    const me=state.players.find(p=>p.id===id);if(!me)return;if(expansion==='snow')weatherSeconds=state.weatherTime??0;stance=me.stance??'stand';remoteParent.setEnabled(true);doors=state.doors??{};environment.doors=doors;
+    const me=state.players.find(p=>p.id===id);if(!me)return;if(expansion==='snow'){weatherSeconds=state.weatherTime??0;weatherSeed=state.weatherSeed??1;}stance=me.stance??'stand';remoteParent.setEnabled(true);doors=state.doors??{};environment.doors=doors;
     duelMode=false;ffaMode=false;survivalMode=false;preview=false;reference=false;lobbyWeapons.show(lobbyWeaponId,false);character.poseLobby(false);if(weaponId!==me.weaponId||me.health===0)scoped=false;if(weaponId!==me.weaponId)equipAge=0;else equipAge+=dt;weaponId=me.weaponId;spec=WEAPONS[weaponId];weapon={...me.weapon};cooldown=me.cooldown;if(networkJumpTick!==state.tick){networkJumpTick=state.tick;networkJumpAge=0;}else networkJumpAge=Math.min(.15,networkJumpAge+dt);jumpState=predictedJump??advanceJump(me.jump,networkJumpAge);falling=(me.fallSpeed??0)>0;inventory=me.inventory??createInventory(me.weaponId);pickups=state.pickups??[];
     recoil.update(dt);effects.update(dt);botEffects.update(dt);update(predictedPosition??me,0,look,true);toolVisuals.update(state.projectiles??[],state.toolEvents??[],dt);for(const target of targets)target.root.setEnabled(false);
     const estimates=new Map((Array.isArray(remotePosition)?remotePosition:remotePosition?[remotePosition]:[]).map(p=>[p.id,p]));const ids=new Set(state.players.filter(p=>p.id!==id&&!p.abandoned).map(p=>p.id));for(const key of remotes.keys())if(!ids.has(key))removeRemote(key);

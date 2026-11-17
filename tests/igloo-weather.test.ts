@@ -1,3 +1,4 @@
+import {snowWeather} from '../src/snow-weather.ts';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {NullEngine} from '@babylonjs/core/Engines/nullEngine.js';
 import {createHarborScene} from '../src/scene.ts';import {createWorld} from '../src/world.ts';
@@ -10,11 +11,11 @@ test('snow hub has a curved footprint, real curved walls and connected entrances
  assert.ok(w.worldSolids().some(r=>r.id.startsWith('igloo-workbench')),'interior has authoritative cover');
 });
 for(const q of ['low','medium','high'] as const)test(`snow ${q}: blizzard limits vision even when cosmetic snow is disabled and pauses correctly`,()=>{
- const e=new NullEngine(),w=createHarborScene(e,{map:'snow',randomSpawns:false});try{
+ const e=new NullEngine(),w=createHarborScene(e,{map:'snow',randomSpawns:false,weatherSeed:123});try{
   assert.equal(typeof w.weatherState,'function');w.setQuality(q==='high');w.setPerformanceLow(q==='low');w.setPreview(false);w.setSnowfall(false);
-  assert.equal(w.weatherState()?.intensity,0);w.update({x:70,z:-20},75,{yaw:0,pitch:0});const heavy=w.weatherState();assert.equal(heavy?.phase,'blizzard');assert.equal(heavy?.visibility,28);assert.equal(w.scene.fogEnd,28);assert.notEqual(w.scene.fogMode,0);
+  assert.equal(w.weatherState()?.intensity,0);w.update({x:70,z:-20},snowWeather(0,123).startsIn+5,{yaw:0,pitch:0});const heavy=w.weatherState();assert.equal(heavy?.phase,'blizzard');assert.equal(heavy?.visibility,28);assert.equal(w.scene.fogEnd,28);assert.equal(w.scene.fogStart,14,'nearby 14m stays clear');assert.notEqual(w.scene.fogMode,0);
   w.update({x:70,z:-20},10,{yaw:0,pitch:0},true);assert.deepEqual(w.weatherState(),heavy);
-  w.update({x:70,z:-20},45,{yaw:0,pitch:0});assert.equal(w.weatherState()?.intensity,0);
+  w.update({x:70,z:-20},heavy!.endsIn+.01,{yaw:0,pitch:0});assert.equal(w.weatherState()?.intensity,0);
  }finally{w.scene.dispose();e.dispose();}
 });
 test('server weather starts with the match, advances authoritatively and survives checkpoints',()=>{
@@ -25,8 +26,8 @@ test('storm visibility also constrains enemy map contacts',()=>{
 });
 test('bots cannot acquire or fire on a player outside the blizzard envelope',async()=>{
  const {createBotRules}=await import('../src/duel.ts'),{inWeatherRange}=await import('../src/snow-weather.ts');const world=createWorld('snow');
- for(const storm of [false,true]){const bot=createBotRules(world).createDuel('easy',{x:70,z:0},undefined,{doors:{},randomSpawns:false,canDetect:(from,to)=>inWeatherRange('snow',storm?75:0,from,to)});let shots=0;
-  for(let i=0;i<40;i++)bot.update(.05,{x:70,z:40},p=>inWeatherRange('snow',storm?75:0,p,{x:70,z:40}),()=>{shots++;});
+ for(const storm of [false,true]){const bot=createBotRules(world).createDuel('easy',{x:70,z:0},undefined,{doors:{},randomSpawns:false,canDetect:(from,to)=>inWeatherRange('snow',storm?snowWeather(0).startsIn+5:0,from,to)});let shots=0;
+  for(let i=0;i<40;i++)bot.update(.05,{x:70,z:40},p=>inWeatherRange('snow',storm?snowWeather(0).startsIn+5:0,p,{x:70,z:40}),()=>{shots++;});
   if(storm){assert.equal(shots,0);const p=bot.state().position;assert.deepEqual({x:p.x,z:p.z},{x:70,z:0},'a hidden player must not be tracked through the blizzard');}else assert.ok(shots>0);
  }
 });
