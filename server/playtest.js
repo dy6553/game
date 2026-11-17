@@ -1,3 +1,4 @@
+import {LEGAL_VERSION} from '../src/legal.ts';
 const maxBodyBytes=4096;
 const retentionSeconds=48*60*60;
 const numeric={seconds:600,frames:8192,fps:2000,frameP95Ms:10000,stalls:8192,rttSamples:512,rttP50Ms:60000,rttP95Ms:60000,rttMaxMs:60000,gapSamples:1024,gapP95Ms:60000,gapMaxMs:60000,corrections:1024,correctionP95M:200};
@@ -22,9 +23,9 @@ export async function savePlaytest(request,storage) {
   }
   sample=JSON.parse(text+decoder.decode());
  }catch{return empty(400);}
- if(sample?.v!==1||!['online','bot','practice'].includes(sample.mode)||
+ if(sample?.diagnosticAge14!==true||sample?.diagnosticConsent!==LEGAL_VERSION||sample?.v!==1||!['online','bot','practice'].includes(sample.mode)||
     !Number.isInteger(sample.frames)||sample.frames<1||!(sample.seconds>0))return empty(400);
- const record={v:1,mode:sample.mode,receivedAt:new Date().toISOString()};
+ const record={v:1,mode:sample.mode,consentVersion:LEGAL_VERSION,receivedAt:new Date().toISOString()};
  for(const [key,max] of Object.entries(numeric)){
   const value=sample[key];
   if(value!==null&&(!Number.isFinite(value)||value<0||value>max))return empty(400);

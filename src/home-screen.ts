@@ -1,3 +1,4 @@
+import {legalLinks} from './legal.ts';
 import {MAPS,normalizeMap} from './maps.ts';
 import {isCharacterType,type CharacterType} from './characters.ts';
 import {isWeaponId,upgradedWeapon,type WeaponId} from './weapons.ts';
@@ -24,7 +25,7 @@ export const HOME_MARKUP=`
    <div class="home-start-actions"><button id="home-start"><span>게임 시작</span><span aria-hidden="true">→</span></button></div>
   </section>
  </div>
- <footer class="lobby-footer"><span>항구의 밤 · NIGHT ARENA</span><span>PC · WASD / 마우스 &nbsp; 모바일 · 가로 / 터치</span></footer>
+ <footer class="lobby-footer"><span>${legalLinks}</span><span>PC · WASD / 마우스 &nbsp; 모바일 · 가로 / 터치</span></footer>
 </section>`;
 export function createHomeScreen(actions:{selectCharacter(type:CharacterType):void;selectWeapon(id:WeaponId):void;start(selection:HomeSelection):void}){
  const el=(id:string)=>document.querySelector<HTMLElement>('#'+id)!;

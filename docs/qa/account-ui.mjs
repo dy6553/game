@@ -5,7 +5,7 @@ const {window,document}=parseHTML('<html><body><div id="app"><section id="home">
 let active=null;window.HTMLElement.prototype.focus=function(){active=this;};Object.defineProperty(document,'activeElement',{get:()=>active});
 const isPublic=process.argv.includes('--public');Object.assign(globalThis,{window,document,HTMLElement:window.HTMLElement,location:new URL('https://game.test/'+(isPublic?'?profile=00000000-0000-4000-8000-000000000001':''))});
 const el=id=>document.querySelector('#'+id),click=id=>el(id).dispatchEvent(new window.Event('click',{bubbles:true}));const settle=()=>new Promise(r=>setImmediate(r));
-const profile={id:'00000000-0000-4000-8000-000000000001',played:3,wins:2,recent:[{endedAt:1000,outcome:'win',kills:10,deaths:2}]};
+const profile={consent:{version:'2026-11-17.1',acceptedAt:1000,publicChangedAt:1000,current:true,publicProfile:false},id:'00000000-0000-4000-8000-000000000001',played:3,wins:2,recent:[{endedAt:1000,outcome:'win',kills:10,deaths:2}]};
 let removed=0,registrations=0;const account={profile:null,async refresh(){},async token(){return null;},async signIn(){this.profile=profile;},async signUp(){registrations++;this.profile=profile;},async signOut(){this.profile=null;},async remove(){removed++;this.profile=null;}};
 if(isPublic)globalThis.fetch=async url=>{assert.match(url,/\/profiles\//);return Response.json({...profile,admin:true,email:'private@example.com',subject:'secret-account'});};
 const view=createAccountView('https://auth.test','https://worker.test',async()=>account);
@@ -16,9 +16,10 @@ if(process.argv.includes('--signup')){
  click('account-signup');await settle();
  assert.equal(validations,0,'registration entry must open before validating the login form');
  assert.equal(el('account-form').hidden,true);assert.equal(el('account-signup-form').hidden,false);assert.equal(el('account-title').textContent,'회원가입');assert.equal(registrations,0);
- assert.equal(document.activeElement,el('signup-email'));assert.equal(el('signup-password').getAttribute('autocomplete'),'new-password');
+ assert.ok(document.activeElement===el('signup-age'));assert.equal(el('signup-password').getAttribute('autocomplete'),'new-password');
  el('signup-password').value='temporary-password';click('account-signup-back');assert.equal(el('account-form').hidden,false);assert.equal(el('account-signup-form').hidden,true);assert.equal(el('signup-password').value,'');
  click('account-signup');el('signup-nickname').value='가입대원';el('signup-email').value='new@example.com';el('signup-password').value='password';
+ for(const id of ['signup-age','signup-privacy','signup-terms','signup-overseas']){assert.ok(!el(id).checked);el(id).checked=true;}assert.ok(!el('signup-public').checked);
  el('account-signup-form').dispatchEvent(new window.Event('submit',{bubbles:true,cancelable:true}));await settle();
  assert.equal(registrations,1);assert.equal(el('account-profile').hidden,false);assert.equal(el('account-signup-form').hidden,true);assert.equal(el('signup-password').value,'');
  click('account-signout');await settle();assert.equal(el('account-form').hidden,false);assert.equal(el('account-signup-form').hidden,true);

@@ -1,3 +1,5 @@
+import consentMigration from './consent-schema.js';
+import {LEGAL_VERSION,validLegalChoice,consentRequired} from '../src/legal.ts';
 import {neon} from '@neondatabase/serverless';
 import migration from './growth-schema.js';
 import adminMigration from './admin-schema.js';
@@ -13,12 +15,29 @@ export function createRecordStore(env,database){
  if(!database&&!env.DATABASE_URL)throw Error('Database is not configured');
  const sql=database??neon(env.DATABASE_URL,{fetchOptions:{signal:AbortSignal.timeout(10000)}});
  async function prepare(){
-  if(!preparations.has(env))preparations.set(env,sql.transaction([...(migration+adminMigration).split(';').map(s=>s.trim()).filter(Boolean).map(s=>sql.query(s)),...[...multiplayerMigration,...nicknameMigration].map(s=>sql.query(s))]).catch(error=>{preparations.delete(env);throw error;}));
+  if(!preparations.has(env))preparations.set(env,sql.transaction([...(migration+adminMigration).split(';').map(s=>s.trim()).filter(Boolean).map(s=>sql.query(s)),...[...multiplayerMigration,...nicknameMigration,...consentMigration].map(s=>sql.query(s))]).catch(error=>{preparations.delete(env);throw error;}));
   await preparations.get(env);
  }
  const admin=createAdminStore(sql);
  return {
-  async setNickname(subject,value){const nickname=normalizeNickname(value);if(!nickname)throw Error('Invalid nickname');await prepare();await this.account(subject);const rows=await sql`UPDATE harbor.profiles p SET nickname=${nickname} FROM neon_auth."user" u WHERE p.subject=${subject} AND u.id::text=p.subject RETURNING p.id`;if(!rows.length)throw Error('Account no longer exists');return this.account(subject);},
+  async saveConsent(subject,body){
+   await prepare();
+   if(body?.publicProfile===false&&Object.keys(body).length===1){
+    const rows=await sql`UPDATE harbor.legal_choices c SET public_profile=false,public_changed_at=${Date.now()} FROM harbor.profiles p WHERE c.profile_id=p.id AND p.subject=${subject} RETURNING c.profile_id`;
+    if(!rows.length)throw consentRequired();return this.account(subject);
+   }
+   if(!validLegalChoice(body))throw Object.assign(Error('필수 동의와 안내 버전을 확인하세요.'),{status:400});
+   const now=Date.now();
+   const rows=await sql`WITH owner AS (
+    INSERT INTO harbor.profiles(subject) SELECT id::text FROM neon_auth."user" WHERE id::text=${subject} FOR KEY SHARE
+    ON CONFLICT(subject) DO UPDATE SET subject=EXCLUDED.subject RETURNING id
+   ) INSERT INTO harbor.legal_choices(profile_id,version,accepted_at,public_profile,public_changed_at)
+    SELECT id,${LEGAL_VERSION},${now},${body.publicProfile},${now} FROM owner
+    ON CONFLICT(profile_id) DO UPDATE SET version=EXCLUDED.version,accepted_at=EXCLUDED.accepted_at,public_profile=EXCLUDED.public_profile,public_changed_at=EXCLUDED.public_changed_at RETURNING profile_id`;
+   if(!rows.length)throw Object.assign(Error('다시 로그인하세요.'),{status:401});return this.account(subject);
+  },
+  async requireConsent(subject){const p=await this.account(subject);if(!p?.consent?.current)throw consentRequired();return p;},
+  async setNickname(subject,value){const nickname=normalizeNickname(value);if(!nickname)throw Error('Invalid nickname');await prepare();await this.requireConsent(subject);const rows=await sql`UPDATE harbor.profiles p SET nickname=${nickname} FROM neon_auth."user" u WHERE p.subject=${subject} AND u.id::text=p.subject RETURNING p.id`;if(!rows.length)throw Error('Account no longer exists');return this.account(subject);},
   async isAdmin(subject){await prepare();return admin.isAdmin(subject);},
   async adminFind(subject,email){await prepare();return admin.find(subject,email);},
   async adminEdit(subject,body){await prepare();return admin.edit(subject,body);},
@@ -27,13 +46,13 @@ export function createRecordStore(env,database){
    if(!rows.length)throw Error('Account no longer exists');return growth(Number(rows[0].xp));
   },
   async startRun(subject,body){
-   if(!validRun(body))throw Error('Invalid run');await prepare();await this.account(subject);
+   if(!validRun(body))throw Error('Invalid run');await prepare();await this.requireConsent(subject);
    const id=crypto.randomUUID();const rows=await sql`INSERT INTO harbor.growth_runs(id,profile_id,mode,difficulty,started_at)
     SELECT ${id}::uuid,p.id,${body.mode},${body.difficulty},${Date.now()} FROM harbor.profiles p JOIN neon_auth."user" u ON u.id::text=p.subject WHERE p.subject=${subject} RETURNING id`;
    if(!rows.length)throw Error('Account no longer exists');return {id};
   },
   async finishRun(subject,id,body){
-   if(!/^[0-9a-f-]{36}$/i.test(id))throw Error('Invalid run');await prepare();
+   if(!/^[0-9a-f-]{36}$/i.test(id))throw Error('Invalid run');await prepare();await this.requireConsent(subject);
    const rows=await sql`SELECT r.mode,r.difficulty FROM harbor.growth_runs r JOIN harbor.profiles p ON p.id=r.profile_id JOIN neon_auth."user" u ON u.id::text=p.subject WHERE r.id=${id}::uuid AND p.subject=${subject}`;
    const run=rows[0];if(!validFinish(body,run))throw Error('Invalid finish');const xp=reward({...body,mode:run.mode});
    await sql`WITH receipt AS (UPDATE harbor.growth_runs r SET xp=${xp} FROM harbor.profiles p,neon_auth."user" u WHERE r.id=${id}::uuid AND r.profile_id=p.id AND p.subject=${subject} AND u.id::text=p.subject AND r.xp IS NULL RETURNING r.profile_id)
@@ -48,16 +67,20 @@ export function createRecordStore(env,database){
     SELECT id::text FROM neon_auth."user" WHERE id::text=${subject} FOR KEY SHARE
     ON CONFLICT(subject) DO UPDATE SET subject=EXCLUDED.subject RETURNING id`;
    if(!rows.length)throw Error('Account no longer exists');
-   return {...await this.profile(rows[0].id),growth:await this.progression(subject),admin:await this.isAdmin(subject)};
+   return {...await this.profile(rows[0].id,true),growth:await this.progression(subject),admin:await this.isAdmin(subject)};
   },
-  async profile(id){
+  async profile(id,owner=false){
    await prepare();
-   const rows=await sql`SELECT p.id,p.played,p.wins,p.nickname,
+   const rows=await sql`SELECT p.id,p.played,p.wins,p.nickname,c.version,c.accepted_at,c.public_profile,c.public_changed_at,
     COALESCE((SELECT jsonb_agg(r ORDER BY r.ended_at DESC,r.match_id DESC)
      FROM (SELECT ended_at,outcome,kills,deaths,match_id,mode FROM harbor.recent
       WHERE profile_id=p.id ORDER BY ended_at DESC,match_id DESC LIMIT 20) r),'[]'::jsonb) AS recent
-    FROM harbor.profiles p JOIN neon_auth."user" u ON u.id::text=p.subject WHERE p.id=${id}::uuid`;
-   return rows.length?publicProfile(rows[0]):null;
+    FROM harbor.profiles p JOIN neon_auth."user" u ON u.id::text=p.subject LEFT JOIN harbor.legal_choices c ON c.profile_id=p.id WHERE p.id=${id}::uuid`;
+   const row=rows[0];if(!row)return null;
+   const current=row.version===LEGAL_VERSION&&Number(row.accepted_at)>0;
+   if(!owner&&(!current||row.public_profile!==true))return null;
+   const profile=publicProfile(row);
+   return owner?{...profile,consent:row.version?{version:row.version,acceptedAt:Number(row.accepted_at),publicProfile:row.public_profile===true,publicChangedAt:Number(row.public_changed_at),current}:null}:profile;
   },
   async write(event){
    await prepare();
@@ -65,6 +88,7 @@ export function createRecordStore(env,database){
    // The lock also makes concurrent writes for this account serialize before trimming.
    await sql.transaction(event.rows.map(row=>sql`WITH owner AS MATERIALIZED (
      SELECT p.id FROM harbor.profiles p JOIN neon_auth."user" u ON u.id::text=p.subject
+     JOIN harbor.legal_choices c ON c.profile_id=p.id AND c.version=${LEGAL_VERSION}
      WHERE p.subject=${row.subject} FOR UPDATE OF p
     ), receipt AS (
      INSERT INTO harbor.receipts(profile_id,match_id) SELECT id,${event.matchId}::uuid FROM owner

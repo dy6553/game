@@ -124,7 +124,7 @@ export default {async fetch(request,env){
    if(response){const result=new Response(response.body,response);for(const [key,value] of Object.entries(headers))result.headers.set(key,value);return result;}
    delete body.accountSubject;delete body.userId;delete body.accountLevel;
    body.map=normalizeMap(body.map);body.mode=['duel','ffa','team'].includes(body.mode)?body.mode:'duel';
-   if(subject){if(env.ACCOUNTS_ENABLED!=='true')throw Error('Accounts not ready');const profile=await createRecordStore(env).account(subject);body.nickname=profile.nickname;body.accountSubject=subject;body.accountLevel=(await createRecordStore(env).progression(subject)).level;}
+   if(subject){if(env.ACCOUNTS_ENABLED!=='true')throw Error('Accounts not ready');const profile=await createRecordStore(env).requireConsent(subject);body.nickname=profile.nickname;body.accountSubject=subject;body.accountLevel=(await createRecordStore(env).progression(subject)).level;}
    if(body.action!=='join'&&!canAccessMap(body.map,!!subject,body.accountLevel)){const denied=json({error:MAPS[body.map].name+' 전장은 로그인 후 Lv3에 해금됩니다.'},403);for(const [key,value] of Object.entries(headers))denied.headers.set(key,value);return denied;}
    if(body.character==='welder'&&(!subject||body.accountLevel<3)){
     const denied=json({error:'용접 로봇은 로그인 후 Lv3에 해금됩니다.'},403);for(const [key,value] of Object.entries(headers))denied.headers.set(key,value);return denied;
@@ -133,6 +133,11 @@ export default {async fetch(request,env){
    const forwarded=new Headers(request.headers);forwarded.delete('Authorization');forwarded.delete('X-Harbor-Location');
    const hints={AS:'apac',OC:'oc',NA:'wnam',SA:'sam',EU:'weur',AF:'afr'};const hint=hints[request.cf?.continent];if(hint)forwarded.set('X-Harbor-Location',hint);
    response=await env.LOBBY.get(env.LOBBY.idFromName('public')).fetch(new Request('https://lobby/',{method:'POST',body:JSON.stringify(body),headers:forwarded}));
+  }else if(url.pathname==='/account/consent'&&request.method==='POST'){
+   if(env.ACCOUNTS_ENABLED!=='true')throw Error('Accounts not ready');
+   let subject;try{subject=await createIdentityVerifier(env)(request);}catch{}
+   if(!subject)response=json({error:'로그인이 필요합니다.'},401);
+   else {const text=await request.text();if(text.length>2048)response=json({error:'요청 크기를 확인하세요.'},400);else {let body;try{body=JSON.parse(text);}catch{response=json({error:'동의 항목을 확인하세요.'},400);}if(!response)response=json(await createRecordStore(env).saveConsent(subject,body));}}
   }else if(url.pathname==='/account/nickname'&&request.method==='POST'){
    if(env.ACCOUNTS_ENABLED!=='true')throw Error('Accounts not ready');let subject;try{subject=await createIdentityVerifier(env)(request);}catch{}if(!subject)response=json({error:'로그인이 필요합니다.'},401);else{const text=await request.text();if(text.length>256)response=json({error:'닉네임이 너무 깁니다.'},400);else{const name=normalizeNickname(JSON.parse(text).nickname);response=name?json(await createRecordStore(env).setNickname(subject,name)):json({error:'닉네임은2~16자 한글·영문·숫자·공백·_-로 입력하세요.'},400);}}
   }else if(['/admin/players/find','/admin/players/level'].includes(url.pathname)&&request.method==='POST'){
@@ -170,6 +175,6 @@ export default {async fetch(request,env){
   }else if(/^\/room\/[0-9A-F]{8}$/.test(url.pathname)&&request.headers.get('Upgrade')==='websocket'){
    return env.ROOMS.get(env.ROOMS.idFromName(url.pathname.split('/')[2])).fetch(request);
   }else response=json({error:'경로를 찾을 수 없습니다.'},404);
- }catch{response=json({error:'서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.'},503);}
+ }catch(error){response=error.status===428?json({error:error.message,code:'CONSENT_REQUIRED'},428):error.status===400||error.status===401?json({error:error.message},error.status):json({error:'서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.'},503);}
  const result=new Response(response.body,response);for(const [key,value] of Object.entries(headers))result.headers.set(key,value);return result;
 }};
