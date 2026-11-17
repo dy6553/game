@@ -4,6 +4,7 @@ import {createWayfindingSigns} from './wayfinding-signs.ts';
 import {stanceStats,type Stance} from './stance.ts';
 import {createRemoteModels,type RemoteModel} from './remote-models.ts';
 import {createHarborMapArt,type HarborArtSource} from './harbor-map-art.ts';
+import {createProceduralExpansion} from './procedural-expansion.ts';
 import {createExpansionMapArt,type ExpansionArtSource} from './expansion-map-art.ts';
 import {isExpansionMap} from './maps.ts';
 import {createSnowfall} from './snowfall.ts';
@@ -565,7 +566,9 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     // Hidden collider meshes still need their real transforms before the first shot.
     for(const mesh of expansionFallback)mesh.freezeWorldMatrix();
   }
-  const mapArt = expansion?createExpansionMapArt(scene,expansion,expansionFallback,options.expansionArtSource,shadows):options.mapArtSource && options.map !== 'factory'
+  const proceduralArt=expansion&&!options.expansionArtSource?createProceduralExpansion(scene,expansion,geometry,shadows):undefined;
+  if(proceduralArt)for(const mesh of expansionFallback)mesh.visibility=0;
+  const mapArt = expansion?proceduralArt??createExpansionMapArt(scene,expansion,expansionFallback,options.expansionArtSource,shadows):options.mapArtSource && options.map !== 'factory'
     ? createHarborMapArt(scene, options.mapArtSource, scene.meshes.filter(mesh => !mesh.parent && mesh !== skyDome),
       BUILDINGS, () => doors, shadows)
     : undefined;
@@ -678,7 +681,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
   const flashTargetColor=Color3.FromHexString('#67d6ca'),idleTargetColor=Color3.FromHexString('#543524');
   const highShotNotices:string[]=[];const botReveals=new Map<string,number>();let stance:Stance='stand';
   function update(p: Point, dt: number, look: Look = { yaw: 0, pitch: 0 }, paused=false) {
-    snowfall?.update(p,snowfallEnabled&&!paused&&!preview&&!reference&&!geometry.indoorAt(p),look.yaw);
+    snowfall?.update(p,snowfallEnabled&&(!proceduralArt||!lowPerformance)&&!paused&&!preview&&!reference&&!geometry.indoorAt(p),look.yaw);
     if(!paused){for(const [id,left] of botReveals){if(left<=dt)botReveals.delete(id);else botReveals.set(id,left-dt);}}
     if(!paused&&!preview&&!reference){
       if(stance==='stand')delete p.stance;else p.stance=stance;
@@ -726,7 +729,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
       const state=battleState();
       if(state.mode==='survival'&&state.ammoRefreshVersion!==seenResupply){seenResupply=state.ammoRefreshVersion;syncSlot(inventory,weapon,cooldown);for(const slot of inventory.slots)slot.weapon=createWeapon(WEAPONS[slot.id]);weapon=inventory.slots[inventory.active]!.weapon;}
       if(wasBotDead&&state.botHealth>0){robotImpact.reset();botFlashes.delete('bot-1');}
-      if(state.respawnVersion!==seenRespawn){seenRespawn=state.respawnVersion;p.x=state.playerPosition.x;p.z=state.playerPosition.z;if(p.y!==undefined)p.y=0;delete p.fallSpeed;falling=false;weaponId=startWeapon;spec=localSpec(weaponId);inventory=createInventory(startWeapon);weapon=createWeapon(spec);if(survivalMode)pickups=pickups.map(c=>({...c,remaining:0}));localActor.gear=createGear();localActor.healing=0;localActor.flash=0;cooldown=0;scoped=false;jumpState=createJump();recoil.clear();}
+      if(state.respawnVersion!==seenRespawn){seenRespawn=state.respawnVersion;p.x=state.playerPosition.x;p.z=state.playerPosition.z;if(p.y!==undefined)p.y=0;p.fallSpeed=0;falling=false;weaponId=startWeapon;spec=localSpec(weaponId);inventory=createInventory(startWeapon);weapon=createWeapon(spec);if(survivalMode)pickups=pickups.map(c=>({...c,remaining:0}));localActor.gear=createGear();localActor.healing=0;localActor.flash=0;cooldown=0;scoped=false;jumpState=createJump();recoil.clear();}
     }
     if(!duelMode&&!paused&&!preview&&!reference){duel.update(dt,p,()=>false,()=>false,false);const d=duel.state();if(d.respawnVersion!==seenRespawn){seenRespawn=d.respawnVersion;p.x=d.playerPosition.x;p.z=d.playerPosition.z;p.y=0;inventory=createInventory(startWeapon);equip();localActor.gear=createGear();localActor.healing=0;localActor.flash=0;}}
     if(!paused&&!preview&&!reference){
@@ -869,7 +872,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
       jumpHeight:jumpState.height,grounded:jumpState.height===0&&jumpState.velocity===0&&!falling};
   }
   return {
-    geometry,
+    geometry,mapArtState:()=>proceduralArt?.state()??null,
     get scoped(){return scoped;},
     targetContacts:()=>targets.map((t,i)=>({id:'target-'+i,name:'표적 '+(i+1),x:t.x,z:t.z,y:0,health:t.health})),
     gearState:()=>({gear:{...localActor.gear},health:localActor.health,flash:localActor.flash,healing:localActor.healing,cooldown:localActor.gearCooldown}),
@@ -902,7 +905,7 @@ export function createHarborScene(engine: Engine,options:{randomSpawns?:boolean;
     setShadows(enabled:boolean){requestedShadows=enabled;scene.shadowsEnabled=enabled&&!lowPerformance;},
     setSnowfall(enabled:boolean){snowfallEnabled=enabled;if(!enabled)snowfall?.stop();},
     snowfallState:()=>snowfall?.state()??null,
-    setPerformanceLow(enabled:boolean){if(lowPerformance===enabled)return;lowPerformance=enabled;syncEffectQuality();snowfall?.setLow(enabled);scene.shadowsEnabled=requestedShadows&&!enabled;botEffects.setReduced(reducedShots||enabled);atmosphere.setLow(enabled);const loading=mapArt?.setPerformanceLow(enabled);applySurfaceQuality();return loading;},
+    setPerformanceLow(enabled:boolean){if(lowPerformance===enabled)return;lowPerformance=enabled;syncEffectQuality();snowfall?.setLow(enabled);if(enabled&&proceduralArt)snowfall?.stop();scene.shadowsEnabled=requestedShadows&&!enabled;botEffects.setReduced(reducedShots||enabled);atmosphere.setLow(enabled);const loading=mapArt?.setPerformanceLow(enabled);applySurfaceQuality();return loading;},
     setQuality(high:boolean){
       snowfall?.setQuality(high);
       onlineQualityHigh=high;syncEffectQuality();for(const r of remotes.values())r.fx.setQuality(high);atmosphere.setQuality(high);robotImpact.setQuality(high);for(const rig of botRigs.slice(1))rig.fx.setQuality(high);
