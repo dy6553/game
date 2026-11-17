@@ -1,7 +1,7 @@
 export const MAPS={
  harbor:{name:'항구 지구',description:'도심 골목과 옥상을 오가는 야간 전투',level:1},
  factory:{name:'폐공장',description:'다층 공장과 산업 엄폐물',level:3},
- snow:{name:'설원 연구소',description:'설산 능선과 관측 돔 · 청록색 연구동',level:3},
+ snow:{name:'설원 연구소',description:'이글루 관측소와 아치 연구동 · 주기적 폭설',level:3},
  moon:{name:'달 기지',description:'크레이터와 착륙장 · 거주 돔과 통신 기지',level:3},
 } as const;
 export type MapId=keyof typeof MAPS;

@@ -1,15 +1,16 @@
+import {iglooLayout,snowShelter} from './igloo-layout.ts';
 import {stanceStats,type Stance} from './stance.ts';
 import {advanceJump,createJump,type JumpState} from './jump.ts';
 import {expansionLayouts} from './expansion-layouts.ts';
 import {isExpansionMap,type MapId} from './maps.ts';
 export type {MapId} from './maps.ts';
 export type Point = { x: number; z: number; y?:number;fallSpeed?:number;stance?:Stance };
-export type Rect = { id: string; x: number; z: number; width: number; depth: number; height?:number; yMin?:number;yMax?:number;jumpClearance?:boolean;slope?:{start:Point&{y:number};end:Point&{y:number}} };
+export type Rect = { shellVertices?:readonly (readonly number[])[]; id: string; x: number; z: number; width: number; depth: number; height?:number; yMin?:number;yMax?:number;jumpClearance?:boolean;slope?:{start:Point&{y:number};end:Point&{y:number}} };
 export type Building = Rect & { height: number; palette: number; enterable?:boolean };
 export type Doors=Record<string,boolean>;
 export type Stairway={building:string;start:Point&{y:number};end:Point&{y:number};width:number};
 export function createWorld(map:MapId='harbor'){
-const expansion=isExpansionMap(map)?expansionLayouts[map]:undefined;
+const expansion=map==='snow'?iglooLayout:isExpansionMap(map)?expansionLayouts[map]:undefined;
 
 // Exploration values only; these are not final combat balance or map dimensions.
 const PROTOTYPE = {
@@ -34,7 +35,7 @@ if(expansion)BUILDINGS.splice(0,BUILDINGS.length,...expansion.rooms.map(b=>({...
 const ENTERABLE_BUILDINGS=BUILDINGS.filter(b=>b.enterable);
 const DOOR_WIDTH=3.2;
 function buildingWalls(b:Building):Rect[]{
- if(expansion)return expansion.solids.filter(r=>r.id.startsWith(b.id+' wall')||r.id.startsWith(b.id+' lintel'));
+ if(expansion)return expansion.solids.filter(r=>r.id.startsWith(b.id));
  const front=b.z<0?1:-1,t=.4,segment=(b.width-DOOR_WIDTH)/2;
  return [
  {id:b.id+'-west',x:b.x-b.width/2+t/2,z:b.z,width:t,depth:b.depth},
@@ -45,7 +46,7 @@ function buildingWalls(b:Building):Rect[]{
 function interiorFurniture(b:Building):Rect[]{if(expansion)return [];return [
  {id:b.id+'-counter',x:b.x+b.width/2-1.3,z:b.z,width:1.4,depth:4},
  {id:b.id+'-table',x:b.x-1.5,z:b.z+(b.z<0?1:-1)*2,width:1.5,depth:1.5}];}
-function indoorAt(p:Point){return BUILDINGS.find(b=>b.enterable&&Math.abs(p.x-b.x)<b.width/2-.4&&Math.abs(p.z-b.z)<b.depth/2-.4);}
+function indoorAt(p:Point){if(map==='snow'){const id=snowShelter(p);return BUILDINGS.find(b=>b.id===id);}return BUILDINGS.find(b=>b.enterable&&Math.abs(p.x-b.x)<b.width/2-.4&&Math.abs(p.z-b.z)<b.depth/2-.4);}
 
 
 const COVERS: Rect[] = [
@@ -68,7 +69,7 @@ if(map==='factory')COVERS.splice(0,COVERS.length,
  {id:`factory-boiler-${side}`,x:side*14,z:-42,width:4,depth:4,height:3},
  ]));
 if(expansion)COVERS.splice(0,COVERS.length,...expansion.solids.filter(r=>!expansion.rooms.some(b=>r.id.startsWith(b.id))).map(r=>({...r,height:r.yMax})));
-const SOLIDS: Rect[] = expansion?[...expansion.solids,...expansion.rooms.map(b=>({id:b.id+' roof',x:b.x,z:b.z,width:b.width+1.1,depth:b.depth+1.1,yMin:b.height,yMax:b.height+.44}))]:[...BUILDINGS.flatMap(b=>b.enterable?[...buildingWalls(b),...interiorFurniture(b)]:[b]), ...COVERS];
+const SOLIDS: Rect[] = expansion?[...expansion.solids,...expansion.rooms.filter(()=>map!=='snow').map(b=>({id:b.id+' roof',x:b.x,z:b.z,width:b.width+1.1,depth:b.depth+1.1,yMin:b.height,yMax:b.height+.44}))]:[...BUILDINGS.flatMap(b=>b.enterable?[...buildingWalls(b),...interiorFurniture(b)]:[b]), ...COVERS];
 const collisionCellSize=8;
 const emptyCollisionCell:readonly Rect[]=[];
 let openSolids:readonly Rect[]|undefined;

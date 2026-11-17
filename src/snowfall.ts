@@ -18,7 +18,8 @@ export function createSnowfall(scene:Scene){
  system.particleTexture=RawTexture.CreateRGBATexture(pixels,size,size,scene,false,false);
  system.particleTexture.name='snowflake-32px';
  system.emitter=origin;
- system.createBoxEmitter(new Vector3(-.09,-1,.025),new Vector3(.03,-1,.075),new Vector3(-8,-1,-8),new Vector3(8,3,8));
+ const wind1=new Vector3(-.09,-1,.025),wind2=new Vector3(.03,-1,.075);
+ system.createBoxEmitter(wind1,wind2,new Vector3(-8,-1,-8),new Vector3(8,3,8));
  system.minSize=.07;system.maxSize=.20;
  system.minLifeTime=4;system.maxLifeTime=7;
  system.minEmitPower=1.1;system.maxEmitPower=1.6;
@@ -27,8 +28,8 @@ export function createSnowfall(scene:Scene){
  system.colorDead=new Color4(.9,.95,1,0);
  system.blendMode=ParticleSystem.BLENDMODE_STANDARD;
  system.updateSpeed=.02;
- let running=false,disposed=false,high=false,low=false;
- function apply(){system.emitRate=high?28:low?7:16;}
+ let running=false,disposed=false,high=false,low=false,storm=0;
+ function apply(){system.emitRate=(high?28:low?7:16)+storm*(high?72:48);wind1.set(-.09-storm*2.5,-1,.025+storm*.3);wind2.set(.03-storm*1.6,-1,.075+storm*.4);system.maxEmitPower=1.6+storm*1.8;system.maxSize=.2+storm*.08;}
  function stop(){if(running){system.stop();system.reset();running=false;}}
  apply();
  scene.onDisposeObservable.addOnce(()=>{disposed=true;running=false;});
@@ -40,6 +41,7 @@ export function createSnowfall(scene:Scene){
    if(!running){system.start();running=true;}
   },
   stop,
+  setStormIntensity(value:number){const next=Math.max(0,Math.min(1,value));if(Math.abs(next-storm)>.001){storm=next;apply();}},
   setQuality(value:boolean){high=value;apply();},
   setLow(value:boolean){low=value;apply();},
   state:()=>({running,capacity,emitRate:system.emitRate,profile:high?'high':low?'low':'medium',textureSize:size}),

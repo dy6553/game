@@ -13,11 +13,11 @@ async function runtime(saved?:unknown){
  let now=1000;const intervals=new Set<()=>void>(),pairs:any[]=[];const storage=new Map(saved?[['checkpoint',saved]]:[]);
  const source=readFileSync(new URL('../server/worker.js',import.meta.url),'utf8').split('export class Lobby')[0]!.replace(/^import .*;\r?\n/gm,'').replace('export class Room','class Room');
  const ctx={storage:{async get(k:string){return storage.get(k);},async put(k:string,v:unknown){storage.set(k,structuredClone(v));},async setAlarm(){},async delete(k:string){storage.delete(k);},async deleteAll(){storage.clear();}},blockConcurrencyWhile:async(f:()=>unknown)=>f(),waitUntil:(p:Promise<unknown>)=>p};
- class Socket {handlers:any={};messages:any[]=[];closed=false;accept(){}send(s:string){this.messages.push(JSON.parse(s));}close(){this.closed=true;this.handlers.close?.();}addEventListener(n:string,f:any){this.handlers[n]=f;}hello(token:string){this.handlers.message({data:JSON.stringify({type:'hello',token})});}}
+ class Socket {handlers:any={};messages:any[]=[];closed=false;accept(){}send(s:string){this.messages.push(JSON.parse(s));}close(){this.closed=true;this.handlers.close?.();}addEventListener(n:string,f:any){this.handlers[n]=f;}hello(token:string,layoutRevision?:string){this.handlers.message({data:JSON.stringify({type:'hello',token,layoutRevision})});}}
  const sandbox:any={createServerClock,statePacket,privatePacket,recipientState,createNetworkGame,onlinePlaying,normalizeNickname,normalizeMap,canAccessMap,MAPS,captureOfficialResult,createResultOutbox,createIdentityVerifier,Date:{now:()=>now},crypto:{randomUUID:()=>String(Math.random())},URL,Response:class{constructor(body:any,options:any){}static json(body:any,options:any){return Response.json(body,options);}},DurableObject:class{},setTimeout:()=>1,clearTimeout(){},setInterval:(f:()=>void)=>{intervals.add(f);return f;},clearInterval:(f:()=>void)=>intervals.delete(f),WebSocketPair:class{0=new Socket();1=new Socket();constructor(){pairs.push(this);}}};
  vm.runInNewContext(source+'\nglobalThis.Room=Room;',sandbox);
  const room=new sandbox.Room(ctx,{});await Promise.resolve();await Promise.resolve();
- async function connect(token:string){await room.fetch(new Request('https://room/ws',{headers:{Upgrade:'websocket'}}));const socket=pairs.at(-1)[1];socket.hello(token);return socket;}
+ async function connect(token:string,layoutRevision?:string){await room.fetch(new Request('https://room/ws',{headers:{Upgrade:'websocket'}}));const socket=pairs.at(-1)[1];socket.hello(token,layoutRevision);return socket;}
  return {room,storage,connect,advance(ms:number){now+=ms;for(const f of [...intervals])f();}};
 }
 test('one returning player cannot reset the missing opponent reconnect deadline',async()=>{
@@ -88,4 +88,16 @@ test('actual room welcome and both broadcast protocols keep team pings private',
  assert.equal(b.messages.find((m:any)=>m.type==='welcome').state.pings.length,0);
  assert.equal(c.messages.find((m:any)=>m.type==='welcome').state.pings.length,1);
  r.room.protocols.set(a,2);r.room.broadcast();assert.equal(a.messages.at(-1).ownPings.length,1);assert.equal(a.messages.at(-1).state.pings,undefined);assert.equal(b.messages.at(-1).state.pings.length,0);assert.equal(c.messages.at(-1).state.pings.length,1);
+});
+
+
+test('snow rooms reject old layout clients and accept matching igloo clients',async()=>{
+ const r=await runtime();r.room.game=createNetworkGame(undefined,'snow',{mode:'team',waitingRoom:true});r.room.game.join('a');r.room.sessions={a:'a'};
+ const old=await r.connect('a');assert.equal(old.closed,true,'old collision clients must refresh');assert.equal(old.messages.some((m:any)=>m.type==='welcome'),false);
+ const current=await r.connect('a',r.room.game.state.layoutRevision);assert.equal(current.closed,false);assert.equal(current.messages.some((m:any)=>m.type==='welcome'),true);
+});
+test('snow clients receive the same authoritative weather time in both state protocols',async()=>{
+ const r=await runtime();r.room.game=createNetworkGame(undefined,'snow',{mode:'team',waitingRoom:true});r.room.game.join('a');r.room.game.join('b');r.room.sessions={a:'a',b:'b'};
+ const revision=r.room.game.state.layoutRevision,a=await r.connect('a',revision),b=await r.connect('b',revision);r.room.protocols.set(a,2);r.room.game.startMatch('a');for(let i=0;i<20;i++)r.advance(50);
+ const sa=a.messages.filter((m:any)=>m.type==='state').at(-1).state,sb=b.messages.filter((m:any)=>m.type==='state').at(-1).state;assert.ok(sa.weatherTime>0);assert.equal(sa.weatherTime,sb.weatherTime);assert.equal(sa.layoutRevision,sb.layoutRevision);
 });

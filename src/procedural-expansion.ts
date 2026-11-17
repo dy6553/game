@@ -1,3 +1,4 @@
+import {snowShells,snowShellIds} from './igloo-layout.ts';
 import type {Scene} from '@babylonjs/core/scene.js';
 import {Mesh} from '@babylonjs/core/Meshes/mesh.js';
 import {VertexData} from '@babylonjs/core/Meshes/mesh.vertexData.js';
@@ -23,6 +24,22 @@ const color=(hex:string)=>Color3.FromHexString(hex),hash=(x:number,z:number)=>{c
 const FONT:Record<string,string>={A:'01110100011000111111100011000110001',B:'11110100011000111110100011000111110',C:'01111100001000010000100001000001111',D:'11110100011000110001100011000111110',E:'11111100001000011110100001000011111',H:'10001100011000111111100011000110001',I:'11111001000010000100001000010011111',L:'10000100001000010000100001000011111',N:'10001110011010110011100011000110001',O:'01110100011000110001100011000101110',P:'11110100011000111110100001000010000',R:'11110100011000111110101001001010001',S:'01111100001000001110000010000111110',T:'11111001000010000100001000010000100',U:'10001100011000110001100011000101110','0':'01110100011001110101110011000101110','1':'00100011000010000100001000010001110','2':'01110100010000100010001000100011111','-':'00000000000000011111000000000000000'};
 function signTexture(scene:Scene){const w=128,h=64,p=new Uint8Array(w*h*3),labels=['OBS 01','A1 LAB','A2 LAB','HAB 01','OPS 02','AIRLOCK','PAD 01','CAUTION'];labels.forEach((text,index)=>{const ox=index%2*64,oy=Math.floor(index/2)*16;for(let y=0;y<16;y++)for(let x=0;x<64;x++){const i=((h-1-oy-y)*w+ox+x)*3;p[i]=12;p[i+1]=36;p[i+2]=45;}for(let k=0;k<text.length;k++){const glyph=FONT[text[k]!]??'0'.repeat(35);for(let y=0;y<7;y++)for(let x=0;x<5;x++)if(glyph[y*5+x]==='1'){const i=((h-1-oy-4-y)*w+ox+4+k*6+x)*3;p[i]=210;p[i+1]=238;p[i+2]=226;}}});const t=RawTexture.CreateRGBTexture(p,w,h,scene,false,false,Texture.NEAREST_SAMPLINGMODE);t.name='procedural-map-signs';return t;}
 
+
+function shellFace(points:readonly (readonly number[])[],center:readonly number[],inset=1,lift=0){
+ const mid=[0,1,2].map(axis=>points.reduce((sum,p)=>sum+p[axis]!,0)/points.length);
+ const positions=points.flatMap(p=>p.map((x,axis)=>mid[axis]!+(x-mid[axis]!)*inset));let indices=[0,1,2,0,2,3],normals:number[]=[];
+ VertexData.ComputeNormals(positions,indices,normals);const toward=mid.map((x,i)=>x-center[i]!);
+ if(normals[0]!*toward[0]!+normals[1]!*toward[1]!+normals[2]!*toward[2]!<0){indices=[0,2,1,0,3,2];normals=[];VertexData.ComputeNormals(positions,indices,normals);}
+ if(lift)for(let i=0;i<positions.length;i++)positions[i]=positions[i]!+normals[i]!*lift;
+ const v=new VertexData();v.positions=positions;v.indices=indices;v.normals=normals;v.uvs=[0,0,1,0,1,1,0,1];return v;
+}
+
+export function shellGeometry(vertices:readonly (readonly number[])[]){
+ const center=[0,1,2].map(axis=>vertices.reduce((sum,p)=>sum+p[axis]!,0)/8),result=new VertexData(),positions:number[]=[],normals:number[]=[],uvs:number[]=[],indices:number[]=[];
+ for(const face of [[0,1,2,3],[4,7,6,5],[0,4,5,1],[3,2,6,7],[0,3,7,4],[1,5,6,2]]){const v=shellFace(face.map(i=>vertices[i]!),center),offset=positions.length/3;positions.push(...v.positions!);normals.push(...v.normals!);uvs.push(...v.uvs!);for(const i of v.indices!)indices.push(i+offset);}
+ result.positions=positions;result.normals=normals;result.uvs=uvs;result.indices=indices;return result;
+}
+
 export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:World,shadows?:ShadowGenerator){
  let high=false,low=false,root:TransformNode|undefined,owned:StandardMaterial[]=[],textures:RawTexture[]=[],meshes:Mesh[]=[],state:ProceduralMapState;
  const snow=map==='snow',bounds=world.PROTOTYPE;
@@ -46,10 +63,11 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
   function box(x:number,y:number,z:number,w:number,h:number,d:number,c:string,mat=0,yaw=0){add(VertexData.CreateBox({width:w,height:h,depth:d}),x,y,z,c,mat,yaw);}
   function cylinder(x:number,y:number,z:number,r:number,h:number,c:string,mat=0){add(VertexData.CreateCylinder({diameter:r*2,height:h,tessellation:profile.segments}),x,y,z,c,mat);}
   function dome(x:number,y:number,z:number,r:number,c:string){add(VertexData.CreateSphere({diameter:r*2,segments:profile.segments,slice:.5}),x,y,z,c);}
-  function label(x:number,y:number,z:number,index:number,yaw=0,pitch=0,width=3.2){const v=VertexData.CreatePlane({width,height:.8,sideOrientation:Mesh.DOUBLESIDE});const u=index%2*.5,t=Math.floor(index/2)*.25;v.uvs=v.uvs!.map((a,i)=>i%2?1-t-.25+a*.25:u+a*.5);add(v,x,y,z,'#ffffff',3,yaw,pitch);}
+  function label(x:number,y:number,z:number,index:number,yaw=0,pitch=0,width=3.2,height=.8){const v=VertexData.CreatePlane({width,height,sideOrientation:Mesh.DOUBLESIDE});const u=index%2*.5,t=Math.floor(index/2)*.25;v.uvs=v.uvs!.map((a,i)=>i%2?1-t-.25+a*.25:u+a*.5);add(v,x,y,z,'#ffffff',3,yaw,pitch);}
   const white=snow?'#d6e7ea':'#c6cfd2',dark=snow?'#284958':'#35404e',accent=snow?'#278c99':'#b79a55',warm='#e9a35d';
   // Exact shared rectangles are the visual foundation at all three levels.
   for(const r of world.worldSolids()){
+   if(snow&&(snowShellIds.has(r.id)||r.id.startsWith('igloo-pillar')))continue;
    const min=r.yMin??0,max=r.yMax??r.height??2,wall=/wall|lintel/.test(r.id),roof=r.id.endsWith(' roof'),isDark=!snow&&r.id.startsWith('Operations');
    const tint=wall?(isDark?dark:white):roof?(snow?'#edf3f1':dark):/basalt/.test(r.id)?'#555a63':/console/.test(r.id)?dark:/support/.test(r.id)?dark:accent;
    box(r.x,(min+max)/2,r.z,r.width,max-min,r.depth,tint);
@@ -70,6 +88,7 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
   }
   // Flat paths and room floors add no obstacles or different sightlines.
   for(const [i,b] of world.BUILDINGS.entries()){
+   if(snow)continue;
    box(b.x,.018,b.z,b.width-.5,.03,b.depth-.5,snow?'#708990':'#66717b');
    for(const side of [-1,1]){
     box(b.x, b.height+.48,b.z+side*(b.depth/2-.25),b.width,.06,.25,white);
@@ -98,17 +117,34 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
    add(v,0,0,0,'#ffffff',0,0,0,0,new Vector3(1,1,1),terrain?'landscape':'ground');const batch=batches.get('0:'+(terrain?'landscape':'ground'))!;batch.colors.splice(batch.colors.length-c.length,c.length,...c);
   }
   grid(false);grid(true);
-  const landmarks=snow?['observatory','mountain-ridge','research-wings']:['habitat-dome','communications-dish','landing-pad','earth'];
+  const landmarks=snow?['observatory','mountain-ridge','igloo-hub','arched-laboratories','heated-links']:['habitat-dome','communications-dish','landing-pad','earth'];
   if(snow){
    for(const side of [-1,1]){
     box(0,.012,side*28,3.4,.014,28,'#aebfc5');
     for(const x of [-1,1])box(x*1.85,.021,side*28,.08,.012,28,accent);
     if(profile.details>0)for(let i=0;i<14;i++)box((i%2?-.35:.35),.024,side*(17+i*1.6),.18,.008,.38,'#94acb5',0,side*.2);
    }
-   cylinder(0,7.65,0,6.7,.8,dark);dome(0,8.05,0,6.3,'#c7dbe1');cylinder(0,8.05,0,6.4,.12,accent);
-   box(0,12.6,0,.15,3.7,.15,dark);box(0,14.3,0,2,.12,.12,warm,1);
-   for(const side of [-1,1]){box(side*22.5,4.45,0,8,.12,6,dark);box(side*22.5,4.55,0,8,.08,6,white);}
-   for(const [i,b] of world.BUILDINGS.entries())if(i>0){cylinder(b.x,b.height+.75,0,1.3,.6,dark);dome(b.x,b.height+1.05,0,1.2,white);}
+   for(const piece of snowShells){
+    const center=[0,1,2].map(axis=>piece.vertices.reduce((sum,p)=>sum+p[axis]!,0)/8);
+    for(const face of [[0,1,2,3],[4,7,6,5],[0,4,5,1],[3,2,6,7],[0,3,7,4],[1,5,6,2]]){
+     const points=face.map(i=>piece.vertices[i]!);add(shellFace(points,center),0,0,0,'#a9c3ce');
+     if(face[0]===0&&face[1]===1)add(shellFace(points,center,.965,.012),0,0,0,'#e5edf0');
+     if(face[0]===4)add(shellFace(points,center,.97,.01),0,0,0,'#e7e5d9');
+    }
+   }
+   add(VertexData.CreateCylinder({diameter:2,height:.025,tessellation:32}),0,.008,0,'#9baaa7',0,0,0,0,new Vector3(17,1,14));
+   for(const b of world.BUILDINGS.slice(1))box(b.x,.012,0,10.4,.025,51,'#91a3a3');
+   for(const side of [-1,1]){
+    box(side*22.25,.015,0,11,.025,5.3,'#a0b1af');box(0,.015,side*17.5,6,.025,7,'#a0b1af');
+    label(0,3.5,side*21.04,0,side<0?0:Math.PI,0,2.2,.45);
+    for(const b of world.BUILDINGS.slice(1))label(b.x,3.3,side*30.96,b.x>0?1:2,side<0?0:Math.PI,0,1.8,.35);
+    // Warm opaque inlays: a light source appearance without extra dynamic lights.
+    box(0,3.25,side*14.4,4.5,.10,.12,warm,1);
+    for(const b of world.BUILDINGS.slice(1))box(b.x,5.35,side*10,.13,.10,8,warm,1);
+   }
+   for(const side of [-1,1]){cylinder(side*9,4.4,3.5,.5,8.8,dark);cylinder(side*9,2.8,3.5,.51,.14,warm,1);}
+   box(0,11.7,0,.12,1.4,.12,dark);box(0,12.35,0,1.8,.1,.1,warm,1);
+
   }else{
    const hab=world.BUILDINGS[0]!,ops=world.BUILDINGS[1]!;
    cylinder(0,.008,0,12,.014,'#4d5965');
@@ -133,7 +169,7 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
    add(earth,-94,76,135,'#ffffff',2);const eb=batches.get('2:global')!;eb.colors.splice(eb.colors.length-earth.colors.length,earth.colors.length,...earth.colors);
    const stars=quality==='low'?48:quality==='medium'?96:144;for(let i=0;i<stars;i++){const a=hash(i,11)*Math.PI*2,e=.12+hash(i,7)*1.25,r=210;const x=Math.cos(a)*Math.cos(e)*r,z=Math.sin(a)*Math.cos(e)*r,y=Math.sin(e)*r;box(x,y,z,.17,.17,.17,'#b8c7d3',2);}
   }
-  if(profile.details>0){
+  if(profile.details>0&&!snow){
    for(const b of world.BUILDINGS){const count=profile.details===2?5:2;for(let i=0;i<count;i++)box(b.x-3+i*1.5,b.height+.9,b.z+b.depth*.28,.8,.65,1.6,dark);}
    // Surface seams and roof equipment are the only additional opaque detail.
    for(const r of world.worldSolids().filter(r=>r.id.includes('wall')&&(r.yMin??0)===0)){const wide=r.width>r.depth,length=wide?r.width:r.depth;for(let i=2;i<length-1;i+=profile.details===2?2.5:5){const offset=i-length/2;box(r.x+(wide?offset:0),2.4,r.z+(wide?0:offset),wide?.035:r.width+.02,3.8,wide?r.depth+.02:.035,dark);}}

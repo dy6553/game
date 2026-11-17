@@ -1,3 +1,5 @@
+import {firstShotBox} from './combat-geometry.ts';
+import {SNOW_LAYOUT_REVISION} from './igloo-layout.ts';
 import {rangedDamage} from './weapon-range.ts';
 import {isStance,stanceStats,type Stance} from './stance.ts';
 export {normalizeNickname} from './nickname.ts';
@@ -18,7 +20,7 @@ export type Command={ping?:Pick<TeamPing,'kind'|'x'|'z'>;stance?:Stance;seq:numb
 export type ShotEvent={id:number;player:string;weapon:WeaponId;from:{x:number;y:number;z:number};to:{x:number;y:number;z:number};hit:boolean;killed:boolean;target?:string;headshot?:boolean;protected?:boolean;elevated?:boolean};
 export type OnlineMode='duel'|'ffa'|'team';
 export type NetworkOptions={clock?:()=>number;waitingRoom?:boolean;mode?:OnlineMode;randomPickups?:boolean};
-export type MatchState={pings?:TeamPing[];phase?:'waiting'|'playing';hostId?:string;mode?:OnlineMode;capacity?:number;started?:boolean;winningIds?:string[];teamScores?:number[];projectiles?:Projectile[];toolEvents?:ToolEvent[];map?:MapId;doors?:Doors;players:Player[];winner:string;tick:number;events:ShotEvent[];pickups:Pickup[]};
+export type MatchState={layoutRevision?:string;weatherTime?:number;pings?:TeamPing[];phase?:'waiting'|'playing';hostId?:string;mode?:OnlineMode;capacity?:number;started?:boolean;winningIds?:string[];teamScores?:number[];projectiles?:Projectile[];toolEvents?:ToolEvent[];map?:MapId;doors?:Doors;players:Player[];winner:string;tick:number;events:ShotEvent[];pickups:Pickup[]};
 const empty=():Command=>({seq:-1,x:0,y:0,yaw:0,pitch:0,fire:false,shot:false,reload:false,jump:false,sprint:false,scope:false});
 export function parseCommand(v:unknown,bounds:Pick<World['PROTOTYPE'],'halfWidth'|'halfDepth'|'maxZ'>=harborWorld.PROTOTYPE):Command|null{
  if(!v||typeof v!=='object')return null;const p=v as Record<string,unknown>;
@@ -66,10 +68,10 @@ function actorHit(origin:number[],direction:number[],p:Player,head=false){
  if(p.stance==='prone')return rayBox(o,d,head?[-.52,.1,1.62]:[-.55,0,0],head?[.52,.9,2.44]:[.55,1,2.5]);
  const h=stanceStats(p.stance).height;return rayBox(o,d,head?[-.52,h*.648,-.4]:[-.55,0,-.55],head?[.52,h*.976,.4]:[.55,h,.55]);
 }
-function wallDistance(origin:number[],direction:number[],doors:Doors|undefined,world:World){let result=150;
- for(const r of world.shotBoxes(doors))result=Math.min(result,rayBox(origin,direction,[r.x-r.width/2,r.yMin??0,r.z-r.depth/2],[r.x+r.width/2,r.yMax??20,r.z+r.depth/2]));
- return result;
+function wallDistance(origin:number[],direction:number[],doors:Doors|undefined,world:World){
+ const a={x:origin[0]!,y:origin[1]!,z:origin[2]!},b={x:a.x+direction[0]!*150,y:a.y+direction[1]!*150,z:a.z+direction[2]!*150};return (firstShotBox(world,doors??{},a,b)?.t??1)*150;
 }
+
 export const availablePlayer=(p:Player)=>p.connected&&!p.abandoned&&p.playing!==false&&(!p.guest||!!normalizeNickname(p.nickname));
 export function onlinePlaying(state:MatchState,id?:string){
  const me=id?state.players.find(p=>p.id===id):undefined;if(id&&(!me||!availablePlayer(me)))return false;if(state.phase==='waiting'||state.winner||state.players.filter(availablePlayer).length<((state.mode??'duel')==='duel'?2:1)||me?.playing===false||me?.abandoned)return false;
@@ -82,11 +84,13 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
  const world=mapId==='harbor'?harborWorld:createWorld(mapId);
  const state:MatchState=saved?structuredClone(saved):{players:[],winner:'',tick:0,events:[],pickups:options.randomPickups?createMatchPickups(world):createPickups()};
  if(!saved&&options.waitingRoom)state.phase='waiting';state.map=mapId;state.mode=mode;state.capacity=mode==='duel'?2:20;state.teamScores??=[0,0];state.projectiles??=[];state.toolEvents??=[];state.pickups??=createMatchPickups(world);state.doors??=world.createDoors();
+ if(mapId==='snow'){state.weatherTime??=0;state.layoutRevision=SNOW_LAYOUT_REVISION;}
  const pingAt=new Map<string,number>();state.pings=[];
  const inputs=new Map<string,{command:Command;at:number}>();let now=0,eventId=state.tick*1000;
  const id=()=>++eventId;
  const spawn=(p:Player,index:number,respawn=false)=>{const point=respawn||mode!=='duel'?world.randomOutdoorSpawn(state.players.filter(o=>o!==p&&o.health>0&&o.playing!==false)):{x:0,z:index===0?-8:18};p.x=point.x;p.z=point.z;p.y=0;p.fallSpeed=0;p.stance='stand';p.protection=respawn||mode!=='duel'?3:0;p.yaw=index===0?0:Math.PI;p.pitch=0;p.health=100;p.dead=0;p.jump=createJump();p.dash=createDash();p.weaponId=p.startWeapon;p.inventory=createInventory(p.startWeapon);p.weapon=createWeapon(WEAPONS[p.weaponId]);p.cooldown=0;p.gear=createGear();p.flash=0;p.healing=0;p.gearCooldown=0;};
  for(const p of state.players){p.connected=false;p.weapon=cancelBurst(p.weapon);p.dash=cancelDash(p.dash??createDash());p.startWeapon??=p.weaponId;p.inventory??=createInventory(p.weaponId);p.gear??=createGear();p.healing=0;p.flash??=0;p.gearCooldown??=0;p.deaths??=0;p.totalKills??=p.kills;syncSlot(p.inventory,p.weapon,p.cooldown);}
+ if(saved&&mapId==='snow'&&saved.layoutRevision!==SNOW_LAYOUT_REVISION)for(const p of state.players)if(!world.canStand(p,world.PROTOTYPE.radius,world.worldSolids()))Object.assign(p,world.randomOutdoorSpawn(state.players.filter(o=>o!==p)),{y:0,fallSpeed:0});
  function finish(winner:string,members:string[]){state.winner=winner;state.winningIds=members;for(const p of state.players)p.healing=0;}
  function scoreWin(p:Player){if(mode==='team')finish('team:'+p.team,state.players.filter(o=>o.team===p.team&&o.participated!==false).map(o=>o.id));else finish(p.id,[p.id]);}
  function hurt(target:Player,amount:number,owner:string){if(target.health<=0||(target.protection??0)>0||state.winner||target.playing===false)return;target.health=Math.max(0,target.health-amount);target.healing=0;if(target.health>0)return;target.deaths++;target.dead=3;target.dash=cancelDash(target.dash??createDash());target.gear=createGear();const killer=state.players.find(p=>p.id===owner);if(!killer||killer===target||(killer.team!==undefined&&killer.team===target.team))return;killer.kills++;killer.totalKills++;if(killer.team!==undefined){state.teamScores![killer.team]++;if(state.teamScores![killer.team]!>=30)scoreWin(killer);}else if(killer.kills>=10)scoreWin(killer);}
@@ -107,7 +111,7 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
   abandon(playerId:string){const p=state.players.find(p=>p.id===playerId);if(p){p.abandoned=true;p.connected=false;if(p.guest)delete p.nickname;p.healing=0;}inputs.delete(playerId);},
   input(playerId:string,raw:unknown){const c=parseCommand(raw,world.PROTOTYPE),p=state.players.find(p=>p.id===playerId);if(!c||!p?.connected||p.abandoned||state.phase==='waiting'||p.playing===false||p.guest&&!normalizeNickname(p.nickname)||c.seq<=Math.max(p.seq,inputs.get(playerId)?.command.seq??-1))return false;const old=inputs.get(playerId)?.command;c.shot ||=old?.shot??false;c.reload ||=old?.reload??false;c.jump ||=old?.jump??false;c.dash ||=old?.dash??false;c.door??=old?.door;c.slot??=old?.slot;if(c.pickup===undefined){c.pickup=old?.pickup;c.replace=old?.replace;}c.equipment??=old?.equipment;c.ping??=old?.ping;inputs.set(playerId,{command:c,at:options.clock?options.clock()/1000:now});return true;},
   step(){const dt=.05;now+=dt;const inputTime=options.clock?options.clock()/1000:now;state.tick++;state.pings=state.pings!.filter(p=>p.expires>state.tick);state.events=[];state.toolEvents=[];
-   if(!onlinePlaying(state)){inputs.clear();return;}state.started=true;tickPickups(state.pickups,dt);
+   if(!onlinePlaying(state)){inputs.clear();return;}state.started=true;if(mapId==='snow')state.weatherTime=(state.weatherTime??0)+dt;tickPickups(state.pickups,dt);
    for(const [index,p] of state.players.entries()){
     if(!availablePlayer(p))continue;const entry=inputs.get(p.id),c=entry&&inputTime-entry.at<.3?entry.command:empty();
     if(entry)p.seq=entry.command.seq;
