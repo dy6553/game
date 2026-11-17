@@ -12,7 +12,7 @@ export function createControlSettings(storage:Pick<Storage,'getItem'|'setItem'>|
  const defaults=()=>Object.fromEntries(Object.entries(KEY_ACTIONS).map(([k,v])=>[k,k==='jump'?jump:EQUIPMENT_KEYS[k as keyof typeof EQUIPMENT_KEYS]??v[1]])) as Record<KeyAction,string>;
  let keys=defaults(),touch:Partial<Record<TouchTarget,TouchPosition>>={},saved=true,profile=initialProfile;
  let profiles:Partial<Record<TouchProfile,Partial<Record<TouchTarget,TouchPosition>>>>={};
- const save=()=>{profiles[profile]=structuredClone(touch);try{if(!storage)throw Error();storage.setItem('harbor-controls-v1',JSON.stringify({keys,touch,touchProfiles:profiles,activeTouchProfile:profile,postureLayout:2}));saved=true;}catch{saved=false;}};
+ const save=()=>{profiles[profile]=structuredClone(touch);try{if(!storage)throw Error();storage.setItem('harbor-controls-v1',JSON.stringify({keys,touch,touchProfiles:profiles,activeTouchProfile:profile,postureLayout:2,actionSide:1}));saved=true;}catch{saved=false;}};
  const position=(id:TouchTarget,p:TouchPosition)=>{if(!(id in TOUCH_TARGETS)||!p||![p.x,p.y,p.size].every(Number.isFinite))return;touch[id]={x:Math.max(0,Math.min(100,p.x)),y:Math.max(0,Math.min(100,p.y)),size:Math.max(60,Math.min(150,p.size))};};
  function loadTouch(data:Partial<Record<TouchTarget,TouchPosition>>|undefined){touch={};for(const id of Object.keys(TOUCH_TARGETS) as TouchTarget[])if(data?.[id])position(id,data[id]!);}
  try{const data=JSON.parse(storage?.getItem('harbor-controls-v1')??'null');if(data){const candidate={...keys,...data.keys};if(Object.keys(KEY_ACTIONS).every(k=>validKey(candidate[k]))&&new Set(Object.values(candidate)).size===Object.keys(KEY_ACTIONS).length)keys=candidate;
@@ -20,7 +20,10 @@ export function createControlSettings(storage:Pick<Storage,'getItem'|'setItem'>|
   if(PROFILES.includes(data.activeTouchProfile))profile=data.activeTouchProfile;
   if(data.touchProfiles&&typeof data.touchProfiles==='object')profiles=data.touchProfiles;
   loadTouch(profiles[profile]??data.touch);
-  if(data.postureLayout!==2){for(const id of ['crouch','prone'] as const){const p=touch[id];if(p&&p.x>=25&&p.x<=75&&p.y>=20&&p.y<=70)delete touch[id];}save();}
+  let migrated=false;
+  if(data.postureLayout!==2){for(const id of ['crouch','prone'] as const){const p=touch[id];if(p&&p.x>=25&&p.x<=75&&p.y>=20&&p.y<=70)delete touch[id];}migrated=true;}
+  if(data.actionSide!==1){const mirror=(layout:Partial<Record<TouchTarget,TouchPosition>>)=>{for(const id of ['dash','crouch','prone'] as const){const p=layout[id];if(p&&Number.isFinite(p.x)&&p.x<50)layout[id]={...p,x:Math.max(0,Math.min(100,100-p.x))};}};mirror(touch);for(const layout of Object.values(profiles))if(layout&&typeof layout==='object')mirror(layout);migrated=true;}
+  if(migrated)save();
  }}catch{saved=false;}
  return {get keys(){return {...keys};},get touch(){return structuredClone(touch);},get profile(){return profile;},get saved(){return saved;},
   label(action:KeyAction){return keyLabel(keys[action]);},
