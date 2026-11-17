@@ -72,7 +72,7 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
   const white=snow?'#d6e7ea':'#c6cfd2',dark=snow?'#284958':'#35404e',accent=snow?'#278c99':'#b79a55',warm='#e9a35d';
   // Exact shared rectangles are the visual foundation at all three levels.
   for(const r of world.worldSolids()){
-   if(snow&&(snowShellIds.has(r.id)||r.id.startsWith('igloo-pillar')))continue;
+   if(snow&&(snowShellIds.has(r.id)||r.id==='igloo-central-pillar'))continue;
    const min=r.yMin??0,max=r.yMax??r.height??2,wall=/wall|lintel/.test(r.id),roof=r.id.endsWith(' roof'),isDark=!snow&&r.id.startsWith('Operations');
    const tint=wall?(isDark?dark:white):roof?(snow?'#edf3f1':dark):/basalt/.test(r.id)?'#555a63':/console|igloo-workbench/.test(r.id)?dark:/support/.test(r.id)?dark:accent;
    box(r.x,(min+max)/2,r.z,r.width,max-min,r.depth,tint);
@@ -140,13 +140,13 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
       const end=faceIndex===2?piece.vertices[0]!:piece.vertices[3]!;
       if(piece.id.startsWith('igloo-link-')||(/^igloo-entry-/.test(piece.id)&&Math.abs(Math.abs(end[2]!)-15.1)<.001)||(/laboratory entry-/.test(piece.id)&&Math.abs(Math.abs(end[2]!)-26)<.001)||(/laboratory shell-/.test(piece.id)&&Math.abs(Math.abs(end[2]!)-26)<.001))continue;
      }
-     const points=face.map(i=>piece.vertices[i]!);if((shellFaceCounts.get(shellFaceKey(points))??0)>1)continue;add(shellFace(points,center),0,0,0,'#c6d2d1');
+     const points=face.map(i=>piece.vertices[i]!);if((shellFaceCounts.get(shellFaceKey(points))??0)>1)continue;add(shellFace(points,center),0,0,0,'#c7d7e1');
      if(face[0]===0&&face[1]===1)add(shellFace(points,center,.985,.016),0,0,0,'#edf1ed');
-     if(face[0]===4)add(shellFace(points,center,.988,.016),0,0,0,'#f2e6d0');
+     if(face[0]===4)add(shellFace(points,center,.988,.016),0,0,0,'#edf3f4');
     }
    }
-   add(VertexData.CreateCylinder({diameter:2,height:.025,tessellation:32}),0,.008,0,'#a4b1ac',0,0,0,0,new Vector3(17,1,14));
-   for(const b of world.BUILDINGS.slice(1))box(b.x,.012,0,10.4,.025,51,'#91a3a3');
+   add(VertexData.CreateCylinder({diameter:2,height:.025,tessellation:32}),0,.008,0,'#d3e4ed',0,0,0,0,new Vector3(17,1,14));
+   for(const b of world.BUILDINGS.slice(1))box(b.x,.012,0,10.4,.025,51,'#c9dce4');
    for(const side of [-1,1]){
     box(side*22.25,.015,0,11,.025,5.3,'#a0b1af');box(0,.015,side*17.5,6,.025,7,'#a0b1af');
     label(0,3.5,side*21.04,0,side<0?0:Math.PI,0,2.2,.45);
@@ -162,8 +162,8 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
     const a=i/ring*Math.PI*2,x=Math.cos(a)*12.45,z=Math.sin(a)*10.3;
     box(x,7.15,z,.65,.075,.13,warm,1,-a);
    }
+   box(0,4.4,0,2.4,8.8,2.4,'#e4edf0');box(0,6.1,-1.211,2.2,.12,.02,'#56d8df',1);box(0,6.1,1.211,2.2,.12,.02,'#56d8df',1);
    for(const side of [-1,1]){
-    cylinder(side*9,4.4,3.5,.5,8.8,'#d8d6c5');cylinder(side*9,2.8,3.5,.51,.14,warm,1);
     for(const z of [-2,7]){
      box(side*6,.72,z-.616,1.9,.42,.018,'#152f3b');
      box(side*6,.75,z-.629,1.55,.22,.008,'#7bb5b7',1);

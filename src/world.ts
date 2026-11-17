@@ -15,7 +15,7 @@ const expansion=map==='snow'?iglooLayout:isExpansionMap(map)?expansionLayouts[ma
 // Exploration values only; these are not final combat balance or map dimensions.
 const PROTOTYPE = {
   halfWidth: expansion?expansion.width/2:64, halfDepth: expansion?expansion.depth/2:60, maxZ:expansion?expansion.depth/2:34, radius: 0.55, speed: 7,
-  spawn: { x: 0, z: -8 },
+  spawn: { x: map==='snow'?3:0, z: -8 },
 };
 
 const BUILDINGS: Building[] = [-19, 19].flatMap((z, row) =>

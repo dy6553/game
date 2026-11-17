@@ -585,7 +585,7 @@ async function start() {
     if(showMinimap)drawCombatMap(document.querySelector<HTMLCanvasElement>('#minimap')!,geometry,p,input.look.yaw,view.radar,pings);
     nameplates.update(onlineActive&&onlineState&&online.connected?(world.onlineNameplates?.(onlineState,onlineId)??[]):[]);refreshRoster();
   }
-  const reset = () => { position = { ...PROTOTYPE.spawn }; input.resetLook();world.resetJump(); };
+  const reset = () => { position = { ...world.geometry.PROTOTYPE.spawn }; input.resetLook();world.resetJump(); };
   document.querySelector('#reset')!.addEventListener('click', reset);
   const restart=()=>{world.setUpgradeTier?.(growthLoggedIn?currentGrowth.tier:0);const b=world.duelState();growthTicket=accountView.startGrowth(b.active?b.mode:'practice',b.mode==='survival'&&b.automatic?'auto':b.difficulty);localDash=createDash();predictionDash=predictionJump=false;resultView.hide();resultTracker.start();shownResult='';reset();world.resetPractice();lastReload=0;lastGrounded=true;lastPlayerHealth=100;lastRespawn=0;footDistance=0;footAlternating=false;emptyAt=0;lastHudKey='';noticeTime=0;hitTime=0;shotTime=0;feedbackTime=0;damageTime=0;impactTime=0;previousDamage=0;refreshHud();};
   document.querySelector('#practice-reset')!.addEventListener('click',restart);

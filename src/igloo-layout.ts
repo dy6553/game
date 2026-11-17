@@ -1,6 +1,6 @@
 import {expansionLayouts} from './expansion-layouts.ts';
 import type {Point,Rect} from './world.ts';
-export const SNOW_LAYOUT_REVISION='igloo-v2';
+export const SNOW_LAYOUT_REVISION='igloo-v3';
 export type SnowShell={id:string;vertices:readonly (readonly number[])[];room:string};
 const shells:SnowShell[]=[],solids:Rect[]=[];
 function piece(id:string,room:string,vertices:number[][]){
@@ -61,7 +61,7 @@ for(const side of [-1,1]){
 // Preserve supplies and consoles; replace rectangular shell and link posts.
 const old=expansionLayouts.snow;solids.push(...old.solids.filter(r=>!old.rooms.some(b=>r.id.startsWith(b.id))&&!r.id.startsWith('link support')));
 for(const side of [-1,1])for(const z of [-2,7])solids.push({id:`igloo-workbench-${side}-${z}`,x:side*6,z,width:2.8,depth:1.2,yMin:0,yMax:1.1});
-for(const side of [-1,1])solids.push({id:`igloo-pillar-${side}`,x:side*9,z:3.5,width:1,depth:1,yMin:0,yMax:8.8});
+solids.push({id:'igloo-central-pillar',x:0,z:0,width:2.4,depth:2.4,yMin:0,yMax:8.8});
 export const snowShells:readonly SnowShell[]=shells;
 export const iglooLayout={width:160,depth:120,rooms,solids};
 export const snowShellIds=new Set(shells.map(p=>p.id));

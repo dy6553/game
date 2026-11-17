@@ -37,3 +37,10 @@ export function weatherMessage(weather:SnowWeather|null){
  if(weather.phase==='clearing')return '폭설이 걷히고 있습니다';
  return `${weather.phase==='building'?'폭설이 강해집니다':'폭설 · 시야 제한'} · ${Math.ceil(weather.endsIn)}초 남음`;
 }
+/** Shared match-time lighting; durations are independent of the storm schedule. */
+export function snowDaylight(seconds:number,seed=1){
+ const time=Number.isFinite(seconds)?Math.max(0,seconds):0;let start=0,index=0,end=0;
+ do{start=end;end=start+40+Math.floor(random((seed>>>0)^0x61c88647,index+733)*41);index++;}while(end<=time);
+ const target=(index-1)%2,previous=1-target,progress=index===1?1:Math.min(1,(time-start)/6),smooth=progress*progress*(3-2*progress);
+ return {night:index===1?0:previous+(target-previous)*smooth,nextChange:end};
+}

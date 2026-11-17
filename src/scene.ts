@@ -1,4 +1,4 @@
-import {snowWeather,inWeatherRange,newWeatherSeed} from './snow-weather.ts';
+import {snowWeather,inWeatherRange,newWeatherSeed,snowDaylight} from './snow-weather.ts';
 import {rangedDamage} from './weapon-range.ts';
 import {viewmodelPose} from './viewmodel-motion.ts';
 import {createWayfindingSigns} from './wayfinding-signs.ts';
@@ -548,7 +548,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
         const t=Math.max(0,Math.min(1,positions[i+1]!/220));
         colors.push(.79*(1-t)+.40*t,.77*(1-t)+.58*t,.76*(1-t)+.71*t,1);
       }
-      skyDome.setVerticesData('color',colors);
+      skyDome.setVerticesData('color',colors,true);
     }
     scene.clearColor=expansion==='snow'?new Color4(.34,.48,.64,1):new Color4(.003,.005,.012,1);
     sky.intensity=expansion==='snow'?.9:.35;moon.intensity=expansion==='snow'?.8:1.2;
@@ -594,7 +594,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
 
   });
   let rangeDistance=0,rangeMoving=false,rangeTime=0;
-  function placeRange(){targets.forEach((t,i)=>{const x=rangeDistance?(i-1)*4+(rangeMoving?Math.sin(rangeTime*1.5+i)*1.4:0):t.baseX,z=rangeDistance?PROTOTYPE.spawn.z+rangeDistance:t.baseZ;t.x=x;t.z=z;t.root.position.set(x-t.baseX,0,z-t.baseZ);t.root.computeWorldMatrix(true);});}
+  function placeRange(){targets.forEach((t,i)=>{const x=rangeDistance?PROTOTYPE.spawn.x+(i-1)*4+(rangeMoving?Math.sin(rangeTime*1.5+i)*1.4:0):t.baseX,z=rangeDistance?PROTOTYPE.spawn.z+rangeDistance:t.baseZ;t.x=x;t.z=z;t.root.position.set(x-t.baseX,0,z-t.baseZ);t.root.computeWorldMatrix(true);});}
   function setPracticeRange(distance:number,moving:boolean){if(duelMode||![0,10,20,40].includes(distance))return false;rangeDistance=distance;rangeMoving=distance>0&&moving;rangeTime=0;resetPractice();return true;}
   const atmosphere:ReturnType<typeof createAtmosphere>=expansion
     ? {update(){},setQuality(){},setLow(){},meshes:[]}
@@ -603,7 +603,15 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
   const snowfall=expansion==='snow'?createSnowfall(scene):null;
   let weatherSeconds=0,weatherSeed=options.weatherSeed??newWeatherSeed();
   const weatherState=()=>expansion==='snow'?snowWeather(weatherSeconds,weatherSeed):null;
-  function applyWeather(){const weather=weatherState();if(!weather)return;const showing=!preview&&!reference;scene.fogMode=showing&&weather.intensity>.001?Scene.FOGMODE_LINEAR:Scene.FOGMODE_NONE;scene.fogColor.set(.78,.85,.88);scene.fogStart=weather.visibility*.5;scene.fogEnd=weather.visibility;snowfall?.setStormIntensity(weather.intensity);}
+  let lastSnowSky=-Infinity;
+  function applyWeather(){const weather=weatherState();if(!weather)return;const showing=!preview&&!reference;scene.fogMode=showing&&weather.intensity>.001?Scene.FOGMODE_LINEAR:Scene.FOGMODE_NONE;scene.fogColor.set(.78,.85,.88);scene.fogStart=weather.visibility*.5;scene.fogEnd=weather.visibility;snowfall?.setStormIntensity(weather.intensity);
+   const night=snowDaylight(weatherSeconds,weatherSeed).night;sky.intensity=.9-.17*night;moon.intensity=.8-.18*night;
+   if(Math.abs(weatherSeconds-lastSnowSky)>=.5||weatherSeconds<lastSnowSky){lastSnowSky=weatherSeconds;const colors:number[]=[];
+    for(let i=0;i<positions.length;i+=3){const x=positions[i]!,y=positions[i+1]!,z=positions[i+2]!,t=Math.max(0,Math.min(1,y/220)),angle=Math.atan2(z,x),band=Math.max(0,1-Math.abs(t-(.36+.08*Math.sin(angle*3)))/.17)*night;
+     colors.push((.79*(1-t)+.40*t)*(1-night)+(.21*(1-t)+.025*t)*night+band*.02,(.77*(1-t)+.58*t)*(1-night)+(.30*(1-t)+.08*t)*night+band*.25,(.76*(1-t)+.71*t)*(1-night)+(.48*(1-t)+.21*t)*night+band*.10,1);
+    }skyDome.updateVerticesData('color',colors);
+   }
+  }
   const botFlashes=new Map<string,number>();
   let botDifficulty:SurvivalDifficulty='easy';const fixedDifficulty=()=>botDifficulty==='auto'?'normal':botDifficulty;const environment={doors,randomSpawns:options.randomSpawns!==false,canDetect:(from:Point,to:Point)=>inWeatherRange(options.map,weatherSeconds,from,to,weatherSeed)};let duel=createDuel(fixedDifficulty(),environment.randomSpawns?randomOutdoorSpawn([PROTOTYPE.spawn]):{x:0,z:18},undefined,environment),ffa=createBotMatch(fixedDifficulty(),environment),survival=createSurvivalMatch(botDifficulty,undefined,environment),duelMode=false,ffaMode=false,survivalMode=false;
   function battleState(){if(survivalMode)return survival.state();if(ffaMode)return ffa.state();const state=duel.state();return {...state,mode:'duel' as const,winnerName:state.winner==='player'?'나':'봇',bots:[] as ReturnType<typeof ffa.state>['bots']};}
