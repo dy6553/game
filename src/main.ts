@@ -69,7 +69,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <div id="game-toolbar" class="toolbar" aria-label="화면 설정">
       <button id="home-open">홈으로</button><button id="online-copy" hidden>초대 링크 복사</button><button id="character-open">캐릭터 선택</button>
       <button id="pause-open">일시정지</button><button id="pointer-lock" class="mouse-only">마우스 고정</button>
-      <button id="reset">출발점</button>
+      <button id="perspective-toggle" type="button" aria-pressed="false">3인칭 · V</button><button id="reset">출발점</button>
       <button id="practice-reset">다시 시작</button>
       <select id="game-mode" aria-label="게임 모드"><option value="duel">봇 1대1</option><option value="ffa">봇 3명 개인전</option><option value="survival">웨이브 생존</option><option value="practice">표적 연습</option></select>
       <label id="bot-difficulty-setting">봇 난이도<select id="bot-difficulty" aria-label="봇 난이도, 변경 시 새 경기"><option value="easy">쉬움</option><option value="normal">보통</option><option value="hard">어려움</option><option value="auto" disabled hidden>자동 · 생존 9단계</option></select></label>
@@ -437,7 +437,7 @@ async function start() {
     mouseLockFallback=false;requestGameplayMouseLock();
   };
   startButton.addEventListener('click',beginGame);
-  function switchMap(map:MapId,type=world.characterType){if(map===selectedMap)return;world.scene.dispose();world=createHarborScene(engine,{map,mapArtSource:harborArtSource});selectedMap=map;world.selectCharacter(type);applyGraphicsProfile(qualityHigh,graphicsMode==='low'||graphicsMode==='auto'&&budget.density<=.85);world.setShadows?.(preferences.value.shadows);world.setSnowfall(preferences.value.snowfall);world.setReducedShots?.(reducedShots);world.setCombatEffects(preferences.value.combatEffects);world.setShake(shake.value==='off'||shake.value==='normal'?shake.value:'low');world.setMotionReduced(reducedLobbyMotion.matches);world.setPreview(true,true);}
+  function switchMap(map:MapId,type=world.characterType){if(map===selectedMap)return;const third=world.thirdPerson;world.scene.dispose();world=createHarborScene(engine,{map,mapArtSource:harborArtSource});if(third)world.togglePerspective();selectedMap=map;world.selectCharacter(type);applyGraphicsProfile(qualityHigh,graphicsMode==='low'||graphicsMode==='auto'&&budget.density<=.85);world.setShadows?.(preferences.value.shadows);world.setSnowfall(preferences.value.snowfall);world.setReducedShots?.(reducedShots);world.setCombatEffects(preferences.value.combatEffects);world.setShake(shake.value==='off'||shake.value==='normal'?shake.value:'low');world.setMotionReduced(reducedLobbyMotion.matches);world.setPreview(true,true);}
   const homeView=createHomeScreen({
     selectCharacter(type){world.selectCharacter(type);refreshCharacter();lobbyCue('ui');if(!reducedLobbyMotion.matches)document.querySelector('#home-character-name')?.animate?.([{opacity:.3},{opacity:1}],{duration:180});},
     selectWeapon(id){world.setLobbyWeapon(id);lobbyCue('ui');if(!reducedLobbyMotion.matches)document.querySelector('#home-equipped-art')?.animate?.([{opacity:.3,transform:'translateX(-6px)'},{opacity:1,transform:'translateX(0)'}],{duration:180});},
@@ -470,7 +470,7 @@ async function start() {
   let position:Point = { ...PROTOTYPE.spawn };
   const zone = document.querySelector('#zone')!;
   const hits = document.querySelector('#hits')!;
-  const crosshair = document.querySelector('.crosshair')!;
+  const crosshair = document.querySelector<HTMLElement>('.crosshair')!;
   const shotFeedback=document.querySelector<HTMLElement>('#shot-feedback')!;
   function showHitFeedback(hit:Parameters<typeof hitFeedback>[0]){const f=hitFeedback(hit),marker=document.querySelector<HTMLElement>('#impact-marker')!;shotFeedback.textContent=f.text;shotFeedback.dataset.kind=f.kind;marker.dataset.kind=f.kind;marker.textContent=f.kind==='protected'?'◇':f.kind==='head'?'✳':'×';marker.classList.toggle('kill',!!hit.killed&&!hit.protected);}
 
@@ -569,6 +569,7 @@ async function start() {
     document.querySelector<HTMLElement>('#combat-map')!.hidden=!active||!showMinimap;
     const weatherNotice=document.querySelector<HTMLElement>('#weather-notice')!;if(!active)weatherNotice.hidden=true;
     const card=document.querySelector<HTMLElement>('#target-vitals')!;if(!active){card.hidden=true;nameplates.clear();document.querySelector<HTMLElement>('#match-roster')!.hidden=true;return;}if(now-combatHudAt<100)return;combatHudAt=now;
+    const reticle=world.aimReticle();crosshair.style.left=reticle.x+'%';crosshair.style.top=reticle.y+'%';
     const battle=world.duelState(),me=onlineActive?onlineState?.players.find(p=>p.id===onlineId):undefined,health=me?.health??(battle.active?battle.playerHealth:readGear().health),p=me?{...me,y:(me.y??0)+me.jump.height}:{...position,y:(position.y??0)+(world.practiceState().jumpHeight??0)},geometry=world.geometry??harborWorld,doors=(onlineActive?onlineState?.doors:world.doorState?.())??{};
     document.querySelector('#combat-hp')!.textContent=String(Math.ceil(health));document.querySelector<HTMLProgressElement>('#combat-hp-bar')!.value=health;document.querySelector('#combat-vitals')!.classList.toggle('critical',health<=25);
     document.querySelector('#combat-life')!.textContent=health===0?'쓰러짐 · 부활 대기':(me?.protection??battle.protection??0)>0?'부활 보호 중':battle.active&&battle.mode==='survival'?`남은 생명 ${battle.lives}`:'피격 시 엄폐 · H 회복';
@@ -617,6 +618,10 @@ async function start() {
     retry(isOnline){if(isOnline){openHome();openOnlineLobby();}else{restart();resumeGame();requestGameplayMouseLock();}},
   });
   document.querySelector('#home-records')!.addEventListener('click',()=>resultView.history());
+  const perspectiveButton=document.querySelector<HTMLButtonElement>('#perspective-toggle')!;
+  function togglePerspective(){if(!canUseInventory())return;const third=world.togglePerspective();perspectiveButton.textContent=third?'1인칭 · V':'3인칭 · V';perspectiveButton.setAttribute('aria-pressed',String(third));canvas.focus();}
+  perspectiveButton.addEventListener('click',()=>{closeMenu();togglePerspective();});
+  window.addEventListener('keydown',event=>{if(controls.mapCode(event.code)==='KeyV'&&!event.repeat&&!event.ctrlKey&&!event.altKey&&!event.metaKey&&!['INPUT','SELECT','TEXTAREA'].includes((event.target as HTMLElement|null)?.tagName??'')){event.preventDefault();togglePerspective();}});
   function toggleScope(){
     if(!canUseInventory())return;
     if(onlineActive&&onlineState){const me=onlineState.players.find(p=>p.id===onlineId);if(!me||me.health===0||onlineState.winner||!onlinePlaying(onlineState,onlineId)||!online.connected)return;}

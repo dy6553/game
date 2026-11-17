@@ -9,7 +9,7 @@ import {createProceduralExpansion,shellGeometry} from './procedural-expansion.ts
 import {createExpansionMapArt,type ExpansionArtSource} from './expansion-map-art.ts';
 import {isExpansionMap} from './maps.ts';
 import {createSnowfall} from './snowfall.ts';
-import {unobstructed,firstShotBox} from './combat-geometry.ts';
+import {unobstructed,firstShotBox,boxHit} from './combat-geometry.ts';
 import {playerName} from './nickname.ts';
 import type {Sound} from './audio.ts';
 import {createMatchPickups} from './match-pickups.ts';
@@ -474,6 +474,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
     character = createCharacter(scene, player, type);lobbyWeapons.attach(character.weaponSocket);
     for (const mesh of character.meshes) shadows.addShadowCaster(mesh);
   }
+  let thirdPerson=false;const aimOrigin=new Vector3();
   const viewModel = new TransformNode('first-person-hands', scene);
   viewModel.parent = camera;
   const gun = box('view-gun', 0.27, -0.255, 0.65, 0.12, 0.09, 0.4, metal); gun.parent = viewModel;
@@ -684,7 +685,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
   }
   function setPreview(value: boolean,lobby=false) {
     if(value)snowfall?.stop();
-    lobbyPreview=value&&lobby;lobbyYaw=0;lobbyTime=0;character.poseLobby(lobbyPreview,0,lobbyWeaponId!=='pistol');lobbyWeapons.show(lobbyWeaponId,lobbyPreview);
+    character.root.scaling.y=1;lobbyPreview=value&&lobby;lobbyYaw=0;lobbyTime=0;character.poseLobby(lobbyPreview,0,lobbyWeaponId!=='pistol');lobbyWeapons.show(lobbyWeaponId,lobbyPreview);
     effects.clear();botEffects.clear();robotImpact.clearParticles();for(const rig of botRigs.slice(1))rig.fx.clearParticles();recoil.clear();reference=false;preview = value;plinth.setEnabled(value); player.setEnabled(value); viewModel.setEnabled(!value);
     camera.fov=value?(lobbyPreview?.65:.85):1.25;camera.getProjectionMatrix(true);
     previewLight.setEnabled(value);
@@ -775,7 +776,11 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
       camera.setTarget(new Vector3(displayPoint.x+(lobbyPreview?0:1.25),lobbyPreview?1.4:1.35,displayPoint.z));
     } else {
       camera.position.set(p.x,(stanceStats(stance).eye-(character.type==='robot-cat'?.05:0))+(p.y??0)+jumpState.height,p.z);
-      camera.fov=(scoped?.38:1.25)+(reducedShots?0:kick.fov);viewModel.setEnabled(!scoped);
+      aimOrigin.copyFrom(camera.position);
+      const third=thirdPerson&&!scoped;
+      if(third){const direction=new Vector3(Math.sin(look.yaw)*Math.cos(look.pitch),-Math.sin(look.pitch),Math.cos(look.yaw)*Math.cos(look.pitch)),desired=aimOrigin.subtract(direction.scale(4)).add(new Vector3(Math.cos(look.yaw)*.65,.6,-Math.sin(look.yaw)*.65));let stop=1;for(const solid of geometry.shotBoxes(doors))stop=Math.min(stop,boxHit(aimOrigin,desired,solid,.18)?.t??1);const distance=Math.max(0,Math.min(4,stop*4-.15));camera.position.copyFrom(Vector3.Lerp(aimOrigin,desired,distance/4));player.setEnabled(distance>1);viewModel.setEnabled(false);character.poseLobby(true,0,weaponId!=='pistol');character.root.scaling.y=stanceStats(stance).height/2.5;lobbyWeapons.show(weaponId,distance>1);for(const mesh of character.meshes)mesh.isPickable=false;
+      }else{player.setEnabled(false);character.poseLobby(false);character.root.scaling.y=1;lobbyWeapons.show(weaponId,false);viewModel.setEnabled(!scoped);}
+      camera.fov=(scoped?.38:1.25)+(reducedShots?0:kick.fov);
       camera.rotation.set(look.pitch, look.yaw, reducedShots?0:kick.roll);
     }
     launcher.setEnabled(weaponId==='bazooka');launcherRim.setEnabled(weaponId==='bazooka');muzzle.setEnabled(weaponId!=='bazooka');muzzleInset.setEnabled(weaponId!=='bazooka');
@@ -794,23 +799,23 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
     if(!continued&&cooldown>1e-8)return {fired:false,hit:false,reason:'cooldown'};
     const attempt=tryFire(weapon);weapon=attempt.state;
     if(!attempt.fired)return {fired:false,hit:false,reason:attempt.reason};
-    if(camera.position.y-stanceStats(stance).eye-jumpState.height>=3.35&&highShotNotices.length<8)highShotNotices.push('고층 사격 · 내 위치가 4초간 노출됩니다');
+    if(aimOrigin.y-stanceStats(stance).eye-jumpState.height>=3.35&&highShotNotices.length<8)highShotNotices.push('고층 사격 · 내 위치가 4초간 노출됩니다');
     (survivalMode?survival:ffaMode?ffa:duel).playerFired();localActor.healing=0;shots++;recoil.fire(weaponId);if(!continued){cooldown=Math.max(0,spec.interval-(spec.automatic?(weapon.cadenceCarry??0):0));weapon=startBurst(weapon,spec);}
-    if(weaponId==='bazooka'){launchRocket({...localActor,x:camera.position.x,y:camera.position.y-stanceStats(stance).eye,stance,z:camera.position.z,jump:{height:0},yaw:camera.rotation.y,pitch:camera.rotation.x},localProjectiles,++toolSequence,spec.damage);return {fired:true,hit:false,eliminated:false,damage:0,impact:false,point:camera.position.clone()};}
+    if(weaponId==='bazooka'){launchRocket({...localActor,x:aimOrigin.x,y:aimOrigin.y-stanceStats(stance).eye,stance,z:aimOrigin.z,jump:{height:0},yaw:camera.rotation.y,pitch:camera.rotation.x},localProjectiles,++toolSequence,spec.damage);return {fired:true,hit:false,eliminated:false,damage:0,impact:false,point:aimOrigin.clone()};}
     let anyHeadshot=false,anyHit=false,anyEliminated=false,impact=false,totalDamage=0;
-    let lastPoint=camera.position.clone();
+    let lastPoint=aimOrigin.clone();
     const offsets=pelletOffsets(spec);
     for(let pellet=0;pellet<offsets.length;pellet++){
     const offset=offsets[pellet]!;
     const direction = camera.getDirection(Vector3.Forward()).add(camera.getDirection(Vector3.Right()).scale(offset.x)).add(camera.getDirection(Vector3.Up()).scale(offset.y)).normalize();
-    const ray = new Ray(camera.position.clone(), direction, 150);
+    const ray = new Ray(aimOrigin.clone(), direction, 150);
     const pick = scene.pickWithRay(ray, mesh => mesh.isPickable && mesh.isEnabled());
-    const end = pick?.pickedPoint ?? camera.position.add(direction.scale(150));
+    const end = pick?.pickedPoint ?? aimOrigin.add(direction.scale(150));
     muzzleInset.computeWorldMatrix(true);
-    let start=muzzleInset.getAbsolutePosition().clone();
-    const originDirection=start.subtract(camera.position),originDistance=originDirection.length();
+    let start=thirdPerson&&!scoped?aimOrigin.clone():muzzleInset.getAbsolutePosition().clone();
+    const originDirection=start.subtract(aimOrigin),originDistance=originDirection.length();
     if(originDistance>0.001){
-      const blockedOrigin=scene.pickWithRay(new Ray(camera.position.clone(),originDirection.scale(1/originDistance),originDistance),mesh=>mesh.isPickable&&mesh.isEnabled());
+      const blockedOrigin=scene.pickWithRay(new Ray(aimOrigin.clone(),originDirection.scale(1/originDistance),originDistance),mesh=>mesh.isPickable&&mesh.isEnabled());
       if(blockedOrigin?.pickedPoint)start=blockedOrigin.pickedPoint.subtract(originDirection.scale(0.03/originDistance));
     }
     const hit = duelMode ? pick?.pickedMesh?.metadata?.opponent === true : pick?.pickedMesh?.metadata?.practiceTarget === true;
@@ -890,9 +895,11 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
   return {
     geometry,weatherState,mapArtState:()=>proceduralArt?.state()??null,
     get scoped(){return scoped;},
+    get thirdPerson(){return thirdPerson;},
+    aimReticle(){if(!thirdPerson||scoped||preview||reference)return {x:50,y:50};const direction=camera.getDirection(Vector3.Forward()),pick=scene.pickWithRay(new Ray(aimOrigin.clone(),direction,150),m=>m.isPickable&&m.isEnabled());const end=pick?.pickedPoint??aimOrigin.add(direction.scale(150)),viewport=camera.viewport.toGlobal(engine.getRenderWidth(),engine.getRenderHeight()),v=Vector3.Project(end,Matrix.Identity(),camera.getViewMatrix().multiply(camera.getProjectionMatrix()),viewport);return {x:Math.max(0,Math.min(100,v.x/engine.getRenderWidth()*100)),y:Math.max(0,Math.min(100,v.y/engine.getRenderHeight()*100))};},togglePerspective(){thirdPerson=!thirdPerson;return thirdPerson;},
     targetContacts:()=>targets.map((t,i)=>({id:'target-'+i,name:'표적 '+(i+1),x:t.x,z:t.z,y:0,health:t.health})),
     gearState:()=>({gear:{...localActor.gear},health:localActor.health,flash:localActor.flash,healing:localActor.healing,cooldown:localActor.gearCooldown}),
-    useEquipment(kind:EquipmentId,p:Point,look:Look){if(preview||reference||battleState().winner)return false;Object.assign(localActor,{stance,jump:jumpState,x:p.x,y:p.y??0,z:p.z,yaw:look.yaw,pitch:look.pitch,health:battleState().playerHealth});const ok=useEquipment(localActor,kind,localProjectiles,++toolSequence);if(ok&&kind!=='medkit')if(camera.position.y-stanceStats(stance).eye-jumpState.height>=3.35&&highShotNotices.length<8)highShotNotices.push('고층 사격 · 내 위치가 4초간 노출됩니다');
+    useEquipment(kind:EquipmentId,p:Point,look:Look){if(preview||reference||battleState().winner)return false;Object.assign(localActor,{stance,jump:jumpState,x:p.x,y:p.y??0,z:p.z,yaw:look.yaw,pitch:look.pitch,health:battleState().playerHealth});const ok=useEquipment(localActor,kind,localProjectiles,++toolSequence);if(ok&&kind!=='medkit')if(aimOrigin.y-stanceStats(stance).eye-jumpState.height>=3.35&&highShotNotices.length<8)highShotNotices.push('고층 사격 · 내 위치가 4초간 노출됩니다');
     (survivalMode?survival:ffaMode?ffa:duel).playerFired();return ok;},
     setUpgradeTier(tier:number){upgradeTier=Number.isInteger(tier)?Math.max(0,Math.min(3,tier)):0;spec=localSpec(weaponId);},
     doorState:()=>doors,
