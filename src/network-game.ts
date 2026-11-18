@@ -1,3 +1,4 @@
+import {advanceWildlife,collectMeat,createWildlife,hurtWildlife,wildlifeBlastTargets,wildlifeHit,type Animal} from './wildlife.ts';
 import {newWeatherSeed} from './snow-weather.ts';
 import {firstShotBox} from './combat-geometry.ts';
 import {SNOW_LAYOUT_REVISION} from './igloo-layout.ts';
@@ -21,7 +22,7 @@ export type Command={ping?:Pick<TeamPing,'kind'|'x'|'z'>;stance?:Stance;seq:numb
 export type ShotEvent={id:number;player:string;weapon:WeaponId;from:{x:number;y:number;z:number};to:{x:number;y:number;z:number};hit:boolean;killed:boolean;target?:string;headshot?:boolean;protected?:boolean;elevated?:boolean};
 export type OnlineMode='duel'|'ffa'|'team';
 export type NetworkOptions={clock?:()=>number;waitingRoom?:boolean;mode?:OnlineMode;randomPickups?:boolean};
-export type MatchState={layoutRevision?:string;weatherTime?:number;weatherSeed?:number;pings?:TeamPing[];phase?:'waiting'|'playing';hostId?:string;mode?:OnlineMode;capacity?:number;started?:boolean;winningIds?:string[];teamScores?:number[];projectiles?:Projectile[];toolEvents?:ToolEvent[];map?:MapId;doors?:Doors;players:Player[];winner:string;tick:number;events:ShotEvent[];pickups:Pickup[]};
+export type MatchState={animals?:Animal[];layoutRevision?:string;weatherTime?:number;weatherSeed?:number;pings?:TeamPing[];phase?:'waiting'|'playing';hostId?:string;mode?:OnlineMode;capacity?:number;started?:boolean;winningIds?:string[];teamScores?:number[];projectiles?:Projectile[];toolEvents?:ToolEvent[];map?:MapId;doors?:Doors;players:Player[];winner:string;tick:number;events:ShotEvent[];pickups:Pickup[]};
 const empty=():Command=>({seq:-1,x:0,y:0,yaw:0,pitch:0,fire:false,shot:false,reload:false,jump:false,sprint:false,scope:false});
 export function parseCommand(v:unknown,bounds:Pick<World['PROTOTYPE'],'halfWidth'|'halfDepth'|'maxZ'>=harborWorld.PROTOTYPE):Command|null{
  if(!v||typeof v!=='object')return null;const p=v as Record<string,unknown>;
@@ -85,7 +86,7 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
  const world=mapId==='harbor'?harborWorld:createWorld(mapId);
  const state:MatchState=saved?structuredClone(saved):{players:[],winner:'',tick:0,events:[],pickups:options.randomPickups?createMatchPickups(world):createPickups()};
  if(!saved&&options.waitingRoom)state.phase='waiting';state.map=mapId;state.mode=mode;state.capacity=mode==='duel'?2:20;state.teamScores??=[0,0];state.projectiles??=[];state.toolEvents??=[];state.pickups??=createMatchPickups(world);state.doors??=world.createDoors();
- if(mapId==='snow'){state.weatherTime??=0;state.weatherSeed??=newWeatherSeed();state.layoutRevision=SNOW_LAYOUT_REVISION;}
+ if(mapId==='snow'){state.animals??=createWildlife();state.weatherTime??=0;state.weatherSeed??=newWeatherSeed();state.layoutRevision=SNOW_LAYOUT_REVISION;}
  const pingAt=new Map<string,number>();state.pings=[];
  const inputs=new Map<string,{command:Command;at:number}>();let now=0,eventId=state.tick*1000;
  const id=()=>++eventId;
@@ -112,7 +113,10 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
   abandon(playerId:string){const p=state.players.find(p=>p.id===playerId);if(p){p.abandoned=true;p.connected=false;if(p.guest)delete p.nickname;p.healing=0;}inputs.delete(playerId);},
   input(playerId:string,raw:unknown){const c=parseCommand(raw,world.PROTOTYPE),p=state.players.find(p=>p.id===playerId);if(!c||!p?.connected||p.abandoned||state.phase==='waiting'||p.playing===false||p.guest&&!normalizeNickname(p.nickname)||c.seq<=Math.max(p.seq,inputs.get(playerId)?.command.seq??-1))return false;const old=inputs.get(playerId)?.command;c.shot ||=old?.shot??false;c.reload ||=old?.reload??false;c.jump ||=old?.jump??false;c.dash ||=old?.dash??false;c.door??=old?.door;c.slot??=old?.slot;if(c.pickup===undefined){c.pickup=old?.pickup;c.replace=old?.replace;}c.equipment??=old?.equipment;c.ping??=old?.ping;inputs.set(playerId,{command:c,at:options.clock?options.clock()/1000:now});return true;},
   step(){const dt=.05;now+=dt;const inputTime=options.clock?options.clock()/1000:now;state.tick++;state.pings=state.pings!.filter(p=>p.expires>state.tick);state.events=[];state.toolEvents=[];
-   if(!onlinePlaying(state)){inputs.clear();return;}state.started=true;if(mapId==='snow')state.weatherTime=(state.weatherTime??0)+dt;tickPickups(state.pickups,dt);
+   if(!onlinePlaying(state)){inputs.clear();return;}state.started=true;if(mapId==='snow')state.weatherTime=(state.weatherTime??0)+dt;
+   const wildlifeTime=state.weatherTime??0;
+   if(state.animals)advanceWildlife(state.animals,wildlifeTime);
+   tickPickups(state.pickups,dt);
    for(const [index,p] of state.players.entries()){
     if(!availablePlayer(p))continue;const entry=inputs.get(p.id),c=entry&&inputTime-entry.at<.3?entry.command:empty();
     if(entry)p.seq=entry.command.seq;
@@ -122,14 +126,40 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
     syncSlot(p.inventory,p.weapon,p.cooldown);advanceStowed(p.inventory,dt,true);if(c.slot!==undefined)switchSlot(p.inventory,c.slot);if(c.pickup){const pickup=state.pickups.find(x=>x.id===c.pickup);if(pickup?.equipmentId)takeEquipmentPickup(p.gear,p,state.pickups,c.pickup);else takePickup(p.inventory,p,state.pickups,c.pickup,c.replace);}
     const slot=p.inventory.slots[p.inventory.active]!;p.weaponId=slot.id;p.weapon=slot.weapon;p.cooldown=slot.cooldown;const spec=WEAPONS[p.weaponId];if(c.reload){const next=beginReload(p.weapon,spec);if(next!==p.weapon)p.weapon=cancelBurst(next);}if(c.equipment)useEquipment(p,c.equipment,state.projectiles!,id());
     c.stance??=p.stance??'stand';p.stance=c.stance;const sequence=advanceBurst(p.weapon,dt);p.weapon=sequence.state;Object.assign(p,advancePlayerMotion(p,c,dt,state.doors,world));
+    if(state.animals){
+      const recovered=collectMeat(state.animals,{x:p.x,z:p.z,y:(p.y??0)+p.jump.height},p.health,world,state.doors!);
+      if(recovered){
+        p.health+=recovered;
+        state.toolEvents.push({id:id(),kind:'heal',owner:p.id,x:p.x,y:(p.y??0)+1,z:p.z});
+      }
+    }
     if(sequence.due>0||((c.shot||(c.fire&&spec.automatic))&&p.cooldown<1e-8)){const attempt=tryFire(p.weapon);p.weapon=attempt.state;if(attempt.fired){if((p.y??0)>=3.35)p.revealedUntil=state.tick+80;p.healing=0;p.protection=0;if(!sequence.due){p.cooldown=Math.max(0,spec.interval-(spec.automatic?(p.weapon.cadenceCarry??0):0));p.weapon=startBurst(p.weapon,spec);}const origin=[p.x,(stanceStats(p.stance).eye-(p.character==='robot-cat'?.05:0))+(p.y??0)+p.jump.height,p.z];
      if(p.weaponId==='bazooka'){launchRocket(p,state.projectiles!,id(),spec.damage);state.events.push({elevated:(p.y??0)>=3.35,id:id(),player:p.id,weapon:p.weaponId,from:{x:origin[0]!,y:origin[1]!,z:origin[2]!},to:{x:p.x+Math.sin(p.yaw)*2,y:origin[1]!-Math.sin(p.pitch)*2,z:p.z+Math.cos(p.yaw)*2},hit:false,killed:false});}else for(const offset of pelletOffsets(spec)){const sy=Math.sin(p.yaw),cy=Math.cos(p.yaw),sp=Math.sin(p.pitch),cp=Math.cos(p.pitch);let d=[sy*cp+cy*offset.x+sy*sp*offset.y,-sp+cp*offset.y,cy*cp-sy*offset.x+cy*sp*offset.y];const len=Math.hypot(...d);d=d.map(v=>v/len);const wall=wallDistance(origin,d,state.doors,world);let target:Player|undefined,range=wall;
       for(const foe of state.players){if(foe===p||foe.health<=0||!availablePlayer(foe))continue;const t=actorHit(origin,d,foe);if(t<range){range=t;target=foe;}}
+      const from={x:origin[0]!,y:origin[1]!,z:origin[2]!};
+      const direction={x:d[0]!,y:d[1]!,z:d[2]!};
+      const animalHit=state.animals && wildlifeHit(state.animals,wildlifeTime,from,direction,range);
+      if(animalHit && state.animals){
+        range=animalHit.distance;
+        hurtWildlife(state.animals,animalHit.index,rangedDamage(p.weaponId,spec.damage,range),wildlifeTime);
+        state.events.push({id:id(),player:p.id,weapon:p.weaponId,from,to:{x:from.x+direction.x*range,y:from.y+direction.y*range,z:from.z+direction.z*range},target:'wildlife-'+animalHit.index,hit:true,killed:state.animals[animalHit.index]!.health===0});
+        continue;
+      }
       const hit=!!target&&(target.protection??0)<=0&&(p.team===undefined||target.team!==p.team);const headDistance=target?actorHit(origin,d,target,true):Infinity;const headshot=!!hit&&headDistance<wall;const before=target?.deaths??0;if(hit)hurt(target!,rangedDamage(p.weaponId,spec.damage,range)*(headshot?1.5:1),p.id);state.events.push({elevated:(p.y??0)>=3.35,id:id(),player:p.id,weapon:p.weaponId,from:{x:origin[0]!,y:origin[1]!,z:origin[2]!},to:{x:origin[0]!+d[0]!*range,y:origin[1]!+d[1]!*range,z:origin[2]!+d[2]!*range},hit,killed:hit&&target!.deaths>before,target:target?.id,headshot,protected:!!target&&(target.protection??0)>0&&(p.team===undefined||target.team!==p.team)});if(state.winner)break;
      }
     }}syncSlot(p.inventory,p.weapon,p.cooldown);c.door=undefined;c.shot=false;c.reload=false;c.jump=false;c.dash=false;c.slot=undefined;c.pickup=undefined;c.replace=undefined;c.equipment=undefined;if(state.winner)break;
    }
-   if(!state.winner)state.toolEvents=advanceEquipment(state.players.filter(availablePlayer),state.projectiles!,dt,world,state.doors!,(target,amount,owner)=>hurt(target as Player,amount,owner),id);
+   if(!state.winner){
+    const blastTargets=state.projectiles!.length?wildlifeBlastTargets(state.animals,wildlifeTime):[];
+    const actors=[...state.players.filter(availablePlayer),...blastTargets];
+    state.toolEvents.push(...advanceEquipment(actors,state.projectiles!,dt,world,state.doors!,(target,amount,owner)=>{
+      if(target.wildlifeBounds&&state.animals){
+        const index=Number(target.id.slice('wildlife-'.length));
+        hurtWildlife(state.animals,index,amount,wildlifeTime);
+        target.health=state.animals[index]!.health;
+      }else hurt(target as Player,amount,owner);
+    },id));
+   }
   },
  };
  return api;
