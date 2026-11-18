@@ -37,3 +37,31 @@ test('shared geometry keeps per-player hit materials independent and templates c
   assert.equal(scene.geometries.length,before,'cached geometries are released after the final actor');
  }finally{factory.clear();scene.dispose();engine.dispose();}
 });
+
+test('crouch and prone retain limb dimensions locally and share posed geometry online',()=>{
+ const engine=new NullEngine(),scene=new Scene(engine),factory=createRemoteModels(scene);
+ try{
+  const parent=new TransformNode('actor',scene);
+  const local=createCharacter(scene,parent,'robot');
+  const head=local.meshes.find(m=>m.name==='robot-head');
+  assert.ok(head);
+  head.computeWorldMatrix(true);
+  const standingHeight=head.getAbsolutePosition().y;
+  for(const stance of ['crouch','prone'] as const){
+   local.poseStance(stance);
+   head.computeWorldMatrix(true);
+   assert.ok(head.getAbsolutePosition().y<standingHeight-.6);
+   for(const mesh of local.meshes){
+    mesh.computeWorldMatrix(true);
+    assert.ok(Math.abs(Vector3.TransformNormal(Vector3.Up(),mesh.getWorldMatrix()).length()-1)<.001);
+   }
+  }
+  const a=factory.create(parent,'robot',true),b=factory.create(parent,'robot',true);
+  const standing=a.meshes[0]!.geometry;
+  a.poseStance('crouch');b.poseStance('crouch');
+  assert.notEqual(a.meshes[0]!.geometry,standing);
+  assert.equal(a.meshes[0]!.geometry,b.meshes[0]!.geometry);
+  a.poseStance('stand');
+  assert.equal(a.meshes[0]!.geometry,standing);
+ }finally{factory.clear();scene.dispose();engine.dispose();}
+});

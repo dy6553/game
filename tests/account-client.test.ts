@@ -33,3 +33,16 @@ test('a valid session JWT remains usable when the SDK returns cached session dat
  const a=createAccount(sdk,async(_url,options)=>{assert.equal(options.headers.Authorization,'Bearer signed.jwt.value');return Response.json({id:'public',nickname:'대원닉네임',played:0,wins:0,recent:[]});},'https://game');
  await a.signIn('test@example.com','password');assert.equal(a.profile?.nickname,'대원닉네임');assert.equal(calls,0);
 });
+
+test('startup bypasses the empty session cache and shares an in-flight profile restore',async()=>{
+ let sessionReads=0,profileReads=0;
+ const sdk={
+  async getSession(options){sessionReads++;return options?.fetchOptions.headers['X-Force-Fetch']==='true'?{data:{user:{id:'u'},session:{token:'signed.jwt.value'}}}:{data:null};},
+  signIn:{email:async()=>({})},signUp:{email:async()=>({})},signOut:async()=>({}),
+ };
+ const account=createAccount(sdk,async()=>{profileReads++;return Response.json({id:'public',played:0,wins:0,recent:[]});},'https://game');
+ await Promise.all([account.refresh(),account.refresh()]);
+ assert.equal(account.profile?.id,'public');
+ assert.equal(sessionReads,1);
+ assert.equal(profileReads,1);
+});

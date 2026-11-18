@@ -27,13 +27,17 @@ export function createAccountView(authURL:string,endpoint:string,connect=connect
   for(const input of panel.querySelectorAll<HTMLInputElement>('input[type=password]'))input.value='';
   if(focus)el(mode==='signup'?'signup-age':'account-email').focus();
  }
+ function publishAccount(profile:OfficialProfile|null){
+  open.textContent=profile?'내 계정':'계정';
+  onGrowth(profile?.growth??growth(0),!!profile?.consent?.current);
+ }
  function draw(profile:OfficialProfile|null){
   const previousOwner=displayedProfile?.id;displayedProfile=profile;if(!profile||profile.id!==previousOwner)for(const box of panel.querySelectorAll<HTMLInputElement>('#account-consent-form input[type=checkbox]'))box.checked=false;adminView.setAllowed(!publicView&&profile?.admin===true);
   if(profile)authMode='signin';
   authScreen(authMode);el('account-form').hidden=!!profile||publicView||authMode==='signup';el('account-signup-form').hidden=!!profile||publicView||authMode!=='signup';el('account-profile').hidden=!profile;
   for(const id of ['account-signout','account-refresh','account-delete','account-share'])el(id).hidden=publicView;
   el('account-profile').querySelector('details')!.hidden=publicView;el('nickname-edit-form').hidden=publicView;
-  if(!publicView)onGrowth(profile?.growth??growth(0),!!profile?.consent?.current);
+  if(!publicView)publishAccount(profile);
   el('account-consent-form').hidden=!profile||publicView||!!profile.consent?.current;el('account-privacy-controls').hidden=!profile||publicView||!profile.consent?.current;
   if(profile&&!publicView){(el('account-public-choice') as HTMLInputElement).checked=profile.consent?.publicProfile===true;el('account-consent-receipt').textContent=profile.consent?`안내 버전 ${profile.consent.version} · 확인 ${new Date(profile.consent.acceptedAt).toLocaleString('ko-KR')}`:'';el('account-share').hidden=!profile.consent?.publicProfile||!profile.consent?.current;}
   if(!profile)return;
@@ -48,7 +52,7 @@ export function createAccountView(authURL:string,endpoint:string,connect=connect
  function show(){previous=document.activeElement;panel.hidden=false;for(const sibling of [...panel.parentElement!.children])if(sibling!==panel&&!sibling.hasAttribute('inert')){sibling.setAttribute('inert','');sibling.setAttribute('data-account-inert','');}el('account-close').focus();}
  function close(){adminView.reset();el('account-status').hidden=false;panel.hidden=true;for(const input of panel.querySelectorAll<HTMLInputElement>('input[type=password]'))input.value='';for(const sibling of document.querySelectorAll('[data-account-inert]')){sibling.removeAttribute('inert');sibling.removeAttribute('data-account-inert');}if(previous instanceof HTMLElement)previous.focus();}
  el('account-close').addEventListener('click',close);
- open.addEventListener('click',()=>{if(!account)return;publicView=false;authMode='signin';draw(null);show();void run(async()=>{const a=await account;await a.refresh();draw(a.profile);status(a.profile?'서버 공식 전적입니다.':'이메일과 비밀번호로 로그인하세요.');});});
+ open.addEventListener('click',()=>{if(!account)return;publicView=false;authMode='signin';el('account-form').hidden=true;el('account-signup-form').hidden=true;el('account-profile').hidden=true;show();void run(async()=>{const a=await account;try{await a.refresh();}finally{draw(a.profile);}status(a.profile?'서버 공식 전적입니다.':'이메일과 비밀번호로 로그인하세요.');});});
  el('account-form').addEventListener('submit',event=>{event.preventDefault();const email=(el('account-email') as HTMLInputElement).value,password=(el('account-password') as HTMLInputElement).value;void run(async()=>{const a=await account!;await a.signIn(email,password);draw(a.profile);status('로그인했습니다. 다음 온라인 경기부터 공식 기록이 남습니다.');});});
  el('account-signup').addEventListener('click',()=>{if(busy)return;for(const box of panel.querySelectorAll<HTMLInputElement>('#account-signup-form input[type=checkbox]'))box.checked=false;authScreen('signup',true);status('');});
  el('account-signup-back').addEventListener('click',()=>{if(busy)return;authScreen('signin',true);status('');});
@@ -63,8 +67,6 @@ export function createAccountView(authURL:string,endpoint:string,connect=connect
  panel.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();close();}if(event.key==='Tab'){const focusable=[...panel.querySelectorAll<HTMLElement>('button,input,summary,a[href]')].filter(e=>!e.closest('[hidden]')&&!(e as HTMLButtonElement).disabled&&(!e.closest('details')||e.closest('details')!.open||e.tagName==='SUMMARY'));const index=focusable.indexOf(document.activeElement as HTMLElement);if(event.shiftKey&&index<=0||!event.shiftKey&&(index<0||index===focusable.length-1)){event.preventDefault();focusable[event.shiftKey?focusable.length-1:0]?.focus();}}});
  const shared=new URL(location.href).searchParams.get('profile');
  if(shared&&/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(shared)&&authURL&&endpoint){publicView=true;show();void run(async()=>{const response=await fetch(endpoint.replace(/\/$/,'')+'/profiles/'+shared,{signal:AbortSignal.timeout(10000)});if(!response.ok)throw Error('공개되지 않았거나 삭제된 전적입니다.');draw(await response.json());status('공개된 온라인 공식 전적입니다.');});}
- // Catch initialization failure without unhandled rejections; a configured login must not block guest boot.
- if(account)void account.then(async a=>{await a.refresh();onGrowth(a.profile?.growth??growth(0),!!a.profile?.consent?.current);await flushGrowth();}).catch(()=>{onGrowth(growth(0),false);});
  type Ticket={id:string;owner:string};type Pending={ticket:Ticket;result:MatchResult};
  let pending:Pending[]=[];try{const value=JSON.parse(localStorage.getItem('harbor-growth-pending-v1')??'[]');if(Array.isArray(value))pending=value.filter(v=>v?.ticket&&/^[0-9a-f-]{36}$/i.test(v.ticket.id)&&/^[0-9a-f-]{36}$/i.test(v.ticket.owner)&&v.result).slice(-30);}catch{}
  const saveStatus=(text:string)=>{for(const id of ['growth-save','result-growth']){const node=document.getElementById(id);if(node)node.textContent=text;}};
@@ -78,13 +80,29 @@ export function createAccountView(authURL:string,endpoint:string,connect=connect
     }catch{saveStatus('성장 서버 저장 대기 중 · 연결 후 다시 시도하세요.');break;}
    }
   })().finally(()=>{flushing=null;});return flushing;}
- el('growth-retry')?.addEventListener('click',()=>void flushGrowth());window.addEventListener('online',()=>void flushGrowth());
+ async function restoreAccount(){
+  if(!account)return;
+  const a=await account;
+  await a.refresh();
+  publishAccount(a.profile);
+ }
+ // A startup network error may be temporary. Retry without opening the account panel.
+ async function restoreOnStartup(){
+  try{await restoreAccount();}catch{
+   await new Promise(resolve=>setTimeout(resolve,1000));
+   await restoreAccount();
+  }
+ }
+ const startup=restoreOnStartup().catch(()=>{});
+ el('growth-retry')?.addEventListener('click',()=>void flushGrowth());
+ window.addEventListener('online',()=>void restoreAccount().then(flushGrowth).catch(()=>{}));
+ void startup.then(flushGrowth).catch(()=>{});
  return {
-  async onlineIdentity(){if(!account)return {member:false,nickname:''};const a=await account;if(!await a.token())return {member:false,nickname:''};if(!a.profile)await a.refresh();if(!a.profile?.consent?.current)throw Error('계정 메뉴에서 개인정보 안내와 필수 동의를 확인해 주세요.');return {member:true,nickname:a.profile?.nickname??''};},
+  async onlineIdentity(){if(!account)return {member:false,nickname:''};await startup;const a=await account;if(!await a.token())return {member:false,nickname:''};if(!a.profile)await a.refresh();if(!a.profile?.consent?.current)throw Error('계정 메뉴에서 개인정보 안내와 필수 동의를 확인해 주세요.');return {member:true,nickname:a.profile?.nickname??''};},
   async saveNickname(name:string){if(!account)throw Error('로그인이 필요합니다.');const a=await account;await a.setNickname(name);draw(a.profile);},
-  async refreshGrowth(){if(!account)return;const a=await account;await a.refresh();onGrowth(a.profile?.growth??growth(0),!!a.profile?.consent?.current);await flushGrowth();},
+  async refreshGrowth(){await restoreAccount();await flushGrowth();},
   async startGrowth(mode:string,difficulty:string):Promise<Ticket|null>{
-   if(!account||!['duel','ffa','survival'].includes(mode))return null;const a=await account,owner=a.profile?.consent?.current?a.profile.id:undefined;if(!owner)return null;
+   if(!account||!['duel','ffa','survival'].includes(mode))return null;await startup;const a=await account,owner=a.profile?.consent?.current?a.profile.id:undefined;if(!owner)return null;
    try{const data=await a.growthRequest('/growth/start',{mode,difficulty});if(!data)return null;saveStatus('성장 기록 연결됨 · 완료 시 서버에 저장');return {id:data.id,owner};}catch{saveStatus('성장 기록을 시작하지 못했습니다. 계정 연결을 확인하세요.');return null;}
   },
   async saveGrowth(ticket:Ticket|null,result:MatchResult){if(!ticket){saveStatus('로그인한 상태에서 시작한 경기부터 성장 기록이 서버에 저장됩니다.');return;}pending.push({ticket,result});persist();saveStatus('성장 서버 저장 중…');await flushGrowth();},

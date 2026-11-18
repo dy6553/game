@@ -5,7 +5,9 @@ import {Color3} from '@babylonjs/core/Maths/math.color.js';
 import type {Scene} from '@babylonjs/core/scene.js';
 import {createCharacter,type CharacterType} from './characters.ts';
 
-export type RemoteModel={root:TransformNode;meshes:Mesh[];type:CharacterType};
+import type {Stance} from './stance.ts';
+
+export type RemoteModel={root:TransformNode;meshes:Mesh[];type:CharacterType;poseStance(stance?:Stance):void};
 // Bake the existing armor colors into vertices; preserve separate emissive colors.
 // Templates share geometry, while each actor's impact materials stay private.
 export function createRemoteModels(scene:Scene){
@@ -22,12 +24,12 @@ export function createRemoteModels(scene:Scene){
  };
  for(const color of [Color3.Black(),Color3.FromHexString('#65e9ef').scale(.85),Color3.FromHexString('#ffbe5e').scale(.85)])surface(color);
  const templates=new Map<string,{container:TransformNode;meshes:Mesh[]}>();
- function template(type:CharacterType,twoHanded:boolean){
-  const key=type+':'+twoHanded;const cached=templates.get(key);if(cached)return cached;
+ function template(type:CharacterType,twoHanded:boolean,stance:Stance){
+  const key=type+':'+twoHanded+':'+stance;const cached=templates.get(key);if(cached)return cached;
   const container=new TransformNode('remote-template-'+key,scene);
   const oldMaterials=new Set(scene.materials),model=createCharacter(scene,container,type,{detail:'remote'});
   const temporaryMaterials=scene.materials.filter(m=>!oldMaterials.has(m));
-  model.poseLobby(true,0,twoHanded);model.root.computeWorldMatrix(true);
+  model.poseLobby(true,0,twoHanded);model.poseStance(stance);model.root.computeWorldMatrix(true);
   const groups=new Map<StandardMaterial,Mesh[]>();
   for(const mesh of model.meshes){
    mesh.computeWorldMatrix(true);const original=mesh.material as StandardMaterial;
@@ -45,10 +47,16 @@ export function createRemoteModels(scene:Scene){
   container.setEnabled(false);const result={container,meshes};templates.set(key,result);return result;
  }
  return {
-  create(parent:TransformNode,type:CharacterType,twoHanded:boolean):RemoteModel{
-   const source=template(type,twoHanded),root=new TransformNode('character-'+type,scene);root.parent=parent;
+  create(parent:TransformNode,type:CharacterType,twoHanded:boolean,stance:Stance='stand'):RemoteModel{
+   const source=template(type,twoHanded,stance),root=new TransformNode('character-'+type,scene);root.parent=parent;
    const meshes=source.meshes.map((mesh,index)=>{const copy=mesh.clone('remote-body-'+index,root)!;copy.isPickable=false;return copy;});
-   return {root,meshes,type};
+   let current=stance;
+   return {root,meshes,type,poseStance(next='stand'){
+    if(next===current)return;
+    const source=template(type,twoHanded,next);
+    for(const [index,mesh] of meshes.entries())source.meshes[index]!.geometry!.applyToMesh(mesh);
+    current=next;
+   }};
   },
   clear(){for(const t of templates.values())t.container.dispose();templates.clear();},
  };

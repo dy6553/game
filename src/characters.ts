@@ -6,6 +6,7 @@ import { TransformNode } from '@babylonjs/core/Meshes/transformNode.js';
 import { Color3 } from '@babylonjs/core/Maths/math.color.js';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import type { Scene } from '@babylonjs/core/scene.js';
+import type { Stance } from './stance.ts';
 import type { Mesh } from '@babylonjs/core/Meshes/mesh.js';
 
 export const CHARACTER_TYPES = ['robot', 'robot-cat', 'welder'] as const;
@@ -41,18 +42,48 @@ export function createCharacter(scene: Scene, parent: TransformNode, type: Chara
   };
   const ball=(name:string,x:number,y:number,z:number,d:number,m:StandardMaterial)=>add(MeshBuilder.CreateSphere(name,{diameter:d,segments:remote?8:20},scene),x,y,z,m);
   const cylinder=(name:string,x:number,y:number,z:number,d:number,h:number,m:StandardMaterial)=>add(MeshBuilder.CreateCylinder(name,{diameter:d,height:h,tessellation:remote?8:24},scene),x,y,z,m);
+  const legs: { thigh: TransformNode; shin: TransformNode; foot: TransformNode }[] = [];
+  const poseBody = new TransformNode('stance-body', scene);
+  poseBody.parent = root;
   const arms:Array<{upper:TransformNode;lower:TransformNode}>=[];let weaponSocket:Mesh;
   for(const side of [-1,1]) {
+    const footStart = meshes.length;
     round('robot-boot',side*0.24,0.15,0.1,0.38,0.29,0.6,ivory);
     round('boot-sole',side*0.24,0.045,0.12,0.4,0.08,0.61,dark);
     round('boot-toe',side*0.24,0.18,0.36,0.27,0.09,0.06,copper);
+    const shinStart = meshes.length;
     round('shin',side*0.24,0.46,0,0.25,0.5,0.29,dark);
     round('shin-plate',side*0.24,0.46,0.13,0.26,0.35,0.12,ivory);
     round('shin-inset',side*0.24,0.46,0.2,0.08,0.19,0.02,silver);
     ball('knee-joint',side*0.24,0.73,0,0.29,dark);
     const knee=cylinder('knee-hub',side*0.24,0.73,0.15,0.2,0.055,copper);knee.rotation.x=Math.PI/2;
+    round('shin-accent',side*.24,.38,.205,.16,.035,.035,copper);
+    const thighStart = meshes.length;
     round('thigh',side*0.22,0.94,0,0.28,0.3,0.32,ivory);
     ball('hip-joint',side*0.22,1.08,0,0.22,dark);
+    const thigh = new TransformNode('stance-hip', scene);
+    const shin = new TransformNode('stance-knee', scene);
+    const foot = new TransformNode('stance-ankle', scene);
+    const hip = new Vector3(side*.22, 1.08, 0);
+    const kneePivot = new Vector3(side*.24, .73, 0);
+    const ankle = new Vector3(side*.24, .23, 0);
+    thigh.parent = poseBody;
+    thigh.position.copyFrom(hip);
+    shin.parent = thigh;
+    shin.position.copyFrom(kneePivot.subtract(hip));
+    foot.parent = shin;
+    foot.position.copyFrom(ankle.subtract(kneePivot));
+    for (const [start, end, joint, pivot] of [
+      [footStart, shinStart, foot, ankle],
+      [shinStart, thighStart, shin, kneePivot],
+      [thighStart, meshes.length, thigh, hip],
+    ] as const) {
+      for (const mesh of meshes.slice(start, end)) {
+        mesh.parent = joint;
+        mesh.position.subtractInPlace(pivot);
+      }
+    }
+    legs.push({ thigh, shin, foot });
     const armStart=meshes.length;
     ball('shoulder-joint',side*0.46,1.48,0,0.31,dark);
     round('shoulder-shell',side*0.48,1.49,0.03,0.31,0.28,0.38,ivory);
@@ -85,7 +116,6 @@ export function createCharacter(scene: Scene, parent: TransformNode, type: Chara
     for (const side of [-1,1]) {
       const collar=round('collar-armor',side*.28,1.64,.15,.25,.11,.28,silver); collar.rotation.z=side*.18;
       const chest=round('chest-side-armor',side*.27,1.39,.24,.14,.32,.055,ivory); chest.rotation.z=-side*.12;
-      round('shin-accent',side*.24,.38,.205,.16,.035,.035,copper);
     }
     round('chest-core-rim',0,1.43,.28,.25,.12,.025,copper);
     round('chest-core-lens',0,1.43,.3,.19,.07,.02,glow);
@@ -138,7 +168,21 @@ export function createCharacter(scene: Scene, parent: TransformNode, type: Chara
     for(let i=2;i<25;i+=3) ball('tail-segment',path[i]!.x,path[i]!.y,path[i]!.z,0.17,i%2?copper:ivory);
     const tip=path[path.length-1]!;ball('cat-tail-tip',tip.x,tip.y,tip.z,0.18,cyan);
   }
-  return {root,meshes,type,weaponSocket:weaponSocket!,poseLobby(active:boolean,phase=0,twoHanded=true){
+  for (const mesh of meshes) if (mesh.parent === root) mesh.parent = poseBody;
+  for (const arm of arms) arm.upper.parent = poseBody;
+  function poseStance(stance: Stance = 'stand') {
+    const crouching = stance === 'crouch';
+    const prone = stance === 'prone';
+    const bend = crouching ? 1.55 : 0;
+    poseBody.position.y = prone ? .48 : crouching ? -.85 * (1 - Math.cos(bend)) : 0;
+    poseBody.rotation.x = prone ? Math.PI / 2 : 0;
+    for (const { thigh, shin, foot } of legs) {
+      thigh.rotation.x = -bend;
+      shin.rotation.x = 2 * bend;
+      foot.rotation.x = -bend;
+    }
+  }
+  return {root,meshes,type,weaponSocket:weaponSocket!,poseStance,poseLobby(active:boolean,phase=0,twoHanded=true){
     root.scaling.y=active?1+Math.sin(phase*1.7)*.003:1;root.rotation.z=active?Math.sin(phase*.9)*.003:0;
     arms.forEach(({upper,lower},i)=>{const raised=active&&(i===1||twoHanded);upper.rotation.set(raised?(i===1?-.55:-.65)+Math.sin(phase*1.7)*.008:0,0,raised?(i===1?-.15:.2):0);lower.rotation.set(raised?-.8:0,0,0);});
   }};
