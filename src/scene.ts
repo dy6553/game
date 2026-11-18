@@ -1,5 +1,5 @@
 import {createWildlifeArt} from './wildlife-art.ts';
-import {advanceWildlife,collectMeat,createWildlife,hurtWildlife,wildlifeBlastTargets,wildlifeHit} from './wildlife.ts';
+import {advanceWildlife,meatRecovery,takeMeat,createWildlife,hurtWildlife,wildlifeBlastTargets,wildlifeHit} from './wildlife.ts';
 import {snowWeather,inWeatherRange,newWeatherSeed,snowDaylight} from './snow-weather.ts';
 import {rangedDamage} from './weapon-range.ts';
 import {viewmodelPose} from './viewmodel-motion.ts';
@@ -15,7 +15,7 @@ import {unobstructed,firstShotBox,boxHit} from './combat-geometry.ts';
 import {playerName} from './nickname.ts';
 import type {Sound} from './audio.ts';
 import {createMatchPickups} from './match-pickups.ts';
-import {createGear,launchRocket,useEquipment,advanceEquipment,type GearActor,type EquipmentId,type Projectile} from './equipment.ts';
+import {createGear,launchRocket,useEquipment,advanceEquipment,type GearActor,type EquipmentId,type Projectile,type ToolEvent} from './equipment.ts';
 import {createEquipmentVisuals} from './equipment-visuals.ts';
 import {createLobbyWeapons} from './lobby-weapons.ts';
 import {createSupplyCrates} from './supply-crates.ts';
@@ -666,6 +666,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
   }
   const matchPickups=()=>options.randomSpawns===false?createPickups():createMatchPickups(geometry);
   let localActor:GearActor={id:'player',...PROTOTYPE.spawn,yaw:0,pitch:0,health:100,gear:createGear(),healing:0,flash:0,gearCooldown:0};
+  let localMeat=0,pendingMeatHeal:ToolEvent|undefined;
   let localProjectiles:Projectile[]=[],toolSequence=0,toolDamageVersion=0,lastToolHealth=100;
   const toolVisuals=createEquipmentVisuals(scene);
   let upgradeTier=0;
@@ -751,13 +752,13 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
       const state=battleState();
       if(state.mode==='survival'&&state.ammoRefreshVersion!==seenResupply){seenResupply=state.ammoRefreshVersion;syncSlot(inventory,weapon,cooldown);for(const slot of inventory.slots)slot.weapon=createWeapon(WEAPONS[slot.id]);weapon=inventory.slots[inventory.active]!.weapon;}
       if(wasBotDead&&state.botHealth>0){robotImpact.reset();botFlashes.delete('bot-1');}
-      if(state.respawnVersion!==seenRespawn){seenRespawn=state.respawnVersion;p.x=state.playerPosition.x;p.z=state.playerPosition.z;if(p.y!==undefined)p.y=0;p.fallSpeed=0;falling=false;weaponId=startWeapon;spec=localSpec(weaponId);inventory=createInventory(startWeapon);weapon=createWeapon(spec);if(survivalMode)pickups=pickups.map(c=>({...c,remaining:0}));localActor.gear=createGear();localActor.healing=0;localActor.flash=0;cooldown=0;scoped=false;jumpState=createJump();recoil.clear();}
+      if(state.respawnVersion!==seenRespawn){seenRespawn=state.respawnVersion;localMeat=0;p.x=state.playerPosition.x;p.z=state.playerPosition.z;if(p.y!==undefined)p.y=0;p.fallSpeed=0;falling=false;weaponId=startWeapon;spec=localSpec(weaponId);inventory=createInventory(startWeapon);weapon=createWeapon(spec);if(survivalMode)pickups=pickups.map(c=>({...c,remaining:0}));localActor.gear=createGear();localActor.healing=0;localActor.flash=0;cooldown=0;scoped=false;jumpState=createJump();recoil.clear();}
     }
-    if(!duelMode&&!paused&&!preview&&!reference){duel.update(dt,p,()=>false,()=>false,false);const d=duel.state();if(d.respawnVersion!==seenRespawn){seenRespawn=d.respawnVersion;p.x=d.playerPosition.x;p.z=d.playerPosition.z;p.y=0;inventory=createInventory(startWeapon);equip();localActor.gear=createGear();localActor.healing=0;localActor.flash=0;}}
+    if(!duelMode&&!paused&&!preview&&!reference){duel.update(dt,p,()=>false,()=>false,false);const d=duel.state();if(d.respawnVersion!==seenRespawn){seenRespawn=d.respawnVersion;localMeat=0;p.x=d.playerPosition.x;p.z=d.playerPosition.z;p.y=0;inventory=createInventory(startWeapon);equip();localActor.gear=createGear();localActor.healing=0;localActor.flash=0;}}
     if(!paused&&!preview&&!reference){
       const battle=battleState(),group=survivalMode?survival:ffaMode?ffa:duel;
       if(battle.damageVersion!==toolDamageVersion){localActor.healing=0;toolDamageVersion=battle.damageVersion;}
-      if(lastToolHealth>0&&battle.playerHealth<=0){localActor.gear=createGear();localActor.healing=0;}
+      if(lastToolHealth>0&&battle.playerHealth<=0){localMeat=0;localActor.gear=createGear();localActor.healing=0;}
       Object.assign(localActor,{stance,jump:jumpState,x:p.x,y:p.y??0,z:p.z,yaw:look.yaw,pitch:look.pitch,health:battle.playerHealth,protection:battle.protection});
       const bots:GearActor[]=duelMode?(battle.mode==='duel'?[{id:'bot-1',...battle.position,health:battle.botHealth}]:battle.bots.map(b=>({id:b.id,...b.position,health:b.health}))).map(b=>({...b,yaw:Math.atan2(p.x-b.x,p.z-b.z),pitch:0,gear:createGear(),healing:0,flash:botFlashes.get(b.id)??0,gearCooldown:0})):targets.map((t,i)=>({id:'target-'+i,x:t.x,y:0,z:t.z,yaw:0,pitch:0,health:t.health,gear:createGear(),healing:0,flash:0,gearCooldown:0}));
       const blastTargets=localProjectiles.length?wildlifeBlastTargets(animals,weatherSeconds):[];
@@ -772,14 +773,10 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
        else {if(battle.mode==='duel')duel.hurt('bot',amount);else if(survivalMode)survival.hurt(target.id,amount);else ffa.hurt(target.id,amount);const next=battleState();target.health=next.mode==='duel'?next.botHealth:next.bots.find(b=>b.id===target.id)?.health??0;}
       },()=>++toolSequence);
       const actual=group.state().playerHealth;if(localActor.health>actual)group.healPlayer(localActor.health-actual);
-      if(animals){
-        advanceWildlife(animals,weatherSeconds);
-        const playerHealth=group.state().playerHealth;
-        const recovered=!group.state().winner ? collectMeat(animals,{...p,y:(p.y??0)+jumpState.height},playerHealth,geometry,doors) : 0;
-        if(recovered){
-          group.healPlayer(recovered);
-          events.push({id:++toolSequence,kind:'heal',owner:'player',x:p.x,y:(p.y??0)+1,z:p.z});
-        }
+      if(animals)advanceWildlife(animals,weatherSeconds);
+      if(pendingMeatHeal){
+        events.unshift(pendingMeatHeal);
+        pendingMeatHeal=undefined;
       }
       localActor.health=group.state().playerHealth;lastToolHealth=localActor.health;for(const b of bots)botFlashes.set(b.id,b.flash);for(const e of events)if(soundEvents.length<16)soundEvents.push({kind:e.kind,x:e.x,z:e.z});toolVisuals.update(localProjectiles,events,dt);
     }
@@ -876,7 +873,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
     const next=beginReload(weapon,spec);const started=next!==weapon;weapon=started?cancelBurst(next):next;return started;
   }
   function resetPractice() {
-    animals=wildlifeArt?createWildlife():undefined;
+    animals=wildlifeArt?createWildlife():undefined;localMeat=0;pendingMeatHeal=undefined;
     weatherSeconds=0;weatherSeed=options.weatherSeed??newWeatherSeed();
     localActor={id:'player',...PROTOTYPE.spawn,yaw:0,pitch:0,health:100,gear:createGear(),healing:0,flash:0,gearCooldown:0};localProjectiles=[];toolSequence=0;toolDamageVersion=0;lastToolHealth=100;botFlashes.clear();toolVisuals.clear();
     highShotNotices.length=0;botReveals.clear();autoShotResults.length=0;weaponId=startWeapon;spec=localSpec(weaponId);inventory=createInventory(startWeapon);pickups=matchPickups();weapon=createWeapon(spec);cooldown=0;scoped=false;jumpState=createJump();falling=false;hits=0;destroyed=0;shots=0;
@@ -927,7 +924,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
     get thirdPerson(){return thirdPerson;},
     aimReticle(){if(!thirdPerson||scoped||preview||reference)return {x:50,y:50};const direction=camera.getDirection(Vector3.Forward()),pick=scene.pickWithRay(new Ray(aimOrigin.clone(),direction,150),m=>m.isPickable&&m.isEnabled());const end=pick?.pickedPoint??aimOrigin.add(direction.scale(150)),viewport=camera.viewport.toGlobal(engine.getRenderWidth(),engine.getRenderHeight()),v=Vector3.Project(end,Matrix.Identity(),camera.getViewMatrix().multiply(camera.getProjectionMatrix()),viewport);return {x:Math.max(0,Math.min(100,v.x/engine.getRenderWidth()*100)),y:Math.max(0,Math.min(100,v.y/engine.getRenderHeight()*100))};},togglePerspective(){thirdPerson=!thirdPerson;return thirdPerson;},
     targetContacts:()=>targets.map((t,i)=>({id:'target-'+i,name:'표적 '+(i+1),x:t.x,z:t.z,y:0,health:t.health})),
-    gearState:()=>({gear:{...localActor.gear},health:localActor.health,flash:localActor.flash,healing:localActor.healing,cooldown:localActor.gearCooldown}),
+    gearState:()=>({meat:localMeat,gear:{...localActor.gear},health:localActor.health,flash:localActor.flash,healing:localActor.healing,cooldown:localActor.gearCooldown}),
     useEquipment(kind:EquipmentId,p:Point,look:Look){if(preview||reference||battleState().winner)return false;Object.assign(localActor,{stance,jump:jumpState,x:p.x,y:p.y??0,z:p.z,yaw:look.yaw,pitch:look.pitch,health:battleState().playerHealth});const ok=useEquipment(localActor,kind,localProjectiles,++toolSequence);if(ok&&kind!=='medkit')if(aimOrigin.y-stanceStats(stance).eye-jumpState.height>=3.35&&highShotNotices.length<8)highShotNotices.push('고층 사격 · 내 위치가 4초간 노출됩니다');
     (survivalMode?survival:ffaMode?ffa:duel).playerFired();return ok;},
     setUpgradeTier(tier:number){upgradeTier=Number.isInteger(tier)?Math.max(0,Math.min(3,tier)):0;spec=localSpec(weaponId);},
@@ -942,8 +939,24 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
     consumeSounds(){return soundEvents.splice(0);},
     consumeAutoShots(){return autoShotResults.splice(0);},
     duelState:()=>({...battleState(),active:duelMode}),
-    inventoryState(){syncSlot(inventory,weapon,cooldown);return {inventory,pickups};},
-    pickup(p:Point,id:string,replace?:number){if(preview||reference||(battleState().playerHealth===0||!!battleState().winner))return 'unavailable';syncSlot(inventory,weapon,cooldown);const crate=pickups.find(c=>c.id===id);if(crate?.equipmentId)return takeEquipmentPickup(localActor.gear,p,pickups,id)?'added':'unavailable';const result=takePickup(inventory,p,pickups,id,replace);if(result==='added')equip();return result;},
+    inventoryState(){syncSlot(inventory,weapon,cooldown);return {inventory,pickups,animals};},
+    pickup(p:Point,id:string,replace?:number){if(preview||reference||(battleState().playerHealth===0||!!battleState().winner))return 'unavailable';if(id.startsWith('meat-')){
+      if(!takeMeat(animals,{...p,y:(p.y??0)+jumpState.height},localMeat,geometry,doors,id))return 'unavailable';
+      localMeat++;
+      return 'added';
+    }syncSlot(inventory,weapon,cooldown);const crate=pickups.find(c=>c.id===id);if(crate?.equipmentId)return takeEquipmentPickup(localActor.gear,p,pickups,id)?'added':'unavailable';const result=takePickup(inventory,p,pickups,id,replace);if(result==='added')equip();return result;},
+    eatMeat(p:Point){
+      const battle=battleState();
+      if(preview||reference||battle.winner)return false;
+      const recovered=meatRecovery(localMeat,battle.playerHealth);
+      if(!recovered)return false;
+      const group=survivalMode?survival:ffaMode?ffa:duel;
+      if(!group.healPlayer(recovered))return false;
+      localMeat--;
+      localActor.health=group.state().playerHealth;
+      pendingMeatHeal={id:++toolSequence,kind:'heal',owner:'player',x:p.x,y:(p.y??0)+1,z:p.z};
+      return true;
+    },
     switchWeapon(slot:number){if(preview||reference||(battleState().playerHealth===0||!!battleState().winner))return false;syncSlot(inventory,weapon,cooldown);if(!switchSlot(inventory,slot))return false;equip();return true;},
     setPracticeRange,reload,resetPractice,practiceState,
     onlineNameplates(state:MatchState,id:string){const me=state.players.find(p=>p.id===id);if(!me||me.health<=0)return [];const width=engine.getRenderWidth(),height=engine.getRenderHeight(),viewport=camera.viewport.toGlobal(width,height),transform=camera.getViewMatrix().multiply(camera.getProjectionMatrix());return state.players.filter(p=>p.id!==id&&p.connected&&!p.abandoned&&p.playing!==false&&p.health>0&&(!p.guest||!!p.nickname)).flatMap(p=>{const point=new Vector3(p.x,(p.y??0)+p.jump.height+stanceStats(p.stance).height+.4,p.z);if(Vector3.DistanceSquared(camera.position,point)>Math.min(60,weatherState()?.visibility??150)**2||!unobstructed(geometry,doors,{x:camera.position.x,y:camera.position.y,z:camera.position.z},{x:p.x,y:(p.y??0)+p.jump.height+1.8,z:p.z}))return [];const v=Vector3.Project(point,Matrix.Identity(),transform,viewport);if(v.z<0||v.z>1||v.x<0||v.x>width||v.y<0||v.y>height)return [];return [{id:p.id,name:playerName(p),x:v.x/width,y:v.y/height,health:p.health,ally:me.team!==undefined&&me.team===p.team}];});},

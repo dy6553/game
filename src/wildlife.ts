@@ -59,16 +59,31 @@ export function advanceWildlife(animals: Animal[],time: number) {
   }
 }
 
-export function collectMeat(animals: Animal[], player: Point, health: number, world: World, doors: Doors) {
-  if (health <= 0 || health >= 100) return 0;
-  for (const animal of animals) {
+export const MEAT_CAPACITY = 3;
+
+export function nearbyMeat(animals: Animal[] | undefined, player: Point, world: World, doors: Doors, id?: string) {
+  if (!animals) return;
+  for (const [index,animal] of animals.entries()) {
     const meat = animal.meat;
-    if (!meat || Math.hypot(player.x-meat.x,player.z-meat.z,player.y ?? 0)>1.4) continue;
-    if (!unobstructed(world,doors,{...player,y:(player.y ?? 0)+.35},{x:meat.x,y:.35,z:meat.z})) continue;
-    delete animal.meat;
-    return Math.min(healAmount,100-health);
+    if (!meat) continue;
+    const dropId = `meat-${index}-${animal.respawnAt}`;
+    if (id !== undefined && id !== dropId) continue;
+    if (Math.hypot(player.x-meat.x,player.z-meat.z,(player.y ?? 0)-(meat.y ?? 0))>1.4) continue;
+    if (!unobstructed(world,doors,{...player,y:(player.y ?? 0)+.35},{x:meat.x,y:(meat.y ?? 0)+.35,z:meat.z})) continue;
+    return {id:dropId,animal};
   }
-  return 0;
+}
+
+export function takeMeat(animals: Animal[] | undefined, player: Point, count: number, world: World, doors: Doors, id: string) {
+  if (count >= MEAT_CAPACITY) return false;
+  const drop = nearbyMeat(animals,player,world,doors,id);
+  if (!drop) return false;
+  delete drop.animal.meat;
+  return true;
+}
+
+export function meatRecovery(count: number, health: number) {
+  return count>0 && health>0 ? Math.max(0,Math.min(healAmount,100-health)) : 0;
 }
 
 export function wildlifeBlastTargets(animals: Animal[] | undefined,time: number): GearActor[] {

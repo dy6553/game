@@ -1,4 +1,4 @@
-import {advanceWildlife,collectMeat,createWildlife,hurtWildlife,wildlifeBlastTargets,wildlifeHit,type Animal} from './wildlife.ts';
+import {advanceWildlife,meatRecovery,takeMeat,createWildlife,hurtWildlife,wildlifeBlastTargets,wildlifeHit,type Animal} from './wildlife.ts';
 import {newWeatherSeed} from './snow-weather.ts';
 import {firstShotBox} from './combat-geometry.ts';
 import {SNOW_LAYOUT_REVISION} from './igloo-layout.ts';
@@ -16,9 +16,9 @@ import { WEAPONS,pelletOffsets,isWeaponId,startBurst,advanceBurst,cancelBurst,ty
 import { createWeapon,beginReload,tryFire,type WeaponState } from './combat.ts';
 import { createJump,beginJump,type JumpState } from './jump.ts';
 import { viewMovement } from './view.ts';
-export type Player = GearActor & {revealedUntil?:number;nickname?:string;guest?:boolean;participated?:boolean;deaths:number;totalKills:number;playing?:boolean;abandoned?:boolean;id:string;y?:number;fallSpeed?:number;protection?:number;x:number;z:number;yaw:number;pitch:number;health:number;kills:number;dead:number;weaponId:WeaponId;weapon:WeaponState;jump:JumpState;cooldown:number;connected:boolean;character:'robot'|'robot-cat'|'welder';seq:number;startWeapon:WeaponId;inventory:Inventory;dash?:DashState};
+export type Player = GearActor & {meat?:number;revealedUntil?:number;nickname?:string;guest?:boolean;participated?:boolean;deaths:number;totalKills:number;playing?:boolean;abandoned?:boolean;id:string;y?:number;fallSpeed?:number;protection?:number;x:number;z:number;yaw:number;pitch:number;health:number;kills:number;dead:number;weaponId:WeaponId;weapon:WeaponState;jump:JumpState;cooldown:number;connected:boolean;character:'robot'|'robot-cat'|'welder';seq:number;startWeapon:WeaponId;inventory:Inventory;dash?:DashState};
 export type TeamPing={kind:'enemy'|'move'|'help';x:number;z:number;player:string;team:number;expires:number};
-export type Command={ping?:Pick<TeamPing,'kind'|'x'|'z'>;stance?:Stance;seq:number;x:number;y:number;yaw:number;pitch:number;fire:boolean;shot:boolean;reload:boolean;jump:boolean;sprint:boolean;scope:boolean;door?:string;dash?:boolean;slot?:number;pickup?:string;replace?:number;equipment?:EquipmentId};
+export type Command={eatMeat?:boolean;ping?:Pick<TeamPing,'kind'|'x'|'z'>;stance?:Stance;seq:number;x:number;y:number;yaw:number;pitch:number;fire:boolean;shot:boolean;reload:boolean;jump:boolean;sprint:boolean;scope:boolean;door?:string;dash?:boolean;slot?:number;pickup?:string;replace?:number;equipment?:EquipmentId};
 export type ShotEvent={id:number;player:string;weapon:WeaponId;from:{x:number;y:number;z:number};to:{x:number;y:number;z:number};hit:boolean;killed:boolean;target?:string;headshot?:boolean;protected?:boolean;elevated?:boolean};
 export type OnlineMode='duel'|'ffa'|'team';
 export type NetworkOptions={clock?:()=>number;waitingRoom?:boolean;mode?:OnlineMode;randomPickups?:boolean};
@@ -30,6 +30,7 @@ export function parseCommand(v:unknown,bounds:Pick<World['PROTOTYPE'],'halfWidth
  if(!Number.isSafeInteger(p.seq)||Number(p.seq)<0||Math.abs(Number(p.x))>1||Math.abs(Number(p.y))>1||Math.abs(Number(p.pitch))>1.2||Math.abs(Number(p.yaw))>Math.PI*2)return null;
  if(!['fire','shot','reload','jump','sprint','scope'].every(k=>typeof p[k]==='boolean'))return null;
  if(p.ping!==undefined){const q=p.ping as Record<string,unknown>;if(!q||typeof q!=='object'||typeof q.kind!=='string'||!['enemy','move','help'].includes(q.kind)||typeof q.x!=='number'||typeof q.z!=='number'||!Number.isFinite(q.x)||!Number.isFinite(q.z)||Math.abs(q.x)>bounds.halfWidth||q.z< -bounds.halfDepth||q.z>bounds.maxZ)return null;}
+ if(p.eatMeat!==undefined&&typeof p.eatMeat!=='boolean')return null;
  if(p.equipment!==undefined&&!isEquipmentId(p.equipment))return null;
  if(p.door!==undefined&&(typeof p.door!=='string'||p.door.length>40))return null;
  if(p.stance!==undefined&&!isStance(p.stance))return null;
@@ -90,12 +91,12 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
  const pingAt=new Map<string,number>();state.pings=[];
  const inputs=new Map<string,{command:Command;at:number}>();let now=0,eventId=state.tick*1000;
  const id=()=>++eventId;
- const spawn=(p:Player,index:number,respawn=false)=>{const point=respawn||mode!=='duel'?world.randomOutdoorSpawn(state.players.filter(o=>o!==p&&o.health>0&&o.playing!==false)):{x:0,z:index===0?-8:18};p.x=point.x;p.z=point.z;p.y=0;p.fallSpeed=0;p.stance='stand';p.protection=respawn||mode!=='duel'?3:0;p.yaw=index===0?0:Math.PI;p.pitch=0;p.health=100;p.dead=0;p.jump=createJump();p.dash=createDash();p.weaponId=p.startWeapon;p.inventory=createInventory(p.startWeapon);p.weapon=createWeapon(WEAPONS[p.weaponId]);p.cooldown=0;p.gear=createGear();p.flash=0;p.healing=0;p.gearCooldown=0;};
+ const spawn=(p:Player,index:number,respawn=false)=>{const point=respawn||mode!=='duel'?world.randomOutdoorSpawn(state.players.filter(o=>o!==p&&o.health>0&&o.playing!==false)):{x:0,z:index===0?-8:18};p.x=point.x;p.z=point.z;p.y=0;p.fallSpeed=0;p.stance='stand';p.protection=respawn||mode!=='duel'?3:0;p.yaw=index===0?0:Math.PI;p.pitch=0;p.health=100;p.dead=0;p.jump=createJump();p.dash=createDash();p.weaponId=p.startWeapon;p.inventory=createInventory(p.startWeapon);p.weapon=createWeapon(WEAPONS[p.weaponId]);p.cooldown=0;p.gear=createGear();if(mapId==='snow')p.meat=0;p.flash=0;p.healing=0;p.gearCooldown=0;};
  for(const p of state.players){p.connected=false;p.weapon=cancelBurst(p.weapon);p.dash=cancelDash(p.dash??createDash());p.startWeapon??=p.weaponId;p.inventory??=createInventory(p.weaponId);p.gear??=createGear();p.healing=0;p.flash??=0;p.gearCooldown??=0;p.deaths??=0;p.totalKills??=p.kills;syncSlot(p.inventory,p.weapon,p.cooldown);}
  if(saved&&mapId==='snow'&&saved.layoutRevision!==SNOW_LAYOUT_REVISION)for(const p of state.players)if(!world.canStand(p,world.PROTOTYPE.radius,world.worldSolids()))Object.assign(p,world.randomOutdoorSpawn(state.players.filter(o=>o!==p)),{y:0,fallSpeed:0});
  function finish(winner:string,members:string[]){state.winner=winner;state.winningIds=members;for(const p of state.players)p.healing=0;}
  function scoreWin(p:Player){if(mode==='team')finish('team:'+p.team,state.players.filter(o=>o.team===p.team&&o.participated!==false).map(o=>o.id));else finish(p.id,[p.id]);}
- function hurt(target:Player,amount:number,owner:string){if(target.health<=0||(target.protection??0)>0||state.winner||target.playing===false)return;target.health=Math.max(0,target.health-amount);target.healing=0;if(target.health>0)return;target.deaths++;target.dead=3;target.dash=cancelDash(target.dash??createDash());target.gear=createGear();const killer=state.players.find(p=>p.id===owner);if(!killer||killer===target||(killer.team!==undefined&&killer.team===target.team))return;killer.kills++;killer.totalKills++;if(killer.team!==undefined){state.teamScores![killer.team]++;if(state.teamScores![killer.team]!>=30)scoreWin(killer);}else if(killer.kills>=10)scoreWin(killer);}
+ function hurt(target:Player,amount:number,owner:string){if(target.health<=0||(target.protection??0)>0||state.winner||target.playing===false)return;target.health=Math.max(0,target.health-amount);target.healing=0;if(target.health>0)return;target.deaths++;target.dead=3;target.dash=cancelDash(target.dash??createDash());target.gear=createGear();if(mapId==='snow')target.meat=0;const killer=state.players.find(p=>p.id===owner);if(!killer||killer===target||(killer.team!==undefined&&killer.team===target.team))return;killer.kills++;killer.totalKills++;if(killer.team!==undefined){state.teamScores![killer.team]++;if(state.teamScores![killer.team]!>=30)scoreWin(killer);}else if(killer.kills>=10)scoreWin(killer);}
  const api={state,
   join(playerId:string,weapon:unknown='pistol',character:unknown='robot',identity?:{nickname:string;guest:boolean}){
    const existing=state.players.find(p=>p.id===playerId);if(existing){if(existing.abandoned)throw Error('재접속 시간이 지났습니다.');existing.connected=true;state.hostId??=existing.id;inputs.delete(playerId);return existing;}
@@ -111,7 +112,7 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
   setGuestNickname(playerId:string,value:unknown){const p=state.players.find(p=>p.id===playerId),name=normalizeNickname(value);if(!p?.connected||!p.guest||!name)return false;p.nickname=name;if(!state.hostId)state.hostId=p.id;return true;},
   disconnect(playerId:string){const p=state.players.find(p=>p.id===playerId);if(p){p.connected=false;if(p.guest)delete p.nickname;if(state.phase==='waiting'&&state.hostId===p.id)state.hostId=state.players.find(o=>o!==p&&o.connected&&!o.abandoned)?.id;p.healing=0;p.weapon=cancelBurst(p.weapon);p.dash=cancelDash(p.dash??createDash());}inputs.delete(playerId);},
   abandon(playerId:string){const p=state.players.find(p=>p.id===playerId);if(p){p.abandoned=true;p.connected=false;if(p.guest)delete p.nickname;p.healing=0;}inputs.delete(playerId);},
-  input(playerId:string,raw:unknown){const c=parseCommand(raw,world.PROTOTYPE),p=state.players.find(p=>p.id===playerId);if(!c||!p?.connected||p.abandoned||state.phase==='waiting'||p.playing===false||p.guest&&!normalizeNickname(p.nickname)||c.seq<=Math.max(p.seq,inputs.get(playerId)?.command.seq??-1))return false;const old=inputs.get(playerId)?.command;c.shot ||=old?.shot??false;c.reload ||=old?.reload??false;c.jump ||=old?.jump??false;c.dash ||=old?.dash??false;c.door??=old?.door;c.slot??=old?.slot;if(c.pickup===undefined){c.pickup=old?.pickup;c.replace=old?.replace;}c.equipment??=old?.equipment;c.ping??=old?.ping;inputs.set(playerId,{command:c,at:options.clock?options.clock()/1000:now});return true;},
+  input(playerId:string,raw:unknown){const c=parseCommand(raw,world.PROTOTYPE),p=state.players.find(p=>p.id===playerId);if(!c||!p?.connected||p.abandoned||state.phase==='waiting'||p.playing===false||p.guest&&!normalizeNickname(p.nickname)||c.seq<=Math.max(p.seq,inputs.get(playerId)?.command.seq??-1))return false;const old=inputs.get(playerId)?.command;c.shot ||=old?.shot??false;c.reload ||=old?.reload??false;c.jump ||=old?.jump??false;c.dash ||=old?.dash??false;c.door??=old?.door;c.slot??=old?.slot;if(c.pickup===undefined){c.pickup=old?.pickup;c.replace=old?.replace;}c.equipment??=old?.equipment;c.eatMeat ||=old?.eatMeat;c.ping??=old?.ping;inputs.set(playerId,{command:c,at:options.clock?options.clock()/1000:now});return true;},
   step(){const dt=.05;now+=dt;const inputTime=options.clock?options.clock()/1000:now;state.tick++;state.pings=state.pings!.filter(p=>p.expires>state.tick);state.events=[];state.toolEvents=[];
    if(!onlinePlaying(state)){inputs.clear();return;}state.started=true;if(mapId==='snow')state.weatherTime=(state.weatherTime??0)+dt;
    const wildlifeTime=state.weatherTime??0;
@@ -123,14 +124,19 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
     if(p.health===0){inputs.delete(p.id);p.dead=Math.max(0,p.dead-dt);if(p.dead<1e-8)spawn(p,index,true);continue;}p.protection=Math.max(0,(p.protection??0)-dt);
     if(c.ping&&mode==='team'&&p.team!==undefined&&state.tick-(pingAt.get(p.id)??-1000)>=30){state.pings=state.pings!.filter(q=>q.player!==p.id);state.pings.push({kind:c.ping.kind,x:c.ping.x,z:c.ping.z,player:p.id,team:p.team,expires:state.tick+120});pingAt.set(p.id,state.tick);}c.ping=undefined;
     if(c.door)world.toggleDoor(state.doors!,c.door,p,state.players.filter(o=>o.health>0&&o.playing!==false));if(entry&&inputTime-entry.at<.3){p.yaw=c.yaw;p.pitch=c.pitch;}
-    syncSlot(p.inventory,p.weapon,p.cooldown);advanceStowed(p.inventory,dt,true);if(c.slot!==undefined)switchSlot(p.inventory,c.slot);if(c.pickup){const pickup=state.pickups.find(x=>x.id===c.pickup);if(pickup?.equipmentId)takeEquipmentPickup(p.gear,p,state.pickups,c.pickup);else takePickup(p.inventory,p,state.pickups,c.pickup,c.replace);}
+    syncSlot(p.inventory,p.weapon,p.cooldown);advanceStowed(p.inventory,dt,true);if(c.slot!==undefined)switchSlot(p.inventory,c.slot);if(c.pickup&&!c.pickup.startsWith('meat-')){const pickup=state.pickups.find(x=>x.id===c.pickup);if(pickup?.equipmentId)takeEquipmentPickup(p.gear,p,state.pickups,c.pickup);else takePickup(p.inventory,p,state.pickups,c.pickup,c.replace);}
     const slot=p.inventory.slots[p.inventory.active]!;p.weaponId=slot.id;p.weapon=slot.weapon;p.cooldown=slot.cooldown;const spec=WEAPONS[p.weaponId];if(c.reload){const next=beginReload(p.weapon,spec);if(next!==p.weapon)p.weapon=cancelBurst(next);}if(c.equipment)useEquipment(p,c.equipment,state.projectiles!,id());
     c.stance??=p.stance??'stand';p.stance=c.stance;const sequence=advanceBurst(p.weapon,dt);p.weapon=sequence.state;Object.assign(p,advancePlayerMotion(p,c,dt,state.doors,world));
     if(state.animals){
-      const recovered=collectMeat(state.animals,{x:p.x,z:p.z,y:(p.y??0)+p.jump.height},p.health,world,state.doors!);
+      const count=p.meat??0;
+      const recovered=c.eatMeat?meatRecovery(count,p.health):0;
       if(recovered){
+        p.meat=count-1;
         p.health+=recovered;
         state.toolEvents.push({id:id(),kind:'heal',owner:p.id,x:p.x,y:(p.y??0)+1,z:p.z});
+      }
+      if(c.pickup?.startsWith('meat-')&&takeMeat(state.animals,{x:p.x,z:p.z,y:(p.y??0)+p.jump.height},p.meat??0,world,state.doors!,c.pickup)){
+        p.meat=(p.meat??0)+1;
       }
     }
     if(sequence.due>0||((c.shot||(c.fire&&spec.automatic))&&p.cooldown<1e-8)){const attempt=tryFire(p.weapon);p.weapon=attempt.state;if(attempt.fired){if((p.y??0)>=3.35)p.revealedUntil=state.tick+80;p.healing=0;p.protection=0;if(!sequence.due){p.cooldown=Math.max(0,spec.interval-(spec.automatic?(p.weapon.cadenceCarry??0):0));p.weapon=startBurst(p.weapon,spec);}const origin=[p.x,(stanceStats(p.stance).eye-(p.character==='robot-cat'?.05:0))+(p.y??0)+p.jump.height,p.z];
@@ -147,7 +153,7 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
       }
       const hit=!!target&&(target.protection??0)<=0&&(p.team===undefined||target.team!==p.team);const headDistance=target?actorHit(origin,d,target,true):Infinity;const headshot=!!hit&&headDistance<wall;const before=target?.deaths??0;if(hit)hurt(target!,rangedDamage(p.weaponId,spec.damage,range)*(headshot?1.5:1),p.id);state.events.push({elevated:(p.y??0)>=3.35,id:id(),player:p.id,weapon:p.weaponId,from:{x:origin[0]!,y:origin[1]!,z:origin[2]!},to:{x:origin[0]!+d[0]!*range,y:origin[1]!+d[1]!*range,z:origin[2]!+d[2]!*range},hit,killed:hit&&target!.deaths>before,target:target?.id,headshot,protected:!!target&&(target.protection??0)>0&&(p.team===undefined||target.team!==p.team)});if(state.winner)break;
      }
-    }}syncSlot(p.inventory,p.weapon,p.cooldown);c.door=undefined;c.shot=false;c.reload=false;c.jump=false;c.dash=false;c.slot=undefined;c.pickup=undefined;c.replace=undefined;c.equipment=undefined;if(state.winner)break;
+    }}syncSlot(p.inventory,p.weapon,p.cooldown);c.door=undefined;c.shot=false;c.reload=false;c.jump=false;c.dash=false;c.slot=undefined;c.pickup=undefined;c.replace=undefined;c.equipment=undefined;c.eatMeat=undefined;if(state.winner)break;
    }
    if(!state.winner){
     const blastTargets=state.projectiles!.length?wildlifeBlastTargets(state.animals,wildlifeTime):[];

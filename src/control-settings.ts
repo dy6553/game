@@ -1,7 +1,7 @@
-export const KEY_ACTIONS={forward:['앞으로','KeyW'],back:['뒤로','KeyS'],left:['왼쪽','KeyA'],right:['오른쪽','KeyD'],reload:['재장전','KeyR'],jump:['점프','Space'],sprint:['달리기','ShiftLeft'],dash:['대시','KeyF'],crouch:['앉기','KeyC'],prone:['엎드리기','KeyZ'],interact:['문 / 획득','KeyE'],scope:['확대','KeyQ'],grenade:['수류탄','KeyG'],flash:['섬광탄','KeyB'],medkit:['회복키트','KeyH'],slot1:['무기 1','Digit1'],slot2:['무기 2','Digit2'],slot3:['무기 3','Digit3']} as const;
+export const KEY_ACTIONS={forward:['앞으로','KeyW'],back:['뒤로','KeyS'],left:['왼쪽','KeyA'],right:['오른쪽','KeyD'],reload:['재장전','KeyR'],jump:['점프','Space'],sprint:['달리기','ShiftLeft'],dash:['대시','KeyF'],crouch:['앉기','KeyC'],prone:['엎드리기','KeyZ'],interact:['문 / 획득','KeyE'],scope:['확대','KeyQ'],grenade:['수류탄','KeyG'],flash:['섬광탄','KeyB'],medkit:['회복키트','KeyH'],eatMeat:['고기 먹기','KeyX'],slot1:['무기 1','Digit1'],slot2:['무기 2','Digit2'],slot3:['무기 3','Digit3']} as const;
 const EQUIPMENT_KEYS={grenade:'Digit4',flash:'Digit5',medkit:'Digit6'} as const;
 export type KeyAction=keyof typeof KEY_ACTIONS;
-export const TOUCH_TARGETS={move:['이동 스틱','.move-control'],fire:['발사','#fire'],reload:['재장전','#reload'],jump:['점프','#jump'],scope:['확대','#scope'],sprint:['달리기','#sprint'],dash:['대시','#dash'],crouch:['앉기','#crouch'],prone:['엎드리기','#prone'],inventory:['하단 6칸','#inventory-ui'],door:['문 열기','#door-panel'],pickup:['무기 획득','#pickup-panel']} as const;
+export const TOUCH_TARGETS={move:['이동 스틱','.move-control'],fire:['발사','#fire'],reload:['재장전','#reload'],jump:['점프','#jump'],scope:['확대','#scope'],sprint:['달리기','#sprint'],dash:['대시','#dash'],crouch:['앉기','#crouch'],prone:['엎드리기','#prone'],inventory:['하단 6칸','#inventory-ui'],door:['문 열기','#door-panel'],pickup:['무기 / 고기 획득','#pickup-panel']} as const;
 export type TouchTarget=keyof typeof TOUCH_TARGETS;
 export type TouchPosition={x:number;y:number;size:number};
 const validKey=(key:string)=>/^(Key[A-Z]|Digit[0-9]|Space|ShiftLeft|ShiftRight|ArrowUp|ArrowDown|ArrowLeft|ArrowRight)$/.test(key);
@@ -15,7 +15,12 @@ export function createControlSettings(storage:Pick<Storage,'getItem'|'setItem'>|
  const save=()=>{profiles[profile]=structuredClone(touch);try{if(!storage)throw Error();storage.setItem('harbor-controls-v1',JSON.stringify({keys,touch,touchProfiles:profiles,activeTouchProfile:profile,postureLayout:2,actionSide:1}));saved=true;}catch{saved=false;}};
  const position=(id:TouchTarget,p:TouchPosition)=>{if(!(id in TOUCH_TARGETS)||!p||![p.x,p.y,p.size].every(Number.isFinite))return;touch[id]={x:Math.max(0,Math.min(100,p.x)),y:Math.max(0,Math.min(100,p.y)),size:Math.max(60,Math.min(150,p.size))};};
  function loadTouch(data:Partial<Record<TouchTarget,TouchPosition>>|undefined){touch={};for(const id of Object.keys(TOUCH_TARGETS) as TouchTarget[])if(data?.[id])position(id,data[id]!);}
- try{const data=JSON.parse(storage?.getItem('harbor-controls-v1')??'null');if(data){const candidate={...keys,...data.keys};if(Object.keys(KEY_ACTIONS).every(k=>validKey(candidate[k]))&&new Set(Object.values(candidate)).size===Object.keys(KEY_ACTIONS).length)keys=candidate;
+ try{const data=JSON.parse(storage?.getItem('harbor-controls-v1')??'null');if(data){const candidate={...keys,...data.keys};
+  if(!data.keys?.eatMeat){
+    const occupied=new Set(Object.entries(candidate).filter(([action])=>action!=='eatMeat').map(([,key])=>key));
+    candidate.eatMeat=['KeyX',...Array.from('UIONMLKJTYPSAEWDRQFZCHGBV',letter=>'Key'+letter)].find(key=>!occupied.has(key))!;
+  }
+  if(Object.keys(KEY_ACTIONS).every(k=>validKey(candidate[k]))&&new Set(Object.values(candidate)).size===Object.keys(KEY_ACTIONS).length)keys=candidate;
   for(const [id,key] of Object.entries(EQUIPMENT_KEYS)){const action=id as KeyAction;if(keys[action]===KEY_ACTIONS[action][1]&&!Object.values(keys).includes(key))keys[action]=key;}
   if(PROFILES.includes(data.activeTouchProfile))profile=data.activeTouchProfile;
   if(data.touchProfiles&&typeof data.touchProfiles==='object')profiles=data.touchProfiles;
