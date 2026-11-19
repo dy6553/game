@@ -101,3 +101,23 @@ test('snow clients receive the same authoritative weather time in both state pro
  const revision=r.room.game.state.layoutRevision,a=await r.connect('a',revision),b=await r.connect('b',revision);r.room.protocols.set(a,2);r.room.game.startMatch('a');for(let i=0;i<20;i++)r.advance(50);
  const sa=a.messages.filter((m:any)=>m.type==='state').at(-1).state,sb=b.messages.filter((m:any)=>m.type==='state').at(-1).state;assert.ok(sa.weatherTime>0);assert.equal(sa.weatherTime,sb.weatherTime);assert.ok(Number.isInteger(sa.weatherSeed));assert.equal(sa.weatherSeed,sb.weatherSeed);assert.equal(sa.layoutRevision,sb.layoutRevision);
 });
+
+test('waiting room host changes map for everyone and guests may join it',async()=>{
+ const r=await runtime();
+ r.room.game=createNetworkGame(undefined,'harbor',{mode:'ffa',waitingRoom:true});
+ r.room.game.join('host','pistol','robot',{nickname:'Host',guest:true});
+ r.room.game.join('guest','pistol','robot',{nickname:'Guest',guest:true});
+ r.room.sessions={host:'host',guest:'guest'};
+ const host=await r.connect('host'),guest=await r.connect('guest');
+ guest.handlers.message({data:JSON.stringify({type:'map',map:'moon'})});
+ assert.equal(r.room.game.state.map,'harbor');
+ host.handlers.message({data:JSON.stringify({type:'map',map:'snow'})});
+ assert.equal(r.room.game.state.map,'snow');
+ assert.equal(guest.messages.at(-1).state.map,'snow');
+ assert.ok(r.room.game.state.animals);
+ host.handlers.message({data:JSON.stringify({type:'start'})});
+ assert.equal(r.room.game.state.map,'snow');
+ assert.equal(r.room.game.state.phase,'playing');
+ host.handlers.message({data:JSON.stringify({type:'map',map:'moon'})});
+ assert.equal(r.room.game.state.map,'snow');
+});
