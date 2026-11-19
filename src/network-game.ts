@@ -1,4 +1,4 @@
-import {advanceWildlife,meatRecovery,takeMeat,createWildlife,hurtWildlife,wildlifeBlastTargets,wildlifeHit,type Animal} from './wildlife.ts';
+import {frightenWildlife,WILDLIFE_SHOT_RANGE,wildlifeMovementRange,advanceWildlife,meatRecovery,takeMeat,createWildlife,hurtWildlife,wildlifeBlastTargets,wildlifeHit,type Animal} from './wildlife.ts';
 import {newWeatherSeed} from './snow-weather.ts';
 import {firstShotBox} from './combat-geometry.ts';
 import {SNOW_LAYOUT_REVISION} from './igloo-layout.ts';
@@ -135,7 +135,10 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
     if(c.door)world.toggleDoor(state.doors!,c.door,p,state.players.filter(o=>o.health>0&&o.playing!==false));if(entry&&inputTime-entry.at<.3){p.yaw=c.yaw;p.pitch=c.pitch;}
     syncSlot(p.inventory,p.weapon,p.cooldown);advanceStowed(p.inventory,dt,true);if(c.slot!==undefined)switchSlot(p.inventory,c.slot);if(c.pickup&&!c.pickup.startsWith('meat-')){const pickup=state.pickups.find(x=>x.id===c.pickup);if(pickup?.equipmentId)takeEquipmentPickup(p.gear,p,state.pickups,c.pickup);else takePickup(p.inventory,p,state.pickups,c.pickup,c.replace);}
     const slot=p.inventory.slots[p.inventory.active]!;p.weaponId=slot.id;p.weapon=slot.weapon;p.cooldown=slot.cooldown;const spec=WEAPONS[p.weaponId];if(c.reload){const next=beginReload(p.weapon,spec);if(next!==p.weapon)p.weapon=cancelBurst(next);}if(c.equipment)useEquipment(p,c.equipment,state.projectiles!,id());
-    c.stance??=p.stance??'stand';p.stance=c.stance;const sequence=advanceBurst(p.weapon,dt);p.weapon=sequence.state;Object.assign(p,advancePlayerMotion(p,c,dt,state.doors,world));
+    c.stance??=p.stance??'stand';p.stance=c.stance;const sequence=advanceBurst(p.weapon,dt);p.weapon=sequence.state;
+    const previousX=p.x,previousZ=p.z;
+    Object.assign(p,advancePlayerMotion(p,c,dt,state.doors,world));
+    frightenWildlife(state.animals,wildlifeTime,p,wildlifeMovementRange(Math.hypot(p.x-previousX,p.z-previousZ)/dt),world,state.doors!);
     if(state.animals){
       const count=p.meat??0;
       const recovered=c.eatMeat?meatRecovery(count,p.health):0;
@@ -157,11 +160,13 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
       if(animalHit && state.animals){
         range=animalHit.distance;
         hurtWildlife(state.animals,animalHit.index,rangedDamage(p.weaponId,spec.damage,range),wildlifeTime);
+        frightenWildlife(state.animals,wildlifeTime,p,0,world,state.doors!,animalHit.index);
         state.events.push({id:id(),player:p.id,weapon:p.weaponId,from,to:{x:from.x+direction.x*range,y:from.y+direction.y*range,z:from.z+direction.z*range},target:'wildlife-'+animalHit.index,hit:true,killed:state.animals[animalHit.index]!.health===0});
         continue;
       }
       const hit=!!target&&(target.protection??0)<=0&&(p.team===undefined||target.team!==p.team);const headDistance=target?actorHit(origin,d,target,true):Infinity;const headshot=!!hit&&headDistance<wall;const before=target?.deaths??0;if(hit)hurt(target!,rangedDamage(p.weaponId,spec.damage,range)*(headshot?1.5:1),p.id);state.events.push({elevated:(p.y??0)>=3.35,id:id(),player:p.id,weapon:p.weaponId,from:{x:origin[0]!,y:origin[1]!,z:origin[2]!},to:{x:origin[0]!+d[0]!*range,y:origin[1]!+d[1]!*range,z:origin[2]!+d[2]!*range},hit,killed:hit&&target!.deaths>before,target:target?.id,headshot,protected:!!target&&(target.protection??0)>0&&(p.team===undefined||target.team!==p.team)});if(state.winner)break;
      }
+     frightenWildlife(state.animals,wildlifeTime,p,WILDLIFE_SHOT_RANGE,world,state.doors!);
     }}syncSlot(p.inventory,p.weapon,p.cooldown);c.door=undefined;c.shot=false;c.reload=false;c.jump=false;c.dash=false;c.slot=undefined;c.pickup=undefined;c.replace=undefined;c.equipment=undefined;c.eatMeat=undefined;if(state.winner)break;
    }
    if(!state.winner){
@@ -172,6 +177,8 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
         const index=Number(target.id.slice('wildlife-'.length));
         hurtWildlife(state.animals,index,amount,wildlifeTime);
         target.health=state.animals[index]!.health;
+        const attacker=state.players.find(player=>player.id===owner);
+        if(attacker)frightenWildlife(state.animals,wildlifeTime,attacker,0,world,state.doors!,index);
       }else hurt(target as Player,amount,owner);
     },id));
    }

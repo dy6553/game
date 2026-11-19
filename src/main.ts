@@ -618,7 +618,19 @@ async function start() {
     if(onlineActive&&onlineState)actors=onlineState.players.filter(a=>a.id!==onlineId).map((a,i)=>({...a,revealed:(a.revealedUntil??0)>onlineState!.tick,name:playerName(a,a.team!==undefined&&a.team===me?.team?'아군':`적 대원 ${i+1}`),ally:me?.team!==undefined&&a.team===me.team,active:a.connected&&!a.abandoned}));
     else if(battle.active)actors=battle.mode==='duel'?[{...battle.position,id:'bot-1',revealed:world.isBotRevealed?.('bot-1'),name:'적 봇',health:battle.botHealth}]:battle.bots.map(b=>({...b.position,id:b.id,revealed:world.isBotRevealed?.(b.id),name:b.name,health:b.health,active:!!b.position}));
     else actors=world.targetContacts?.()??[];
-    const view=combatContacts(geometry,doors,p,input.look.yaw,input.look.pitch,actors,world.weatherState()?.visibility??150),target=health>0?view.target:undefined;card.hidden=!target;if(target){document.querySelector('#target-name')!.textContent=target.name;document.querySelector('#target-hp')!.textContent=String(Math.ceil(target.health));document.querySelector<HTMLProgressElement>('#target-hp-bar')!.value=target.health;}
+    const view=combatContacts(geometry,doors,p,input.look.yaw,input.look.pitch,actors,world.weatherState()?.visibility??150);
+    const animal=health>0?world.wildlifeTarget?.(view.target?.distance??60,onlineState?.animals,onlineActive):undefined;
+    const target=health>0?animal??view.target:undefined;
+    card.hidden=!target;
+    if(target){
+      const maxHealth=animal?.maxHealth??100,hp=Math.ceil(target.health);
+      document.querySelector('#target-name')!.textContent=target.name;
+      document.querySelector('#target-hp')!.textContent=String(hp);
+      document.querySelector('#target-max-hp')!.textContent=String(maxHealth);
+      const bar=document.querySelector<HTMLProgressElement>('#target-hp-bar')!;
+      bar.max=maxHealth;
+      bar.value=target.health;
+    }
     const navigation=navigationLocation(geometry,me??position),locationLabel=document.querySelector<HTMLElement>('#map-location')!;if(locationLabel.textContent!==navigation.label)locationLabel.textContent=navigation.label;locationLabel.style.borderColor=navigation.color;
     const weather=world.weatherState(),weatherLabel=document.querySelector<HTMLElement>('#weather-status')!,weatherText=weather?.intensity&&geometry.indoorAt(p)?'실내 · 폭설 차단':weatherMessage(weather);weatherLabel.hidden=!weather;if(weatherLabel.textContent!==weatherText)weatherLabel.textContent=weatherText;weatherNotice.hidden=!weather?.warning;if(weatherNotice.textContent!==weatherText)weatherNotice.textContent=weatherText;
     const pings=onlineState?.pings?.filter(q=>q.expires>(onlineState?.tick??0))??[];
@@ -826,6 +838,7 @@ async function start() {
         const wasDashing=localDash.remaining>0,dashStep=advanceDash(localDash,step);localDash=dashStep.state;
         if(canAct){position=world.move?.(position,dashStep.delta)??moveWithCollisions(position,dashStep.delta);const walkTime=step-dashStep.activeSeconds;position=world.move?.(position,{x:movement.x*PROTOTYPE.speed*runScale*walkTime,z:movement.z*PROTOTYPE.speed*runScale*walkTime})??moveWithCollisions(position,{x:movement.x*PROTOTYPE.speed*runScale*walkTime,z:movement.z*PROTOTYPE.speed*runScale*walkTime});}
         if(input.consumeJumps()>0&&canAct&&!wasDashing&&world.jump())audio.play('jump');
+        if(canAct)world.wildlifeNoise?.(position,Math.hypot(position.x-oldPosition.x,position.z-oldPosition.z)/step);
         world.update(position, step, input.look);
         if(reloadRequested>0&&world.reload())audio.play('reload');
         const current=world.practiceState();

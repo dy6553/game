@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createNetworkGame} from '../src/network-game.ts';
-import {advanceWildlife,animalPose,nearbyMeat,takeMeat,meatRecovery,MEAT_CAPACITY,createWildlife,hurtWildlife,wildlifeHit} from '../src/wildlife.ts';
+import {frightenWildlife,wildlifeMovementRange,advanceWildlife,animalPose,nearbyMeat,takeMeat,meatRecovery,MEAT_CAPACITY,createWildlife,hurtWildlife,wildlifeHit} from '../src/wildlife.ts';
 import {createWorld} from '../src/world.ts';
 
 test('a meat drop can be stored once at full health and the animal respawns',()=>{
@@ -40,9 +40,13 @@ test('online snow room processes shooting, meat and recovery on the server',()=>
   const {x,z}=animalPose(0,.05);
   Object.assign(player,{x,z:z-3,y:0});
   const command={x:0,y:0,yaw:0,pitch:Math.atan2(1.55,3),fire:false,shot:true,reload:false,jump:false,sprint:false,scope:false};
-  for(let seq=0;seq<10 && game.checkpoint().animals![0]!.health>0;seq++){
+  for(let seq=0;seq<10 && game.state.animals![0]!.health>0;seq++){
+    const target=animalPose(0,game.state.weatherTime!+.05,game.state.animals![0]);
+    Object.assign(player,{x:target.x,z:target.z-3});
     assert.equal(game.input(player.id,{...command,seq}),true);
-    for(let i=0;i<8;i++)game.step();
+    game.step();
+    if(seq===0)assert.ok(game.state.animals![0]!.flight);
+    for(let i=0;i<7;i++)game.step();
   }
   const animal=game.checkpoint().animals![0]!;
   assert.equal(animal.health,0);
@@ -71,11 +75,11 @@ test('online snow room processes shooting, meat and recovery on the server',()=>
   assert.equal(player.health,85);
 });
 
-test('all nine wildlife paths and meat drops stay outdoors and respawn independently',()=>{
+test('all twelve wildlife paths and meat drops stay outdoors and respawn independently',()=>{
   const world=createWorld('snow');
   const solids=world.worldSolids(world.createDoors());
   const animals=createWildlife();
-  assert.equal(animals.length,9);
+  assert.equal(animals.length,12);
   for(const index of animals.keys()){
     for(let time=0;time<50;time+=.25){
       const pose=animalPose(index,time);
@@ -100,5 +104,32 @@ test('old snow room checkpoints keep original animals and add new ones',()=>{
   hurtWildlife(old.animals,1,1000,10);
   const restored=createNetworkGame(old).state.animals!;
   assert.deepEqual(restored.slice(0,3),old.animals);
-  assert.equal(restored.length,9);
+  assert.equal(restored.length,12);
+});
+
+
+test('quiet movement leaves wildlife alone and nearby sprinting causes a quick outdoor retreat',()=>{
+  const world=createWorld('snow');
+  const doors=world.createDoors();
+  const solids=world.worldSolids(doors);
+  const animals=createWildlife();
+  const start=animalPose(0,0);
+  const source={x:start.x,z:start.z-3};
+  frightenWildlife(animals,0,source,wildlifeMovementRange(7),world,doors);
+  assert.equal(animals[0]!.flight,undefined);
+  frightenWildlife(animals,0,source,wildlifeMovementRange(10.5),world,doors);
+  const flight=animals[0]!.flight!;
+  assert.ok(flight);
+  const after=animalPose(0,.5,animals[0]);
+  assert.ok(Math.hypot(after.x-start.x,after.z-start.z)>4);
+  assert.ok(Math.hypot(after.x-source.x,after.z-source.z)>3);
+  for(let time=0;time<flight.resume;time+=.05){
+    const position=animalPose(0,time,animals[0]);
+    assert.equal(world.indoorAt(position),undefined);
+    assert.ok(world.canStand(position,.7,solids));
+  }
+  advanceWildlife(animals,flight.resume);
+  assert.equal(animals[0]!.flight,undefined);
+  const returned=animalPose(0,flight.resume,animals[0]);
+  assert.ok(Math.hypot(start.x-returned.x,start.z-returned.z)<.001);
 });

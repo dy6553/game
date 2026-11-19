@@ -1,5 +1,5 @@
 import {createWildlifeArt} from './wildlife-art.ts';
-import {advanceWildlife,meatRecovery,takeMeat,createWildlife,hurtWildlife,wildlifeBlastTargets,wildlifeHit} from './wildlife.ts';
+import {frightenWildlife,WILDLIFE_SHOT_RANGE,wildlifeMovementRange,wildlifeSpawns,type Animal,advanceWildlife,meatRecovery,takeMeat,createWildlife,hurtWildlife,wildlifeBlastTargets,wildlifeHit} from './wildlife.ts';
 import {snowWeather,inWeatherRange,newWeatherSeed,snowDaylight} from './snow-weather.ts';
 import {rangedDamage} from './weapon-range.ts';
 import {viewmodelPose} from './viewmodel-motion.ts';
@@ -755,6 +755,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
         const normal=delta.normalize().scale(-1);
         if(nearest){normal.set(0,0,0);if(nearest.axis===0)normal.x=delta.x>0?-1:1;else if(nearest.axis===1)normal.y=delta.y>0?-1:1;else normal.z=delta.z>0?-1:1;}
         if(soundEvents.length<16)soundEvents.push({kind:'pistol',x:point.x,z:point.z});
+        frightenWildlife(animals,weatherSeconds,point,WILDLIFE_SHOT_RANGE,geometry,doors);
         botEffects.emit(start,impact,normal,!clear,false);
         return clear;
       });
@@ -776,6 +777,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
         const index=Number(target.id.slice('wildlife-'.length));
         hurtWildlife(animals,index,amount,weatherSeconds);
         target.health=animals[index]!.health;
+        frightenWildlife(animals,weatherSeconds,localActor,0,geometry,doors,index);
        }
        else if(target.id==='player'){group.hurtSelf(amount);localActor.health=group.state().playerHealth;if(localActor.health<=0)localActor.gear=createGear();}
        else if(target.id.startsWith('target-')){const t=targets[Number(target.id.slice(7))]!;const before=t.health;t.health=Math.max(0,t.health-amount);target.health=t.health;if(before>t.health){hits++;t.flash=.16;}if(before>0&&t.health===0){destroyed++;t.root.setEnabled(false);}t.healthBar.scaling.x=Math.max(.001,t.health/100);}
@@ -830,7 +832,9 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
     if(!attempt.fired)return {fired:false,hit:false,reason:attempt.reason};
     if(aimOrigin.y-stanceStats(stance).eye-jumpState.height>=3.35&&highShotNotices.length<8)highShotNotices.push('고층 사격 · 내 위치가 4초간 노출됩니다');
     (survivalMode?survival:ffaMode?ffa:duel).playerFired();localActor.healing=0;shots++;recoil.fire(weaponId);if(!continued){cooldown=Math.max(0,spec.interval-(spec.automatic?(weapon.cadenceCarry??0):0));weapon=startBurst(weapon,spec);}
-    if(weaponId==='bazooka'){launchRocket({...localActor,x:aimOrigin.x,y:aimOrigin.y-stanceStats(stance).eye,stance,z:aimOrigin.z,jump:{height:0},yaw:camera.rotation.y,pitch:camera.rotation.x},localProjectiles,++toolSequence,spec.damage);return {fired:true,hit:false,eliminated:false,damage:0,impact:false,point:aimOrigin.clone()};}
+    if(weaponId==='bazooka'){
+      frightenWildlife(animals,weatherSeconds,localActor,WILDLIFE_SHOT_RANGE,geometry,doors);
+      launchRocket({...localActor,x:aimOrigin.x,y:aimOrigin.y-stanceStats(stance).eye,stance,z:aimOrigin.z,jump:{height:0},yaw:camera.rotation.y,pitch:camera.rotation.x},localProjectiles,++toolSequence,spec.damage);return {fired:true,hit:false,eliminated:false,damage:0,impact:false,point:aimOrigin.clone()};}
     let anyHeadshot=false,anyHit=false,anyEliminated=false,impact=false,totalDamage=0;
     let lastPoint=aimOrigin.clone();
     const offsets=pelletOffsets(spec);
@@ -853,6 +857,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
     if(animalHit && animals){
       totalDamage+=hurtWildlife(animals,animalHit.index,rangedDamage(weaponId,spec.damage,animalHit.distance),weatherSeconds);
       eliminated=animals[animalHit.index]!.health===0;
+      frightenWildlife(animals,weatherSeconds,localActor,0,geometry,doors,animalHit.index);
     }
     if(hit&&!animalHit&&duelMode){
       const id=String(pick!.pickedMesh!.metadata.botId??'bot-1'),multi=ffaMode||survivalMode,group=survivalMode?survival:ffa;
@@ -875,6 +880,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
     impact=impact||!!animalHit||pick?.hit===true;
     anyHit=anyHit||hit;anyEliminated=anyEliminated||eliminated;lastPoint=end;
     }
+    frightenWildlife(animals,weatherSeconds,localActor,WILDLIFE_SHOT_RANGE,geometry,doors);
     return { fired: true, hit:anyHit,headshot:anyHeadshot, eliminated:anyEliminated, damage:totalDamage,impact,point:lastPoint };
   }
   function reload() {
@@ -934,6 +940,23 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
     get scoped(){return scoped;},
     get thirdPerson(){return thirdPerson;},
     aimReticle(){if(!thirdPerson||scoped||preview||reference)return {x:50,y:50};const direction=camera.getDirection(Vector3.Forward()),pick=scene.pickWithRay(new Ray(aimOrigin.clone(),direction,150),m=>m.isPickable&&m.isEnabled());const end=pick?.pickedPoint??aimOrigin.add(direction.scale(150)),viewport=camera.viewport.toGlobal(engine.getRenderWidth(),engine.getRenderHeight()),v=Vector3.Project(end,Matrix.Identity(),camera.getViewMatrix().multiply(camera.getProjectionMatrix()),viewport);return {x:Math.max(0,Math.min(100,v.x/engine.getRenderWidth()*100)),y:Math.max(0,Math.min(100,v.y/engine.getRenderHeight()*100))};},togglePerspective(){thirdPerson=!thirdPerson;return thirdPerson;},
+    wildlifeNoise(source:Point,speed:number){
+      if(preview||reference)return;
+      frightenWildlife(animals,weatherSeconds,source,wildlifeMovementRange(speed),geometry,doors);
+    },
+    wildlifeTarget(limit:number,onlineAnimals?:Animal[],online=false){
+      const nearby=online?onlineAnimals:animals;
+      if(!nearby?.length||preview||reference)return;
+      const direction=camera.getDirection(Vector3.Forward());
+      const range=Math.min(60,limit,weatherState()?.visibility??150);
+      const end=aimOrigin.add(direction.scale(range));
+      const obstruction=firstShotBox(geometry,doors,aimOrigin,end);
+      const hit=wildlifeHit(nearby,weatherSeconds,aimOrigin,direction,range*(obstruction?.t??1));
+      if(hit){
+        const {name,health:maxHealth}=wildlifeSpawns[hit.index]!;
+        return {name,maxHealth,health:nearby[hit.index]!.health};
+      }
+    },
     targetContacts:()=>targets.map((t,i)=>({id:'target-'+i,name:'표적 '+(i+1),x:t.x,z:t.z,y:0,health:t.health})),
     gearState:()=>({meat:localMeat,gear:{...localActor.gear},health:localActor.health,flash:localActor.flash,healing:localActor.healing,cooldown:localActor.gearCooldown}),
     useEquipment(kind:EquipmentId,p:Point,look:Look){if(preview||reference||battleState().winner)return false;Object.assign(localActor,{stance,jump:jumpState,x:p.x,y:p.y??0,z:p.z,yaw:look.yaw,pitch:look.pitch,health:battleState().playerHealth});const ok=useEquipment(localActor,kind,localProjectiles,++toolSequence);if(ok&&kind!=='medkit')if(aimOrigin.y-stanceStats(stance).eye-jumpState.height>=3.35&&highShotNotices.length<8)highShotNotices.push('고층 사격 · 내 위치가 4초간 노출됩니다');

@@ -60,7 +60,7 @@ export function createWildlifeArt(scene: Scene) {
     visible = !!animals;
     for (const [index,rig] of rigs.entries()) {
       const animal = animals?.[index];
-      const pose = animalPose(index,time);
+      const pose = animalPose(index,time,animal);
       const distance = Math.hypot(pose.x-viewer.x,pose.z-viewer.z);
       const draw = !!animal && animal.health>0 && distance<Math.min(visibility+2,72);
       const detail = distance>34 ? 'low' : distance>19 && quality==='high' ? 'medium' : quality;
