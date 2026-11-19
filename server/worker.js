@@ -12,9 +12,9 @@ const json=(body,status=200)=>Response.json(body,{status});
 const code=()=>crypto.randomUUID().replaceAll('-','').slice(0,8).toUpperCase();
 export class Room extends DurableObject {
  accounts={};matchId=crypto.randomUUID();officialQueued=false;recording=null;closing=null;
- game=createNetworkGame(undefined,'harbor',{clock:()=>Date.now()});sessions={};sockets=new Map();timer=null;last=Date.now();disconnectedAt=0;startedAt=0;finishedAt=0;matchStarted=false;packets=new WeakMap();protocols=new WeakMap();disconnects={};idleSince=0;
- constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;ctx.blockConcurrencyWhile(async()=>{const saved=await ctx.storage.get('checkpoint');if(saved){this.game=createNetworkGame(saved.state,'harbor',{clock:()=>Date.now()});this.accounts=saved.accounts??{};this.disconnects=saved.disconnects??{};this.idleSince=saved.idleSince??0;this.matchId=saved.matchId??this.matchId;this.officialQueued=saved.officialQueued??false;this.sessions=saved.sessions;this.last=saved.last;this.startedAt=saved.startedAt??saved.last;this.finishedAt=saved.finishedAt??0;this.matchStarted=saved.matchStarted??saved.state.players.length===2;this.disconnectedAt=(this.game.state.mode??'duel')==='duel'&&this.game.state.phase!=='waiting'?(saved.disconnectedAt||saved.last):0;if(this.game.state.mode!=='duel'||this.game.state.phase==='waiting')for(const p of this.game.state.players)if(!p.abandoned)this.disconnects[p.id]??=saved.last;}});}
- async save(){await this.ctx.storage.put('checkpoint',{state:this.game.checkpoint(),disconnects:this.disconnects,idleSince:this.idleSince,accounts:this.accounts,matchId:this.matchId,officialQueued:this.officialQueued,sessions:this.sessions,last:this.last,startedAt:this.startedAt,finishedAt:this.finishedAt,matchStarted:this.matchStarted,disconnectedAt:this.disconnectedAt});}
+ levels={};game=createNetworkGame(undefined,'harbor',{clock:()=>Date.now()});sessions={};sockets=new Map();timer=null;last=Date.now();disconnectedAt=0;startedAt=0;finishedAt=0;matchStarted=false;packets=new WeakMap();protocols=new WeakMap();disconnects={};idleSince=0;
+ constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;ctx.blockConcurrencyWhile(async()=>{const saved=await ctx.storage.get('checkpoint');if(saved){this.game=createNetworkGame(saved.state,'harbor',{clock:()=>Date.now()});this.accounts=saved.accounts??{};this.levels=saved.levels??{};this.disconnects=saved.disconnects??{};this.idleSince=saved.idleSince??0;this.matchId=saved.matchId??this.matchId;this.officialQueued=saved.officialQueued??false;this.sessions=saved.sessions;this.last=saved.last;this.startedAt=saved.startedAt??saved.last;this.finishedAt=saved.finishedAt??0;this.matchStarted=saved.matchStarted??saved.state.players.length===2;this.disconnectedAt=(this.game.state.mode??'duel')==='duel'&&this.game.state.phase!=='waiting'?(saved.disconnectedAt||saved.last):0;if(this.game.state.mode!=='duel'||this.game.state.phase==='waiting')for(const p of this.game.state.players)if(!p.abandoned)this.disconnects[p.id]??=saved.last;}});}
+ async save(){await this.ctx.storage.put('checkpoint',{state:this.game.checkpoint(),disconnects:this.disconnects,idleSince:this.idleSince,accounts:this.accounts,levels:this.levels,matchId:this.matchId,officialQueued:this.officialQueued,sessions:this.sessions,last:this.last,startedAt:this.startedAt,finishedAt:this.finishedAt,matchStarted:this.matchStarted,disconnectedAt:this.disconnectedAt});}
  outbox(){return createResultOutbox(this.ctx.storage,event=>createRecordStore(this.env).write(event));}
  async queueResult(){
   if(this.recording)return this.recording;if(this.officialQueued)return;
@@ -24,7 +24,7 @@ export class Room extends DurableObject {
   try{await this.recording;}finally{this.recording=null;}
  }
  async deliver(){await this.outbox().flush();if(await this.outbox().pending())await this.ctx.storage.setAlarm(Date.now()+60000);}
- reset(){this.disconnects={};this.idleSince=0;this.game=createNetworkGame(undefined,'harbor',{clock:()=>Date.now()});this.sessions={};this.accounts={};this.matchId=crypto.randomUUID();this.officialQueued=false;this.startedAt=0;this.finishedAt=0;this.matchStarted=false;this.disconnectedAt=0;}
+ reset(){this.levels={};this.disconnects={};this.idleSince=0;this.game=createNetworkGame(undefined,'harbor',{clock:()=>Date.now()});this.sessions={};this.accounts={};this.matchId=crypto.randomUUID();this.officialQueued=false;this.startedAt=0;this.finishedAt=0;this.matchStarted=false;this.disconnectedAt=0;}
  async fetch(request){const url=new URL(request.url);
   if(url.pathname==='/reserve')return this.ctx.blockConcurrencyWhile(async()=>{
    if(this.closing)await this.closing;
@@ -34,10 +34,11 @@ export class Room extends DurableObject {
    if(this.game.state.players.length>=(this.game.state.capacity??2)||this.game.state.winner)return json({error:'입장할 수 없는 방입니다.'},409);
    const id=crypto.randomUUID(),token=crypto.randomUUID();
    const map=this.game.state.players.length?this.game.state.map:normalizeMap(input.map);
-   if(!canAccessMap(map,!!input.accountSubject,input.accountLevel))return json({error:MAPS[map].name+' 전장은 로그인 후 Lv3에 해금됩니다.'},403);
+   if(input.action==='quick'&&this.game.state.players.length&&map!==normalizeMap(input.map))return json({error:'전장이 변경되었습니다.'},409);
+   if(!this.game.state.players.length&&!canAccessMap(map,!!input.accountSubject,input.accountLevel))return json({error:MAPS[map].name+' 전장은 로그인 후 Lv3에 해금됩니다.'},403);
    if(!this.game.state.players.length)this.game=createNetworkGame(undefined,map,{mode:input.mode??'duel',randomPickups:true,waitingRoom:true,clock:()=>Date.now()});
    if(input.accountSubject&&Object.values(this.accounts).includes(input.accountSubject))return json({error:'같은 계정으로 양쪽에 입장할 수 없습니다.'},409);
-   const p=this.game.join(id,input.weapon,input.character,{nickname:normalizeNickname(input.nickname)??'대원',guest:!input.accountSubject});if(input.accountSubject)this.accounts[id]=input.accountSubject;p.connected=false;this.disconnects[id]=Date.now();this.sessions[token]=id;this.last=Date.now();await this.save();await this.ctx.storage.setAlarm(Date.now()+120000);return json({id,token,mode:this.game.state.mode,players:this.game.state.players.length,capacity:this.game.state.capacity,phase:this.game.state.phase,accepting:this.game.state.players.length<this.game.state.capacity});
+   const p=this.game.join(id,input.weapon,input.character,{nickname:normalizeNickname(input.nickname)??'대원',guest:!input.accountSubject});if(input.accountSubject){this.accounts[id]=input.accountSubject;this.levels[id]=input.accountLevel;}p.connected=false;this.disconnects[id]=Date.now();this.sessions[token]=id;this.last=Date.now();await this.save();await this.ctx.storage.setAlarm(Date.now()+120000);return json({id,token,mode:this.game.state.mode,players:this.game.state.players.length,capacity:this.game.state.capacity,phase:this.game.state.phase,accepting:this.game.state.players.length<this.game.state.capacity});
   });
   if(request.headers.get('Upgrade')!=='websocket')return json({error:'WebSocket required'},426);
   const pair=new WebSocketPair(),client=pair[0],server=pair[1];server.accept();
@@ -54,6 +55,12 @@ export class Room extends DurableObject {
      server.send(JSON.stringify({type:'welcome',id,state:recipientState(this.game.state,id)}));this.start();return;
     }
     const now=Date.now(),rate=this.packets.get(server)??{at:now,count:0};if(now-rate.at>1000){rate.at=now;rate.count=0;}if(++rate.count>80){server.close(1008,'전송 속도 초과');return;}this.packets.set(server,rate);
+    if(msg.type==='map'){
+     const map=typeof msg.map==='string'&&Object.hasOwn(MAPS,msg.map)?msg.map:null;
+     if(!map||id!==this.game.state.hostId||this.game.state.phase!=='waiting')server.send(JSON.stringify({type:'room-error',reason:'대기 중인 방장만 전장을 변경할 수 있습니다.'}));
+     else if(!canAccessMap(map,!!this.accounts[id],this.levels[id]??0))server.send(JSON.stringify({type:'room-error',reason:'방장이 해당 전장을 해금해야 합니다.'}));
+     else if(this.game.changeMap(id,map)){this.ctx.waitUntil(this.save());this.broadcast();}
+    }
     if(msg.type==='start'){if(!this.game.startMatch(id))server.send(JSON.stringify({type:'room-error',reason:'방장만 시작할 수 있습니다. 개인전·팀전은1명부터,1대1은2명부터 시작합니다.'}));else this.matchStarted=true;this.ctx.waitUntil(this.save());this.broadcast();}
     if(msg.type==='deploy'){this.game.deploy(id);this.ctx.waitUntil(this.save());this.broadcast();}
     if(msg.type==='nickname'){if(!this.game.setGuestNickname(id,msg.nickname))server.send(JSON.stringify({type:'room-error',reason:'닉네임을2~16자로 입력하세요.'}));else if(this.game.state.mode!=='duel'&&this.game.state.phase==='playing')this.game.deploy(id);this.broadcast();}

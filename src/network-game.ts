@@ -11,7 +11,7 @@ import {createGear,launchRocket,useEquipment,advanceEquipment,isEquipmentId,type
 import {createDash,beginDash,advanceDash,cancelDash,type DashState} from './dash.ts';
 import {createInventory,createPickups,takeEquipmentPickup,syncSlot,advanceStowed,switchSlot,takePickup,tickPickups,type Inventory,type Pickup} from './inventory.ts';
 import {harborWorld,createWorld,type World,type MapId,type Doors,type Point} from './world.ts';
-import {normalizeMap} from './maps.ts';
+import {normalizeMap,MAPS} from './maps.ts';
 import { WEAPONS,pelletOffsets,isWeaponId,startBurst,advanceBurst,cancelBurst,type WeaponId } from './weapons.ts';
 import { createWeapon,beginReload,tryFire,type WeaponState } from './combat.ts';
 import { createJump,beginJump,type JumpState } from './jump.ts';
@@ -83,8 +83,8 @@ export function onlinePlaying(state:MatchState,id?:string){
 export function wonOnline(state:MatchState,id:string){return state.winningIds?state.winningIds.includes(id):state.winner===id;}
 export const ONLINE_MODES:OnlineMode[]=['duel','ffa','team'];
 export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:NetworkOptions={}){
- const mapId=normalizeMap(saved?.map??map),mode=saved?.mode??options.mode??'duel';
- const world=mapId==='harbor'?harborWorld:createWorld(mapId);
+ let mapId=normalizeMap(saved?.map??map);const mode=saved?.mode??options.mode??'duel';
+ let world=mapId==='harbor'?harborWorld:createWorld(mapId);
  const state:MatchState=saved?structuredClone(saved):{players:[],winner:'',tick:0,events:[],pickups:options.randomPickups?createMatchPickups(world):createPickups()};
  if(!saved&&options.waitingRoom)state.phase='waiting';state.map=mapId;state.mode=mode;state.capacity=mode==='duel'?2:20;state.teamScores??=[0,0];state.projectiles??=[];state.toolEvents??=[];state.pickups??=createMatchPickups(world);state.doors??=world.createDoors();
  if(mapId==='snow'){state.animals??=createWildlife();state.weatherTime??=0;state.weatherSeed??=newWeatherSeed();state.layoutRevision=SNOW_LAYOUT_REVISION;}
@@ -106,6 +106,15 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
    spawn(p,state.players.length);state.players.push(p);state.hostId??=p.id;return p;
   },
   checkpoint(){const saved=structuredClone(state);for(const p of saved.players)if(p.guest)delete p.nickname;return saved;},
+  changeMap(playerId:string,map:MapId){
+   if(state.phase!=='waiting'||state.hostId!==playerId||!state.players.find(p=>p.id===playerId)?.connected||!Object.hasOwn(MAPS,map))return false;
+   if(map===mapId)return true;
+   mapId=map;world=map==='harbor'?harborWorld:createWorld(map);state.map=map;
+   state.doors=world.createDoors();state.pickups=options.randomPickups?createMatchPickups(world):createPickups();
+   delete state.animals;delete state.weatherTime;delete state.weatherSeed;delete state.layoutRevision;
+   if(map==='snow'){state.animals=createWildlife();state.weatherTime=0;state.weatherSeed=newWeatherSeed();state.layoutRevision=SNOW_LAYOUT_REVISION;}
+   return true;
+  },
   startMatch(playerId:string){if(state.phase!=='waiting'||state.hostId!==playerId)return false;const host=state.players.find(p=>p.id===playerId);if(!host?.connected||host.guest&&!normalizeNickname(host.nickname))return false;const players=state.players.filter(p=>p.connected&&!p.abandoned&&(!p.guest||!!normalizeNickname(p.nickname)));if(players.length<(mode==='duel'?2:1))return false;state.phase='playing';state.started=true;inputs.clear();for(const p of players){p.playing=true;p.participated=true;}for(const p of players)spawn(p,state.players.indexOf(p));return true;},
   deploy(playerId:string){const p=state.players.find(p=>p.id===playerId);if(state.phase!=='playing'||state.winner||!p?.connected||p.abandoned||p.playing!==false||p.guest&&!normalizeNickname(p.nickname))return false;p.playing=true;p.participated=true;spawn(p,state.players.indexOf(p),true);inputs.delete(p.id);return true;},
   leaveWaiting(playerId:string){if(state.phase!=='waiting')return false;const index=state.players.findIndex(p=>p.id===playerId);if(index<0)return false;state.players.splice(index,1);inputs.delete(playerId);if(state.hostId===playerId)state.hostId=state.players.find(p=>p.connected)?.id??state.players[0]?.id;state.players.forEach((p,i)=>{if(mode==='team')p.team=i%2;spawn(p,i);});return true;},

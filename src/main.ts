@@ -316,6 +316,10 @@ async function start() {
     const buttons=['online-create','online-join','online-quick'].map(id=>document.querySelector<HTMLButtonElement>('#'+id)!);buttons.forEach(button=>button.disabled=true);
     try{const identity=await accountView.onlineIdentity();const nickname=await chooseOnlineNickname(identity,(member,save,initial)=>nicknameDialog.open(member,save,initial),name=>accountView.saveNickname(name));if(!nickname)return;await online.enter(action,document.querySelector<HTMLInputElement>('#online-code')!.value.trim().toUpperCase(),document.querySelector<HTMLSelectElement>('#online-weapon')!.value,document.querySelector<HTMLSelectElement>('#online-character')!.value,selectedMap,document.querySelector<HTMLSelectElement>('#online-mode')!.value,nickname);}catch(error){document.querySelector('#online-message')!.textContent=error instanceof Error?error.message:'방에 입장하지 못했습니다.';}finally{buttons.forEach(button=>button.disabled=!online.available);}
   });
+  document.querySelector<HTMLSelectElement>('#waiting-map')!.addEventListener('change',event=>{
+    const select=event.currentTarget as HTMLSelectElement;
+    if(!online.changeMap(select.value))select.value=normalizeMap(onlineState?.map);
+  });
   document.querySelector('#waiting-start')!.addEventListener('click',()=>online.control('start'));document.querySelector('#waiting-deploy')!.addEventListener('click',()=>online.control('deploy'));document.querySelector('#waiting-leave')!.addEventListener('click',()=>openHome());document.querySelector('#waiting-copy')!.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(onlineCode);document.querySelector('#waiting-status')!.textContent='방 코드를 복사했습니다.';}catch{document.querySelector('#waiting-status')!.textContent='초대 코드 '+onlineCode;}});
   let homeOpen=true;
   let manualPaused=false,hasPlayed=false,wasLocked=false;

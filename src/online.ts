@@ -31,6 +31,7 @@ export function createOnlineClient(endpoint:string,onState:(state:MatchState,id:
    const data=await response.json();if(ticket!==operation)return;if(!response.ok)throw new Error(data.error??'방에 입장하지 못했습니다.');session=data;stopped=false;attempt=0;seq=0;onSession(data);connect();
   },
   control(type:'start'|'deploy'|'nickname',nickname?:string){if(stopped||socket?.readyState!==WebSocket.OPEN)return false;socket.send(JSON.stringify({type,nickname}));return true;},
+  changeMap(map:string){if(stopped||socket?.readyState!==WebSocket.OPEN)return false;socket.send(JSON.stringify({type:'map',map}));return true;},
   send(command:Omit<Command,'seq'>){if(!stopped&&socket?.readyState===WebSocket.OPEN&&socket.bufferedAmount<65536){const sent=seq++;timing.sent(sent);socket.send(JSON.stringify({type:'input',command:{...command,seq:sent}}));return sent;}return null;},
   leave(){operation++;stopped=true;clearTimeout(retry);if(socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify({type:'leave'}));socket?.close();socket=null;session=null;},
  };
