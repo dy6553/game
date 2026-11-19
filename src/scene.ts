@@ -611,7 +611,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
     wildlifeArt?.(state,weatherSeconds,viewer,lowPerformance?'low':onlineQualityHigh?'high':'medium',weatherState()?.visibility??150);
   const weatherState=()=>expansion==='snow'?snowWeather(weatherSeconds,weatherSeed):null;
   let lastSnowSky=-Infinity;
-  function applyWeather(){const weather=weatherState();if(!weather)return;const showing=!preview&&!reference;scene.fogMode=showing&&weather.intensity>.001?Scene.FOGMODE_LINEAR:Scene.FOGMODE_NONE;scene.fogColor.set(.78,.85,.88);scene.fogStart=weather.visibility*.5;scene.fogEnd=weather.visibility;snowfall?.setStormIntensity(weather.intensity);
+  function applyWeather(sheltered:boolean){const weather=weatherState();if(!weather)return;const showing=!preview&&!reference;scene.fogMode=showing&&weather.intensity>.001?Scene.FOGMODE_LINEAR:Scene.FOGMODE_NONE;scene.fogColor.set(.78,.85,.88);scene.fogStart=weather.visibility*.5;scene.fogEnd=weather.visibility;snowfall?.setStormIntensity(weather.intensity);proceduralArt?.setSheltered(showing&&sheltered&&weather.intensity>.001);
    const night=snowDaylight(weatherSeconds,weatherSeed).night;sky.intensity=.9-.17*night;moon.intensity=.8-.18*night;
    if(Math.abs(weatherSeconds-lastSnowSky)>=.5||weatherSeconds<lastSnowSky){lastSnowSky=weatherSeconds;const colors:number[]=[];
     for(let i=0;i<positions.length;i+=3){const x=positions[i]!,y=positions[i+1]!,z=positions[i+2]!,t=Math.max(0,Math.min(1,y/220)),angle=Math.atan2(z,x),band=Math.max(0,1-Math.abs(t-(.36+.08*Math.sin(angle*3)))/.17)*night;
@@ -619,8 +619,14 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
     }skyDome.updateVerticesData('color',colors);
    }
   }
+  function sharedShelter(a:Point,b:Point){
+    if(expansion!=='snow')return false;
+    const shelter=geometry.indoorAt(a);
+    return !!shelter&&geometry.indoorAt(b)?.id===shelter.id;
+  }
+  const canSeeThroughWeather=(a:Point,b:Point)=>sharedShelter(a,b)||inWeatherRange(options.map,weatherSeconds,a,b,weatherSeed);
   const botFlashes=new Map<string,number>();
-  let botDifficulty:SurvivalDifficulty='easy';const fixedDifficulty=()=>botDifficulty==='auto'?'normal':botDifficulty;const environment={doors,randomSpawns:options.randomSpawns!==false,canDetect:(from:Point,to:Point)=>inWeatherRange(options.map,weatherSeconds,from,to,weatherSeed)};let duel=createDuel(fixedDifficulty(),environment.randomSpawns?randomOutdoorSpawn([PROTOTYPE.spawn]):{x:0,z:18},undefined,environment),ffa=createBotMatch(fixedDifficulty(),environment),survival=createSurvivalMatch(botDifficulty,undefined,environment),duelMode=false,ffaMode=false,survivalMode=false;
+  let botDifficulty:SurvivalDifficulty='easy';const fixedDifficulty=()=>botDifficulty==='auto'?'normal':botDifficulty;const environment={doors,randomSpawns:options.randomSpawns!==false,canDetect:canSeeThroughWeather};let duel=createDuel(fixedDifficulty(),environment.randomSpawns?randomOutdoorSpawn([PROTOTYPE.spawn]):{x:0,z:18},undefined,environment),ffa=createBotMatch(fixedDifficulty(),environment),survival=createSurvivalMatch(botDifficulty,undefined,environment),duelMode=false,ffaMode=false,survivalMode=false;
   function battleState(){if(survivalMode)return survival.state();if(ffaMode)return ffa.state();const state=duel.state();return {...state,mode:'duel' as const,winnerName:state.winner==='player'?'나':'봇',bots:[] as ReturnType<typeof ffa.state>['bots']};}
   const botParent=new TransformNode('opponent',scene);
   const opponent=createCharacter(scene,botParent,'robot-cat');
@@ -658,7 +664,8 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
       const bot=ffaMode||survivalMode?state.bots.find(b=>b.id===rig.id):rig.id==='bot-1'?{health:state.botHealth,position:state.position,locked:state.locked}:undefined;
       if(!bot){rig.parent.setEnabled(false);continue;}
       if(rig.health===0&&bot.health>0){rig.fx.reset();botFlashes.delete(rig.id);}rig.health=bot.health;const alive=bot.health>0;
-      for(const mesh of rig.body)mesh.isPickable=alive;
+      const fogged=expansion!=='snow'||!sharedShelter(player.position,bot.position);
+      for(const mesh of rig.body){mesh.isPickable=alive;if(mesh.applyFog!==fogged)mesh.applyFog=fogged;}
       rig.mark.setEnabled(alive);rig.mark.scaling.y=bot.locked?2.5:1;rig.mark.scaling.x=Math.max(.001,bot.health/100);
       rig.parent.setEnabled(duelMode&&(alive||rig.fx.showingDeath)&&!preview&&!reference);rig.parent.position.set(bot.position.x,bot.position.y??0,bot.position.z);
       rig.parent.rotation.y=Math.atan2(camera.position.x-bot.position.x,camera.position.z-bot.position.z);rig.parent.computeWorldMatrix(true);
@@ -701,9 +708,11 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
   const autoShotResults:ReturnType<typeof shoot>[]=[];
   const flashTargetColor=Color3.FromHexString('#67d6ca'),idleTargetColor=Color3.FromHexString('#543524');
   const highShotNotices:string[]=[];const botReveals=new Map<string,number>();let stance:Stance='stand';
-  function update(p: Point, dt: number, look: Look = { yaw: 0, pitch: 0 }, paused=false) {
-    if(!paused&&!preview&&!reference&&expansion==='snow')weatherSeconds+=Math.max(0,dt);applyWeather();
-    snowfall?.update(p,snowfallEnabled&&(!proceduralArt||!lowPerformance)&&!paused&&!preview&&!reference&&!geometry.indoorAt(p),look.yaw);
+  function update(p: Point, dt: number, look: Look = { yaw: 0, pitch: 0 }, paused=false,onlineFrame=false) {
+    if(!paused&&!preview&&!reference&&expansion==='snow')weatherSeconds+=Math.max(0,dt);
+    const sheltered=expansion==='snow'&&!!geometry.indoorAt({...p,y:(p.y??0)+jumpState.height});
+    applyWeather(sheltered);
+    snowfall?.update(p,snowfallEnabled&&(!proceduralArt||!lowPerformance)&&(!paused||onlineFrame)&&!preview&&!reference&&!sheltered,look.yaw);
     if(!paused){for(const [id,left] of botReveals){if(left<=dt)botReveals.delete(id);else botReveals.set(id,left-dt);}}
     if(!paused&&!preview&&!reference){
       if(stance==='stand')delete p.stance;else p.stance=stance;
@@ -733,11 +742,11 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
       const wasBotDead=battleState().botHealth===0;
       const updateBattle=survivalMode?survival.update:ffaMode?ffa.update:duel.update;
       updateBattle(dt,p,(point:Point,botId?:string)=>{
-        if((botFlashes.get(botId??'bot-1')??0)>.05||!inWeatherRange(options.map,weatherSeconds,point,p,weatherSeed))return false;
+        if((botFlashes.get(botId??'bot-1')??0)>.05||!canSeeThroughWeather(point,p))return false;
         const from=new Vector3(point.x,1.8+(point.y??0),point.z),to=new Vector3(p.x,1.95+(p.y??0)+jumpState.height,p.z);
         return unobstructed(geometry,doors,from,to);
       },(point,target)=>{
-        if(!inWeatherRange(options.map,weatherSeconds,point,target,weatherSeed))return false;
+        if(!canSeeThroughWeather(point,target))return false;
         if((point.y??0)>=3.35){const b=battleState(),actor=b.bots.find(a=>Math.hypot(a.position.x-point.x,a.position.z-point.z)<.1);botReveals.set(actor?.id??'bot-1',4);if(highShotNotices.length<8)highShotNotices.push('고층 사격 감지 · 미니맵에 4초간 표시');}
         const start=new Vector3(point.x,1.8+(point.y??0),point.z),end=new Vector3(target.x,1.8+(target.y??0),target.z);
         const delta=end.subtract(start);
@@ -900,13 +909,15 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
   function renderOnline(state:MatchState,id:string,look:Look,dt:number,predictedPosition?:Point,remotePosition?:(Point&{id:string})|Array<Point&{id:string}>,predictedJump?:JumpState){
     const me=state.players.find(p=>p.id===id);if(!me)return;if(expansion==='snow'){weatherSeconds=state.weatherTime??0;weatherSeed=state.weatherSeed??1;}stance=me.stance??'stand';remoteParent.setEnabled(true);doors=state.doors??{};environment.doors=doors;
     duelMode=false;ffaMode=false;survivalMode=false;preview=false;reference=false;lobbyWeapons.show(lobbyWeaponId,false);character.poseLobby(false);if(weaponId!==me.weaponId||me.health===0)scoped=false;if(weaponId!==me.weaponId)equipAge=0;else equipAge+=dt;weaponId=me.weaponId;spec=WEAPONS[weaponId];weapon={...me.weapon};cooldown=me.cooldown;if(networkJumpTick!==state.tick){networkJumpTick=state.tick;networkJumpAge=0;}else networkJumpAge=Math.min(.15,networkJumpAge+dt);jumpState=predictedJump??advanceJump(me.jump,networkJumpAge);falling=(me.fallSpeed??0)>0;inventory=me.inventory??createInventory(me.weaponId);pickups=state.pickups??[];
-    recoil.update(dt);effects.update(dt);botEffects.update(dt);update(predictedPosition??me,0,look,true);drawWildlife(state.animals,predictedPosition??me);toolVisuals.update(state.projectiles??[],state.toolEvents??[],dt);for(const target of targets)target.root.setEnabled(false);
+    recoil.update(dt);effects.update(dt);botEffects.update(dt);update(predictedPosition??me,0,look,true,true);drawWildlife(state.animals,predictedPosition??me);toolVisuals.update(state.projectiles??[],state.toolEvents??[],dt);for(const target of targets)target.root.setEnabled(false);
     const estimates=new Map((Array.isArray(remotePosition)?remotePosition:remotePosition?[remotePosition]:[]).map(p=>[p.id,p]));const ids=new Set(state.players.filter(p=>p.id!==id&&!p.abandoned).map(p=>p.id));for(const key of remotes.keys())if(!ids.has(key))removeRemote(key);
     for(const other of state.players){if(other.id===id||other.abandoned)continue;let rig=remotes.get(other.id);
       if(!rig||rig.type!==other.character){removeRemote(other.id);const parent=new TransformNode('online-player-'+other.id,scene);parent.parent=remoteParent;const model=remoteModels.create(parent,other.character,other.weaponId!=='pistol',other.stance),body=model.meshes;
        const fx=createRobotImpact(scene,model.root,body,{particleLimit:12});fx.setQuality(onlineQualityHigh);fx.setEffectsEnabled(combatEffectsEnabled);const marker=MeshBuilder.CreateBox('team-marker',{width:.45,height:.07,depth:.1},scene);marker.parent=parent;marker.position.y=2.95;marker.isPickable=false;rig={model,fx,parent,type:other.character,health:other.health,marker,castsShadow:false};remotes.set(other.id,rig);parent.position.set(other.x,(other.y??0)+other.jump.height,other.z);
       }
       if(rig.health===0&&other.health>0){rig.fx.reset();rig.parent.position.set(other.x,(other.y??0)+other.jump.height,other.z);}const target=estimates.get(other.id)??other,factor=1-Math.exp(-dt*35);rig.parent.position.x+=(target.x-rig.parent.position.x)*factor;rig.parent.position.z+=(target.z-rig.parent.position.z)*factor;rig.parent.position.y+=((target.y??other.y??0)+other.jump.height-rig.parent.position.y)*factor;rig.parent.rotation.y+=Math.atan2(Math.sin(other.yaw-rig.parent.rotation.y),Math.cos(other.yaw-rig.parent.rotation.y))*factor;rig.model.poseStance(other.stance);rig.marker.position.y=stanceStats(other.stance).height+.45;rig.marker.material=me.team!==undefined&&me.team===other.team?friendMat:enemyMat;rig.fx.update(dt);rig.parent.setEnabled(other.connected&&other.playing!==false&&(!other.guest||!!other.nickname)&&(other.health>0||rig.fx.showingDeath));rig.health=other.health;
+      const fogged=expansion!=='snow'||!sharedShelter(player.position,rig.parent.position);
+      for(const mesh of rig.model.meshes)if(mesh.applyFog!==fogged)mesh.applyFog=fogged;
       const shadowRadius=onlineQualityHigh?40:24;
       const castsShadow=!lowPerformance&&requestedShadows&&other.connected&&other.health>0&&other.playing!==false&&Math.hypot(other.x-me.x,other.z-me.z)<shadowRadius;
       if(castsShadow!==rig.castsShadow){for(const mesh of rig.model.meshes){if(castsShadow)shadows.addShadowCaster(mesh);else shadows.removeShadowCaster(mesh);}rig.castsShadow=castsShadow;}
@@ -959,7 +970,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
     },
     switchWeapon(slot:number){if(preview||reference||(battleState().playerHealth===0||!!battleState().winner))return false;syncSlot(inventory,weapon,cooldown);if(!switchSlot(inventory,slot))return false;equip();return true;},
     setPracticeRange,reload,resetPractice,practiceState,
-    onlineNameplates(state:MatchState,id:string){const me=state.players.find(p=>p.id===id);if(!me||me.health<=0)return [];const width=engine.getRenderWidth(),height=engine.getRenderHeight(),viewport=camera.viewport.toGlobal(width,height),transform=camera.getViewMatrix().multiply(camera.getProjectionMatrix());return state.players.filter(p=>p.id!==id&&p.connected&&!p.abandoned&&p.playing!==false&&p.health>0&&(!p.guest||!!p.nickname)).flatMap(p=>{const point=new Vector3(p.x,(p.y??0)+p.jump.height+stanceStats(p.stance).height+.4,p.z);if(Vector3.DistanceSquared(camera.position,point)>Math.min(60,weatherState()?.visibility??150)**2||!unobstructed(geometry,doors,{x:camera.position.x,y:camera.position.y,z:camera.position.z},{x:p.x,y:(p.y??0)+p.jump.height+1.8,z:p.z}))return [];const v=Vector3.Project(point,Matrix.Identity(),transform,viewport);if(v.z<0||v.z>1||v.x<0||v.x>width||v.y<0||v.y>height)return [];return [{id:p.id,name:playerName(p),x:v.x/width,y:v.y/height,health:p.health,ally:me.team!==undefined&&me.team===p.team}];});},
+    onlineNameplates(state:MatchState,id:string){const me=state.players.find(p=>p.id===id);if(!me||me.health<=0)return [];const width=engine.getRenderWidth(),height=engine.getRenderHeight(),viewport=camera.viewport.toGlobal(width,height),transform=camera.getViewMatrix().multiply(camera.getProjectionMatrix());return state.players.filter(p=>p.id!==id&&p.connected&&!p.abandoned&&p.playing!==false&&p.health>0&&(!p.guest||!!p.nickname)).flatMap(p=>{const point=new Vector3(p.x,(p.y??0)+p.jump.height+stanceStats(p.stance).height+.4,p.z);if(Vector3.DistanceSquared(camera.position,point)>Math.min(60,sharedShelter(camera.position,{...p,y:(p.y??0)+p.jump.height})?150:weatherState()?.visibility??150)**2||!unobstructed(geometry,doors,{x:camera.position.x,y:camera.position.y,z:camera.position.z},{x:p.x,y:(p.y??0)+p.jump.height+1.8,z:p.z}))return [];const v=Vector3.Project(point,Matrix.Identity(),transform,viewport);if(v.z<0||v.z>1||v.x<0||v.x>width||v.y<0||v.y>height)return [];return [{id:p.id,name:playerName(p),x:v.x/width,y:v.y/height,health:p.health,ally:me.team!==undefined&&me.team===p.team}];});},
     renderOnline,endOnline,
     effectsState:effects.stats,
     impactState:()=>({...robotImpact.stats(),recoil:recoil.read()}),

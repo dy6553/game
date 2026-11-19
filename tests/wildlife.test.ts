@@ -70,3 +70,35 @@ test('online snow room processes shooting, meat and recovery on the server',()=>
   game.step();
   assert.equal(player.health,85);
 });
+
+test('all nine wildlife paths and meat drops stay outdoors and respawn independently',()=>{
+  const world=createWorld('snow');
+  const solids=world.worldSolids(world.createDoors());
+  const animals=createWildlife();
+  assert.equal(animals.length,9);
+  for(const index of animals.keys()){
+    for(let time=0;time<50;time+=.25){
+      const pose=animalPose(index,time);
+      assert.equal(world.indoorAt(pose),undefined);
+      assert.ok(world.canStand(pose,1.36,solids));
+    }
+  }
+  hurtWildlife(animals,3,1000,12);
+  hurtWildlife(animals,6,1000,17);
+  assert.equal(world.indoorAt(animals[3]!.meat!),undefined);
+  advanceWildlife(animals,42);
+  assert.equal(animals[3]!.health,55);
+  assert.equal(animals[6]!.health,0);
+  advanceWildlife(animals,47);
+  assert.equal(animals[6]!.health,55);
+});
+
+test('old snow room checkpoints keep original animals and add new ones',()=>{
+  const game=createNetworkGame(undefined,'snow');
+  const old=game.checkpoint();
+  old.animals=old.animals!.slice(0,3);
+  hurtWildlife(old.animals,1,1000,10);
+  const restored=createNetworkGame(old).state.animals!;
+  assert.deepEqual(restored.slice(0,3),old.animals);
+  assert.equal(restored.length,9);
+});

@@ -2,20 +2,34 @@ import {createGear,type GearActor} from './equipment.ts';
 import {rayBox, unobstructed, type Vec3} from './combat-geometry.ts';
 import type {Doors, Point, World} from './world.ts';
 
-export const wildlifeSpecies = [
-  {model: 'arctic-fox', x: -22, z: -28, health: 55, width: .44, height: .76, length: 1.44},
-  {model: 'reindeer', x: 22, z: -27, health: 85, width: 1.18, height: 2.4, length: 2.13},
-  {model: 'polar-bear', x: 0, z: 25, health: 140, width: .82, height: 1.4, length: 2.68},
+const wildlifeSpecies = [
+  {model: 'arctic-fox', health: 55, width: .44, height: .76, length: 1.44},
+  {model: 'reindeer', health: 85, width: 1.18, height: 2.4, length: 2.13},
+  {model: 'polar-bear', health: 140, width: .82, height: 1.4, length: 2.68},
+] as const;
+
+// Keep the original three slots first so existing saved health and meat stay with their species.
+export const wildlifeSpawns = [
+  {...wildlifeSpecies[0],x:-22,z:-28},
+  {...wildlifeSpecies[1],x:22,z:-27},
+  {...wildlifeSpecies[2],x:0,z:25},
+  {...wildlifeSpecies[0],x:-8,z:-25},
+  {...wildlifeSpecies[1],x:8,z:-25},
+  {...wildlifeSpecies[2],x:8,z:25},
+  {...wildlifeSpecies[0],x:-47,z:-14},
+  {...wildlifeSpecies[1],x:46,z:23},
+  {...wildlifeSpecies[2],x:-48,z:20},
 ] as const;
 
 const healAmount = 25;
 const respawnSeconds = 30;
 export type Animal = {health: number; respawnAt: number; meat?: Point};
-export const createWildlife = (): Animal[] => wildlifeSpecies.map(({health}) => ({health, respawnAt: 0}));
+export const createWildlife = (saved?: Animal[]): Animal[] =>
+  wildlifeSpawns.map(({health},index) => saved?.[index] ?? {health,respawnAt:0});
 
 export function animalPose(index: number, time: number) {
-  const species = wildlifeSpecies[index]!;
-  const angle = time * (.19 - index * .025) + index * 2;
+  const species = wildlifeSpawns[index]!;
+  const angle = time * (.19 - (index % 3) * .025) + index * 2;
   return {x: species.x + 2.6 * Math.cos(angle), y: 0, z: species.z + 2.6 * Math.sin(angle), yaw: -angle};
 }
 
@@ -24,7 +38,7 @@ export function wildlifeHit(animals: Animal[], time: number, origin: Vec3, direc
   for (const [index, animal] of animals.entries()) {
     if (animal.health <= 0) continue;
     const {x,z,yaw} = animalPose(index,time);
-    const {width,height,length} = wildlifeSpecies[index]!;
+    const {width,height,length} = wildlifeSpawns[index]!;
     const sine = Math.sin(yaw), cosine = Math.cos(yaw);
     const dx = origin.x-x, dz = origin.z-z;
     const distance = rayBox(
@@ -53,7 +67,7 @@ export function hurtWildlife(animals: Animal[], index: number, amount: number, t
 export function advanceWildlife(animals: Animal[],time: number) {
   for (const [index,animal] of animals.entries()) {
     if (animal.health > 0 || time < animal.respawnAt) continue;
-    animal.health = wildlifeSpecies[index]!.health;
+    animal.health = wildlifeSpawns[index]!.health;
     animal.respawnAt = 0;
     delete animal.meat;
   }
@@ -89,6 +103,6 @@ export function meatRecovery(count: number, health: number) {
 export function wildlifeBlastTargets(animals: Animal[] | undefined,time: number): GearActor[] {
   return animals?.flatMap((animal,index)=>animal.health>0?[{
     ...animalPose(index,time),id:'wildlife-'+index,health:animal.health,pitch:0,
-    gear:createGear(),healing:0,flash:0,gearCooldown:0,wildlifeBounds:wildlifeSpecies[index]!,
+    gear:createGear(),healing:0,flash:0,gearCooldown:0,wildlifeBounds:wildlifeSpawns[index]!,
   }]:[])??[];
 }

@@ -46,7 +46,7 @@ const shellFaceCounts=new Map<string,number>();
 for(const shell of snowShells)for(const face of SHELL_FACES){const key=shellFaceKey(face.map(i=>shell.vertices[i]!));shellFaceCounts.set(key,(shellFaceCounts.get(key)??0)+1);}
 
 export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:World,shadows?:ShadowGenerator){
- let high=false,low=false,root:TransformNode|undefined,owned:StandardMaterial[]=[],textures:RawTexture[]=[],meshes:Mesh[]=[],state:ProceduralMapState;
+ let high=false,low=false,sheltered=false,root:TransformNode|undefined,owned:StandardMaterial[]=[],textures:RawTexture[]=[],meshes:Mesh[]=[],state:ProceduralMapState;
  const snow=map==='snow',bounds=world.PROTOTYPE;
  function release(){for(const m of meshes)shadows?.removeShadowCaster(m,false);root?.dispose();meshes=[];for(const m of owned)m.dispose();for(const t of textures)t.dispose();owned=[];textures=[];root=undefined;}
  function build(quality:ExpansionQuality){
@@ -62,7 +62,8 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
   const materials=owned;
   function add(v:VertexData,x:number,y:number,z:number,tint:string,material=0,yaw=0,pitch=0,roll=0,scale:Vector3=new Vector3(1,1,1),special?:string){
    const key=special??(material===0?`${Math.max(0,Math.min(Math.ceil(bounds.halfWidth*2/40)-1,Math.floor((x+bounds.halfWidth)/40)))},${Math.max(0,Math.min(Math.ceil((bounds.maxZ+bounds.halfDepth)/40)-1,Math.floor((z+bounds.halfDepth)/40)))}`:'global');
-   const id=material+':'+key;let b=batches.get(id);if(!b){b={positions:[],normals:[],indices:[],uvs:[],colors:[],material};batches.set(id,b);}const offset=b.positions.length/3,c=color(tint),matrix=Matrix.Compose(scale,Quaternion.RotationYawPitchRoll(yaw,pitch,roll),new Vector3(x,y,z));
+   const indoors=snow&&(special==='shelter'||(!special&&world.indoorAt({x,y,z})));
+   const id=material+':'+(indoors?'shelter:':'')+key;let b=batches.get(id);if(!b){b={positions:[],normals:[],indices:[],uvs:[],colors:[],material};batches.set(id,b);}const offset=b.positions.length/3,c=color(tint),matrix=Matrix.Compose(scale,Quaternion.RotationYawPitchRoll(yaw,pitch,roll),new Vector3(x,y,z));
    const p=v.positions!,n=v.normals!,out=new Vector3(),norm=new Vector3();for(let i=0;i<p.length;i+=3){Vector3.TransformCoordinatesFromFloatsToRef(p[i]!,p[i+1]!,p[i+2]!,matrix,out);Vector3.TransformNormalFromFloatsToRef(n[i]!,n[i+1]!,n[i+2]!,matrix,norm);norm.normalize();b.positions.push(out.x,out.y,out.z);b.normals.push(norm.x,norm.y,norm.z);b.colors.push(c.r,c.g,c.b,1);b.uvs.push(v.uvs?.[i/3*2]??0,v.uvs?.[i/3*2+1]??0);}for(const i of v.indices!)b.indices.push(i+offset);
   }
   function box(x:number,y:number,z:number,w:number,h:number,d:number,c:string,mat=0,yaw=0){add(VertexData.CreateBox({width:w,height:h,depth:d}),x,y,z,c,mat,yaw);}
@@ -140,9 +141,9 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
       const end=faceIndex===2?piece.vertices[0]!:piece.vertices[3]!;
       if(piece.id.startsWith('igloo-link-')||(/^igloo-entry-/.test(piece.id)&&Math.abs(Math.abs(end[2]!)-15.1)<.001)||(/laboratory entry-/.test(piece.id)&&Math.abs(Math.abs(end[2]!)-26)<.001)||(/laboratory shell-/.test(piece.id)&&Math.abs(Math.abs(end[2]!)-26)<.001))continue;
      }
-     const points=face.map(i=>piece.vertices[i]!);if((shellFaceCounts.get(shellFaceKey(points))??0)>1)continue;add(shellFace(points,center),0,0,0,'#c7d7e1');
-     if(face[0]===0&&face[1]===1)add(shellFace(points,center,.985,.016),0,0,0,'#edf1ed');
-     if(face[0]===4)add(shellFace(points,center,.988,.016),0,0,0,'#edf3f4');
+     const points=face.map(i=>piece.vertices[i]!);if((shellFaceCounts.get(shellFaceKey(points))??0)>1)continue;add(shellFace(points,center),0,0,0,'#c7d7e1',0,0,0,0,undefined,'shelter');
+     if(face[0]===0&&face[1]===1)add(shellFace(points,center,.985,.016),0,0,0,'#edf1ed',0,0,0,0,undefined,'shelter');
+     if(face[0]===4)add(shellFace(points,center,.988,.016),0,0,0,'#edf3f4',0,0,0,0,undefined,'shelter');
     }
    }
    add(VertexData.CreateCylinder({diameter:2,height:.025,tessellation:32}),0,.008,0,'#d3e4ed',0,0,0,0,new Vector3(17,1,14));
@@ -202,11 +203,15 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
    // Surface seams and roof equipment are the only additional opaque detail.
    for(const r of world.worldSolids().filter(r=>r.id.includes('wall')&&(r.yMin??0)===0)){const wide=r.width>r.depth,length=wide?r.width:r.depth;for(let i=2;i<length-1;i+=profile.details===2?2.5:5){const offset=i-length/2;box(r.x+(wide?offset:0),2.4,r.z+(wide?0:offset),wide?.035:r.width+.02,3.8,wide?r.depth+.02:.035,dark);}}
   }
-  let triangles=0;for(const [key,b] of batches){const mesh=new Mesh(`${map}-batch-${quality}-${key}`,scene),v=new VertexData();v.positions=b.positions;v.normals=b.normals;v.indices=b.indices;v.uvs=b.uvs;v.colors=b.colors;v.applyToMesh(mesh);mesh.material=materials[b.material]!;mesh.parent=root;mesh.isPickable=false;mesh.checkCollisions=false;mesh.receiveShadows=b.material===0&&quality!=='low';mesh.metadata={proceduralMap:map,quality};mesh.freezeWorldMatrix();meshes.push(mesh);triangles+=b.indices.length/3;
+  let triangles=0;for(const [key,b] of batches){const mesh=new Mesh(`${map}-batch-${quality}-${key}`,scene),v=new VertexData();v.positions=b.positions;v.normals=b.normals;v.indices=b.indices;v.uvs=b.uvs;v.colors=b.colors;v.applyToMesh(mesh);mesh.material=materials[b.material]!;mesh.parent=root;mesh.isPickable=false;mesh.checkCollisions=false;mesh.receiveShadows=b.material===0&&quality!=='low';const indoor=key.includes(':shelter:');mesh.metadata={proceduralMap:map,quality,indoor};mesh.applyFog=!indoor||!sheltered;mesh.freezeWorldMatrix();meshes.push(mesh);triangles+=b.indices.length/3;
    if(quality==='high'&&b.material===0&&!key.includes('landscape')&&!key.includes('ground'))shadows?.addShadowCaster(mesh,false);
   }
   root.metadata={proceduralMap:map,quality,landmarks};state={source:'procedural',map,quality,triangles,meshCount:meshes.length,textureBytes:grain.byteLength+128*64*3,collisionCount:world.worldSolids().length,landmarks};
  }
  build('medium');scene.onDisposeObservable.addOnce(release);
- return {setQuality(value:boolean){high=value;build(high?'high':low?'low':'medium');},setPerformanceLow(value:boolean){low=value;build(high?'high':low?'low':'medium');},syncDoors(){},state:()=>structuredClone(state)};
+ return {setQuality(value:boolean){high=value;build(high?'high':low?'low':'medium');},setPerformanceLow(value:boolean){low=value;build(high?'high':low?'low':'medium');},syncDoors(){},setSheltered(value:boolean){
+  if(value===sheltered)return;
+  sheltered=value;
+  for(const mesh of meshes)if(mesh.metadata.indoor)mesh.applyFog=!value;
+ },state:()=>structuredClone(state)};
 }

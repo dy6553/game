@@ -87,7 +87,7 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
  let world=mapId==='harbor'?harborWorld:createWorld(mapId);
  const state:MatchState=saved?structuredClone(saved):{players:[],winner:'',tick:0,events:[],pickups:options.randomPickups?createMatchPickups(world):createPickups()};
  if(!saved&&options.waitingRoom)state.phase='waiting';state.map=mapId;state.mode=mode;state.capacity=mode==='duel'?2:20;state.teamScores??=[0,0];state.projectiles??=[];state.toolEvents??=[];state.pickups??=createMatchPickups(world);state.doors??=world.createDoors();
- if(mapId==='snow'){state.animals??=createWildlife();state.weatherTime??=0;state.weatherSeed??=newWeatherSeed();state.layoutRevision=SNOW_LAYOUT_REVISION;}
+ if(mapId==='snow'){state.animals=createWildlife(state.animals);state.weatherTime??=0;state.weatherSeed??=newWeatherSeed();state.layoutRevision=SNOW_LAYOUT_REVISION;}
  const pingAt=new Map<string,number>();state.pings=[];
  const inputs=new Map<string,{command:Command;at:number}>();let now=0,eventId=state.tick*1000;
  const id=()=>++eventId;

@@ -38,3 +38,24 @@ test('curved shell server rays agree with visible inner ceiling triangles',async
 test('main aisles connect the observation igloo to both labs and the outside',()=>{
  const w=createWorld('snow');for(let x=0;x<=4;x+=.5)assert.ok(w.canStand({x,z:-3},.55),`detour x=${x}`);for(let z=-3;z<=0;z+=.5)assert.ok(w.canStand({x:4,z},.55),`detour z=${z}`);for(let x=4;x<=33;x+=.5)assert.ok(w.canStand({x,z:0},.55),`link aisle x=${x}`);for(let z=-3;z>=-38;z-=.5)assert.ok(w.canStand({x:0,z},.55),`front airlock z=${z}`);
 });
+
+test('shelters keep interior surfaces and contacts clear without clearing outdoor fog',()=>{
+ const e=new NullEngine(),w=createHarborScene(e,{map:'snow',randomSpawns:false,weatherSeed:123});
+ try{
+  const inside={x:33,z:-19},outside={x:8,z:-25};
+  w.update(inside,snowWeather(0,123).startsIn+5);
+  const interior=w.scene.meshes.filter(m=>m.metadata?.indoor);
+  assert.ok(interior.length>0);
+  assert.ok(interior.every(m=>!m.applyFog));
+  assert.ok(w.scene.meshes.some(m=>m.name.endsWith(':landscape')&&m.applyFog));
+  assert.notEqual(w.scene.fogMode,0);
+  assert.equal(w.snowfallState()?.running,false);
+  const other={x:33,z:20,id:'other',name:'Bot',health:100};
+  assert.equal(combatContacts(w.geometry,{},inside,0,0,[other],28).radar.length,1);
+  w.setQuality(true);
+  assert.ok(w.scene.meshes.filter(m=>m.metadata?.indoor).every(m=>!m.applyFog));
+  w.update(outside,.05);
+  assert.ok(w.scene.meshes.filter(m=>m.metadata?.indoor).every(m=>m.applyFog));
+  assert.equal(w.snowfallState()?.running,true);
+ }finally{w.scene.dispose();e.dispose();}
+});

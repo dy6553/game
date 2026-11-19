@@ -4,8 +4,9 @@ import {unobstructed} from './combat-geometry.ts';import type {Point,World,Doors
 export type Contact=Point&{id:string;name:string;health:number;ally?:boolean;active?:boolean;revealed?:boolean;jump?:{height:number}};
 export function combatContacts(world:World,doors:Doors,me:Point,yaw:number,pitch:number,actors:Contact[],visibility=60){
  const eye={x:me.x,y:(me.y??0)+stanceStats(me.stance).eye,z:me.z};
+ const shelter=visibility<60?world.indoorAt(me):undefined;
  const seen=actors.filter(a=>a.active!==false&&a.health>0).map(a=>{const target={x:a.x,y:(a.y??0)+(a.jump?.height??0)+stanceStats(a.stance).eye*.8,z:a.z},dx=a.x-me.x,dz=a.z-me.z,distance=Math.hypot(dx,dz),angle=Math.atan2(Math.sin(Math.atan2(dx,dz)-yaw),Math.cos(Math.atan2(dx,dz)-yaw)),vertical=Math.atan2(eye.y-target.y,distance)-pitch;
- return {...a,distance,angle,vertical,visible:distance<=Math.min(60,visibility)&&Math.abs(angle)<.75&&unobstructed(world,doors,eye,target)};});
+ return {...a,distance,angle,vertical,visible:distance<=Math.min(60,shelter&&world.indoorAt({...a,y:(a.y??0)+(a.jump?.height??0)})?.id===shelter.id?60:visibility)&&Math.abs(angle)<.75&&unobstructed(world,doors,eye,target)};});
  return {radar:seen.filter(a=>a.ally||a.visible||a.revealed),target:seen.filter(a=>!a.ally&&a.visible&&Math.abs(a.angle)<.14&&Math.abs(a.vertical)<.2).sort((a,b)=>Math.abs(a.angle)-Math.abs(b.angle)||a.distance-b.distance)[0]};
 }
 export function mapPoint(world:World,p:Point){const b=world.PROTOTYPE;return {x:Math.max(0,Math.min(1,(p.x+b.halfWidth)/(b.halfWidth*2))),y:Math.max(0,Math.min(1,(b.maxZ-p.z)/(b.halfDepth+b.maxZ)))};}
