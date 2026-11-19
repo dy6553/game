@@ -8,4 +8,4 @@ export type MapId=keyof typeof MAPS;
 export type ExpansionMapId='snow'|'moon';
 export function normalizeMap(value:unknown):MapId{return typeof value==='string'&&Object.hasOwn(MAPS,value)?value as MapId:'harbor';}
 export function isExpansionMap(value:unknown):value is ExpansionMapId{return value==='snow'||value==='moon';}
-export function canAccessMap(value:unknown,loggedIn:boolean,level:number){const map=normalizeMap(value);return map==='harbor'||loggedIn&&Number.isFinite(level)&&level>=MAPS[map].level;}
+export function canAccessMap(_value:unknown,_loggedIn:boolean,_level:number){return true;}

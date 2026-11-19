@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createNetworkGame} from '../src/network-game.ts';
+import {createNetworkGame,canAccessMap} from '../src/network-game.ts';
 
 test('only the host changes a waiting map and the chosen map survives start',()=>{
  const game=createNetworkGame(undefined,'harbor',{mode:'ffa',waitingRoom:true,randomPickups:true});
@@ -17,4 +17,8 @@ test('only the host changes a waiting map and the chosen map survives start',()=
  assert.equal(game.startMatch('host'),true);
  assert.equal(game.changeMap('host','harbor'),false);
  assert.equal(game.state.map,'moon');
+});
+
+test('all maps are accessible without an account or level',()=>{
+ for(const map of ['harbor','factory','snow','moon'])assert.equal(canAccessMap(map,false,1),true);
 });
