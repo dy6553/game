@@ -3,6 +3,7 @@ import type {AssetContainer} from '@babylonjs/core/assetContainer.js';
 import type {AbstractMesh} from '@babylonjs/core/Meshes/abstractMesh.js';
 import {Color3} from '@babylonjs/core/Maths/math.color.js';
 import {MeshBuilder} from '@babylonjs/core/Meshes/meshBuilder.js';
+import {Mesh} from '@babylonjs/core/Meshes/mesh.js';
 import {StandardMaterial} from '@babylonjs/core/Materials/standardMaterial.js';
 import type {ExpansionQuality} from './expansion-map-art.ts';
 import {animalPose,wildlifeSpawns,type Animal} from './wildlife.ts';
@@ -18,13 +19,45 @@ export function createWildlifeArt(scene: Scene) {
   const assets = new Map<string,ModelAsset>();
   const pending = new Set<string>();
   const retryAt = new Map<string,number>();
+  const fallbackAssets = new Map<Model,Mesh>();
+  function fallbackBody(index:number){
+    const {model,width:w,height:h,length:l}=wildlifeSpawns[index]!;
+    let base=fallbackAssets.get(model);
+    if(!base){
+      function part(x:number,y:number,z:number,width:number,height:number,depth:number){
+        const mesh=MeshBuilder.CreateBox(model+'-part',{width,height,depth},scene);
+        mesh.position.set(x,y,z);
+        return mesh;
+      }
+      const parts=[
+        part(0,h*.49,-l*.06,w,h*.36,l*.6),
+        part(0,h*.68,l*.29,w*.68,h*.29,l*.28),
+        part(0,h*.61,l*.46,w*.45,h*.14,l*.16),
+        ...[-1,1].flatMap(side=>[
+          part(w*.34*side,h*.21,-l*.23,w*.25,h*.42,l*.13),
+          part(w*.34*side,h*.21,l*.14,w*.25,h*.42,l*.13),
+          part(w*.24*side,h*.85,l*.26,w*.19,h*.25,l*.08),
+        ]),
+      ];
+      if(model==='arctic-fox')parts.push(part(0,h*.44,-l*.47,w*.46,h*.23,l*.32));
+      base=Mesh.MergeMeshes(parts,true)!;
+      const coat=new StandardMaterial(model+'-fallback-coat',scene);
+      coat.diffuseColor=Color3.FromHexString(model==='reindeer'?'#997b65':model==='polar-bear'?'#e0d7bd':'#c4dce8');
+      coat.emissiveColor=coat.diffuseColor.scale(.22);
+      base.material=coat;
+      base.isPickable=false;
+      base.setEnabled(false);
+      fallbackAssets.set(model,base);
+    }
+    return base.clone('wildlife-fallback-'+index,null,true)!;
+  }
   const rigs = wildlifeSpawns.map(({model},index)=>{
     const meat = MeshBuilder.CreateSphere(model+'-meat-'+index,{diameter:.55,segments:4},scene);
     meat.scaling.set(1,.55,.75);
     meat.material = material;
     meat.isPickable = false;
     meat.setEnabled(false);
-    return {model,meat,clones:new Map<ExpansionQuality,AbstractMesh>(),active:undefined as AbstractMesh|undefined};
+    return {model,meat,clones:new Map<ExpansionQuality,AbstractMesh>(),fallback:undefined as Mesh|undefined,active:undefined as AbstractMesh|undefined};
   });
   let visible = false;
   async function load(model: Model,quality: ExpansionQuality,key: string) {
@@ -37,7 +70,12 @@ export function createWildlifeArt(scene: Scene) {
       if (scene.isDisposed) return;
       const container = await loader.LoadAssetContainerAsync('/wildlife/'+model+'-'+quality+'.glb',scene,{pluginExtension:'.glb'});
       if (scene.isDisposed) { container.dispose(); return; }
-      const root = container.meshes[0]!;
+      const root = container.meshes[0];
+      if(!root||!container.meshes.some(mesh=>mesh.getTotalVertices()>0&&mesh.isVisible&&mesh.visibility>0)){
+        container.dispose();
+        retryAt.set(key,performance.now()+10000);
+        return;
+      }
       root.setEnabled(false);
       for (const mesh of container.meshes) mesh.isPickable = false;
       for (const mat of container.materials) {
@@ -79,6 +117,7 @@ export function createWildlifeArt(scene: Scene) {
           }else if(!pending.has(key)&&performance.now()>=(retryAt.get(key)??0))void load(rig.model,detail,key);
         }
         active??=rig.clones.values().next().value;
+        active??=rig.fallback??=fallbackBody(index);
       }
       if(active!==rig.active){
         rig.active?.setEnabled(false);
