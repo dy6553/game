@@ -1,4 +1,4 @@
-import {snowShells,snowShellIds} from './igloo-layout.ts';
+import {snowShells,snowShellIds,snowEntryGalleries} from './igloo-layout.ts';
 import type {Scene} from '@babylonjs/core/scene.js';
 import {Mesh} from '@babylonjs/core/Meshes/mesh.js';
 import {VertexData} from '@babylonjs/core/Meshes/mesh.vertexData.js';
@@ -148,8 +148,12 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
    }
    add(VertexData.CreateCylinder({diameter:2,height:.025,tessellation:32}),0,.008,0,'#d3e4ed',0,0,0,0,new Vector3(17,1,14));
    for(const b of world.BUILDINGS.slice(1))box(b.x,.012,0,10.4,.025,51,'#c9dce4');
+   for(const entry of snowEntryGalleries){
+    const floor=VertexData.CreateBox({width:(entry.radius-.54)*2,height:.025,depth:entry.end-entry.floorStart});
+    for(const side of [-1,1])add(floor,entry.x,.015,side*(entry.floorStart+entry.end)/2,'#a0b1af',0,0,0,0,undefined,'shelter');
+   }
    for(const side of [-1,1]){
-    box(side*22.25,.015,0,11,.025,5.3,'#a0b1af');box(0,.015,side*17.5,6,.025,7,'#a0b1af');
+    box(side*22.25,.015,0,11,.025,5.3,'#a0b1af');
     label(0,3.5,side*21.04,0,side<0?0:Math.PI,0,2.2,.45);
     for(const b of world.BUILDINGS.slice(1))label(b.x,3.3,side*30.96,b.x>0?1:2,side<0?0:Math.PI,0,1.8,.35);
     // Warm opaque inlays: a light source appearance without extra dynamic lights.

@@ -607,10 +607,10 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
   let weatherSeconds=0,weatherSeed=options.weatherSeed??newWeatherSeed();
   const wildlifeArt = expansion==='snow' ? createWildlifeArt(scene) : undefined;
   let animals = wildlifeArt ? createWildlife() : undefined;
-  const drawWildlife = (state: typeof animals,viewer: Point) =>
-    wildlifeArt?.(state,weatherSeconds,viewer,lowPerformance?'low':onlineQualityHigh?'high':'medium',weatherState()?.visibility??150);
+  const drawWildlife = (state: typeof animals,viewer: Point,time=weatherSeconds) =>
+    wildlifeArt?.(state,time,viewer,lowPerformance?'low':onlineQualityHigh?'high':'medium',weatherState()?.visibility??150);
   const weatherState=()=>expansion==='snow'?snowWeather(weatherSeconds,weatherSeed):null;
-  let lastSnowSky=-Infinity;
+  let lastSnowSky=-Infinity,weatherSheltered=false;
   function applyWeather(sheltered:boolean){const weather=weatherState();if(!weather)return;const showing=!preview&&!reference;scene.fogMode=showing&&weather.intensity>.001?Scene.FOGMODE_LINEAR:Scene.FOGMODE_NONE;scene.fogColor.set(.78,.85,.88);scene.fogStart=weather.visibility*.5;scene.fogEnd=weather.visibility;snowfall?.setStormIntensity(weather.intensity);proceduralArt?.setSheltered(showing&&sheltered&&weather.intensity>.001);
    const night=snowDaylight(weatherSeconds,weatherSeed).night;sky.intensity=.9-.17*night;moon.intensity=.8-.18*night;
    if(Math.abs(weatherSeconds-lastSnowSky)>=.5||weatherSeconds<lastSnowSky){lastSnowSky=weatherSeconds;const colors:number[]=[];
@@ -710,9 +710,6 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
   const highShotNotices:string[]=[];const botReveals=new Map<string,number>();let stance:Stance='stand';
   function update(p: Point, dt: number, look: Look = { yaw: 0, pitch: 0 }, paused=false,onlineFrame=false) {
     if(!paused&&!preview&&!reference&&expansion==='snow')weatherSeconds+=Math.max(0,dt);
-    const sheltered=expansion==='snow'&&!!geometry.indoorAt({...p,y:(p.y??0)+jumpState.height});
-    applyWeather(sheltered);
-    snowfall?.update(p,snowfallEnabled&&(!proceduralArt||!lowPerformance)&&(!paused||onlineFrame)&&!preview&&!reference&&!sheltered,look.yaw);
     if(!paused){for(const [id,left] of botReveals){if(left<=dt)botReveals.delete(id);else botReveals.set(id,left-dt);}}
     if(!paused&&!preview&&!reference){
       if(stance==='stand')delete p.stance;else p.stance=stance;
@@ -813,6 +810,9 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
       camera.fov=(scoped?.38:1.25)+(reducedShots?0:kick.fov);
       camera.rotation.set(look.pitch, look.yaw, reducedShots?0:kick.roll);
     }
+    weatherSheltered=expansion==='snow'&&!preview&&!reference&&!!geometry.indoorAt(camera.position);
+    applyWeather(weatherSheltered);
+    snowfall?.update(p,snowfallEnabled&&(!proceduralArt||!lowPerformance)&&(!paused||onlineFrame)&&!preview&&!reference&&!weatherSheltered,look.yaw);
     launcher.setEnabled(weaponId==='bazooka');launcherRim.setEnabled(weaponId==='bazooka');muzzle.setEnabled(weaponId!=='bazooka');muzzleInset.setEnabled(weaponId!=='bazooka');
     scopeBody.setEnabled(weaponId==='sniper');secondBarrel.setEnabled(weaponId==='shotgun');
     gun.scaling.z=weaponId==='pistol'?1:weaponId==='smg'?1.2:weaponId==='dmr'?1.9:1.6;barrel.scaling.z=weaponId==='sniper'?2:weaponId==='dmr'?1.8:weaponId==='pistol'?1:weaponId==='smg'?1.2:1.5;
@@ -915,7 +915,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
   function renderOnline(state:MatchState,id:string,look:Look,dt:number,predictedPosition?:Point,remotePosition?:(Point&{id:string})|Array<Point&{id:string}>,predictedJump?:JumpState){
     const me=state.players.find(p=>p.id===id);if(!me)return;if(expansion==='snow'){weatherSeconds=state.weatherTime??0;weatherSeed=state.weatherSeed??1;}stance=me.stance??'stand';remoteParent.setEnabled(true);doors=state.doors??{};environment.doors=doors;
     duelMode=false;ffaMode=false;survivalMode=false;preview=false;reference=false;lobbyWeapons.show(lobbyWeaponId,false);character.poseLobby(false);if(weaponId!==me.weaponId||me.health===0)scoped=false;if(weaponId!==me.weaponId)equipAge=0;else equipAge+=dt;weaponId=me.weaponId;spec=WEAPONS[weaponId];weapon={...me.weapon};cooldown=me.cooldown;if(networkJumpTick!==state.tick){networkJumpTick=state.tick;networkJumpAge=0;}else networkJumpAge=Math.min(.15,networkJumpAge+dt);jumpState=predictedJump??advanceJump(me.jump,networkJumpAge);falling=(me.fallSpeed??0)>0;inventory=me.inventory??createInventory(me.weaponId);pickups=state.pickups??[];
-    recoil.update(dt);effects.update(dt);botEffects.update(dt);update(predictedPosition??me,0,look,true,true);drawWildlife(state.animals,predictedPosition??me);toolVisuals.update(state.projectiles??[],state.toolEvents??[],dt);for(const target of targets)target.root.setEnabled(false);
+    recoil.update(dt);effects.update(dt);botEffects.update(dt);update(predictedPosition??me,0,look,true,true);drawWildlife(state.animals,predictedPosition??me,weatherSeconds+Math.min(.05,networkJumpAge));toolVisuals.update(state.projectiles??[],state.toolEvents??[],dt);for(const target of targets)target.root.setEnabled(false);
     const estimates=new Map((Array.isArray(remotePosition)?remotePosition:remotePosition?[remotePosition]:[]).map(p=>[p.id,p]));const ids=new Set(state.players.filter(p=>p.id!==id&&!p.abandoned).map(p=>p.id));for(const key of remotes.keys())if(!ids.has(key))removeRemote(key);
     for(const other of state.players){if(other.id===id||other.abandoned)continue;let rig=remotes.get(other.id);
       if(!rig||rig.type!==other.character){removeRemote(other.id);const parent=new TransformNode('online-player-'+other.id,scene);parent.parent=remoteParent;const model=remoteModels.create(parent,other.character,other.weaponId!=='pistol',other.stance),body=model.meshes;
@@ -936,7 +936,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
       jumpHeight:jumpState.height,grounded:jumpState.height===0&&jumpState.velocity===0&&!falling};
   }
   return {
-    geometry,weatherState,mapArtState:()=>proceduralArt?.state()??null,
+    geometry,weatherState,isWeatherSheltered:()=>weatherSheltered,mapArtState:()=>proceduralArt?.state()??null,
     get scoped(){return scoped;},
     get thirdPerson(){return thirdPerson;},
     aimReticle(){if(!thirdPerson||scoped||preview||reference)return {x:50,y:50};const direction=camera.getDirection(Vector3.Forward()),pick=scene.pickWithRay(new Ray(aimOrigin.clone(),direction,150),m=>m.isPickable&&m.isEnabled());const end=pick?.pickedPoint??aimOrigin.add(direction.scale(150)),viewport=camera.viewport.toGlobal(engine.getRenderWidth(),engine.getRenderHeight()),v=Vector3.Project(end,Matrix.Identity(),camera.getViewMatrix().multiply(camera.getProjectionMatrix()),viewport);return {x:Math.max(0,Math.min(100,v.x/engine.getRenderWidth()*100)),y:Math.max(0,Math.min(100,v.y/engine.getRenderHeight()*100))};},togglePerspective(){thirdPerson=!thirdPerson;return thirdPerson;},
@@ -951,7 +951,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
       const range=Math.min(60,limit,weatherState()?.visibility??150);
       const end=aimOrigin.add(direction.scale(range));
       const obstruction=firstShotBox(geometry,doors,aimOrigin,end);
-      const hit=wildlifeHit(nearby,weatherSeconds,aimOrigin,direction,range*(obstruction?.t??1));
+      const hit=wildlifeHit(nearby,weatherSeconds+(online?Math.min(.05,networkJumpAge):0),aimOrigin,direction,range*(obstruction?.t??1));
       if(hit){
         const {name,health:maxHealth}=wildlifeSpawns[hit.index]!;
         return {name,maxHealth,health:nearby[hit.index]!.health};

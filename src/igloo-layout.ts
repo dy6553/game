@@ -1,6 +1,6 @@
 import {expansionLayouts} from './expansion-layouts.ts';
 import type {Point,Rect} from './world.ts';
-export const SNOW_LAYOUT_REVISION='igloo-v3';
+export const SNOW_LAYOUT_REVISION='igloo-v4';
 export type SnowShell={id:string;vertices:readonly (readonly number[])[];room:string};
 const shells:SnowShell[]=[],solids:Rect[]=[];
 function piece(id:string,room:string,vertices:number[][]){
@@ -43,12 +43,22 @@ function portal(id:string,room:string,cx:number,cz:number,outer:readonly (readon
  }
 }
 const rooms=[{id:hub,x:0,z:0,width:36,depth:30,height:11},{id:'West laboratory',x:33,z:0,width:12,depth:52,height:6},{id:'East laboratory',x:-33,z:0,width:12,depth:52,height:6}];
+const hubEntry={start:15.1,end:21,radius:3.6,height:3.8,floorStart:14};
+const labEntry={start:26,end:31,radius:3.2,height:3.6,floorStart:25.45};
+export const snowEntryGalleries=[
+ {room:hub,x:0,...hubEntry},
+ ...rooms.slice(1).map(room=>({room:room.id,x:room.x,...labEntry})),
+];
+const entryProfiles=snowEntryGalleries.map(entry=>({...entry,profile:archProfile(entry.radius-.5,entry.height-.5)}));
+const labProfile=archProfile(5.5,5.5),linkProfile=archProfile(2.7,3.1);
+const hubPortalProfile=archProfile(3.1,3.3),labPortalProfile=archProfile(2.7,3.1);
+
 for(const b of rooms.slice(1)){
  vault(b.id,b.id,b.x,b.z,6,6,52,false,true);
  for(const side of [-1,1]){
   portal(`${b.id} end-wall-${side}`,b.id,b.x,side*25.75,archProfile(6,6),2.7,3.1,.5);
   // The entrance starts where the cap ends, rather than running through it.
-  vault(`${b.id} entry-${side}`,b.id,b.x,side*28.5,3.2,3.6,5);
+  vault(`${b.id} entry-${side}`,b.id,b.x,side*(labEntry.start+labEntry.end)/2,labEntry.radius,labEntry.height,labEntry.end-labEntry.start);
   if(side===Math.sign(b.x))portal(`${b.id} side-portal`,b.id,b.x-side*5.45,0,[[-3.3,3.8],[3.3,3.8]],2.7,3.1,1.5,true);
  }
 }
@@ -56,7 +66,7 @@ for(const side of [-1,1]){
  portal(`igloo-hub-side-portal-${side}`,hub,side*17.05,0,[[-3.3,3.8],[3.3,3.8]],2.7,3.1,2.1,true);
  vault(`igloo-link-${side}`,hub,side*22.45,0,3.2,3.6,8.7,true);
  portal(`igloo-hub-front-portal-${side}`,hub,0,side*14.15,[[-3.6,3.8],[3.6,3.8]],3.1,3.3,1.9);
- vault(`igloo-entry-${side}`,hub,0,side*18.05,3.6,3.8,5.9);
+ vault(`igloo-entry-${side}`,hub,0,side*(hubEntry.start+hubEntry.end)/2,hubEntry.radius,hubEntry.height,hubEntry.end-hubEntry.start);
 }
 // Preserve supplies and consoles; replace rectangular shell and link posts.
 const old=expansionLayouts.snow;solids.push(...old.solids.filter(r=>!old.rooms.some(b=>r.id.startsWith(b.id))&&!r.id.startsWith('link support')));
@@ -66,11 +76,21 @@ export const snowShells:readonly SnowShell[]=shells;
 export const iglooLayout={width:160,depth:120,rooms,solids};
 export const snowShellIds=new Set(shells.map(p=>p.id));
 export function snowShelter(p:Point){
- if((p.y??0)>10.4)return undefined;
- if((p.x/17.4)**2+(p.z/14.4)**2<1&&((p.y??0)+.2)<10.4*Math.sqrt(Math.max(0,1-(p.x/17.4)**2-(p.z/14.4)**2)))return hub;
- for(const b of rooms.slice(1))if(Math.abs(p.z)<25.8&&Math.abs(p.x-b.x)<5.5)return b.id;
- if(Math.abs(p.x)<3.1&&Math.abs(p.z)<21)return hub;
- if(Math.abs(p.z)<2.7&&Math.abs(p.x)<28)return hub;
- for(const b of rooms.slice(1))if(Math.abs(p.x-b.x)<2.7&&Math.abs(p.z)<31)return b.id;
+ const y=Math.max(0,p.y??0),x=Math.abs(p.x),z=Math.abs(p.z);
+ const dome=(p.x/17.4)**2+(p.z/14.4)**2;
+ if(dome<1&&y<10.4*Math.sqrt(1-dome))return hub;
+
+ for(const entry of entryProfiles){
+  if(z>=entry.start&&z<=entry.end&&Math.abs(p.x-entry.x)<entry.radius-.5&&
+     y<profileHeight(entry.profile,p.x-entry.x))return entry.room;
+ }
+ if(z>=13.2&&z<=hubEntry.start&&x<3.1&&y<profileHeight(hubPortalProfile,p.x))return hub;
+ if(x>=16&&x<=28&&z<2.7&&y<profileHeight(linkProfile,p.z))return hub;
+ for(const room of rooms.slice(1)){
+  const across=p.x-room.x;
+  if(z>=25.5&&z<=labEntry.start){
+   if(Math.abs(across)<2.7&&y<profileHeight(labPortalProfile,across))return room.id;
+  }else if(z<25.5&&Math.abs(across)<5.5&&y<profileHeight(labProfile,across))return room.id;
+ }
  return undefined;
 }

@@ -86,8 +86,11 @@ export function createWildlifeArt(scene: Scene) {
         rig.active=active;
       }
       if(active){
-        active.position.set(pose.x,0,pose.z);
+        const stride=Math.min(1,pose.speed/8),gait=time*(15+(index%3)*1.2)+index;
+        active.position.set(pose.x,Math.sin(gait)**2*.072*stride,pose.z);
+        active.rotation.x=Math.sin(gait*2)*.022*stride;
         active.rotation.y=pose.yaw;
+        active.rotation.z=Math.cos(gait)*.027*stride;
       }
       const meat = animal?.meat;
       rig.meat.setEnabled(!!meat && Math.hypot(meat.x-viewer.x,meat.z-viewer.z)<Math.min(visibility+2,36));

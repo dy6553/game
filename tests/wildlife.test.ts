@@ -121,8 +121,9 @@ test('quiet movement leaves wildlife alone and nearby sprinting causes a quick o
   const flight=animals[0]!.flight!;
   assert.ok(flight);
   const after=animalPose(0,.5,animals[0]);
-  assert.ok(Math.hypot(after.x-start.x,after.z-start.z)>4);
+  assert.ok(after.speed>start.speed&&after.speed<animalPose(0,1,animals[0]).speed);
   assert.ok(Math.hypot(after.x-source.x,after.z-source.z)>3);
+  assert.ok(Math.hypot(flight.to.x-start.x,flight.to.z-start.z)>19);
   for(let time=0;time<flight.resume;time+=.05){
     const position=animalPose(0,time,animals[0]);
     assert.equal(world.indoorAt(position),undefined);
@@ -131,5 +132,33 @@ test('quiet movement leaves wildlife alone and nearby sprinting causes a quick o
   advanceWildlife(animals,flight.resume);
   assert.equal(animals[0]!.flight,undefined);
   const returned=animalPose(0,flight.resume,animals[0]);
-  assert.ok(Math.hypot(start.x-returned.x,start.z-returned.z)<.001);
+  assert.ok(Math.hypot(flight.to.x-returned.x,flight.to.z-returned.z)<.001);
+  const later=animalPose(0,flight.resume+8,animals[0]);
+  assert.ok(Math.hypot(later.x-flight.to.x,later.z-flight.to.z)<5.3);
+  assert.equal(world.indoorAt(later),undefined);
+});
+
+test('a sustained threat can extend an escape without snapping the animal back or turning instantly',()=>{
+  const world=createWorld('snow'),doors=world.createDoors();
+  const index=6,animals=createWildlife(),animal=animals[index]!,start=animalPose(index,0);
+  frightenWildlife(animals,0,{x:start.x,z:start.z-4},30,world,doors);
+  const first=animal.flight!;
+  const interrupted=first.start+first.travel*.8;
+  const before=animalPose(index,interrupted,animal);
+  frightenWildlife(animals,interrupted,{x:before.x,z:before.z-3},30,world,doors,index);
+  assert.equal(animal.flight?.start,interrupted);
+  const next=animal.flight!;
+  const after=animalPose(index,interrupted,animal);
+  assert.ok(Math.hypot(after.x-before.x,after.z-before.z)<.001);
+  assert.ok(Math.abs(Math.sin(after.yaw-before.yaw))<.01);
+  assert.ok(Math.hypot(next.to.x-start.x,next.to.z-start.z)>26);
+  for(let time=interrupted;time<next.resume+20;time+=.05){
+    const pose=animalPose(index,time,animal);
+    assert.equal(world.indoorAt(pose),undefined);
+    assert.ok(world.canStand(pose,.73),JSON.stringify(pose));
+  }
+  advanceWildlife(animals,next.resume+1);
+  const standing=animalPose(index,next.resume+1,animal);
+  frightenWildlife(animals,next.resume+1,{x:standing.x,z:standing.z-3},30,world,doors,index);
+  assert.ok(animal.flight);
 });

@@ -1,6 +1,8 @@
 import {snowWeather} from '../src/snow-weather.ts';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {NullEngine} from '@babylonjs/core/Engines/nullEngine.js';
+import {Ray} from '@babylonjs/core/Culling/ray.js';
+import {Vector3} from '@babylonjs/core/Maths/math.vector.js';
 import {createHarborScene} from '../src/scene.ts';import {createWorld} from '../src/world.ts';
 import {createNetworkGame} from '../src/network-game.ts';import {combatContacts} from '../src/combat-hud.ts';
 
@@ -58,4 +60,28 @@ test('shelters keep interior surfaces and contacts clear without clearing outdoo
   assert.ok(w.scene.meshes.filter(m=>m.metadata?.indoor).every(m=>m.applyFog));
   assert.equal(w.snowfallState()?.running,true);
  }finally{w.scene.dispose();e.dispose();}
+});
+
+test('actual entrance mouths define where storm shelter ends on both sides of each building',()=>{
+ const e=new NullEngine(),scene=createHarborScene(e,{map:'snow',randomSpawns:false,weatherSeed:123});
+ try{
+  scene.update({x:0,z:0},snowWeather(0,123).startsIn+5);
+  for(const [x,edge,ceiling] of [[0,21,3.3],[33,31,3.1],[-33,31,3.1]] as const)for(const side of [-1,1]){
+   const inside={x,z:side*(edge-.02)},outside={x,z:side*(edge+.02)};
+   assert.ok(scene.geometry.indoorAt(inside));
+   assert.equal(scene.geometry.indoorAt({...inside,y:ceiling+.01}),undefined);
+   scene.update(inside,0);
+   assert.equal(scene.isWeatherSheltered(),true);
+   assert.equal(scene.snowfallState()?.running,false);
+   const floorAt=(z:number)=>scene.scene.pickWithRay(
+    new Ray(new Vector3(x,.5,z),new Vector3(0,-1,0),1),
+    mesh=>mesh.metadata?.proceduralMap==='snow',
+   )?.pickedMesh;
+   assert.equal(floorAt(inside.z)?.applyFog,false);
+   assert.equal(floorAt(outside.z)?.applyFog,true);
+   scene.update(outside,0);
+   assert.equal(scene.isWeatherSheltered(),false);
+   assert.equal(scene.snowfallState()?.running,true);
+  }
+ }finally{scene.scene.dispose();e.dispose();}
 });
