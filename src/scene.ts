@@ -562,7 +562,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
     }
     const ground=box('expansion-ground',0,-.04,0,PROTOTYPE.halfWidth*2,.08,PROTOTYPE.maxZ+PROTOTYPE.halfDepth,expansion==='snow'?stone:asphalt);
     ground.isPickable=true;expansionFallback.push(ground);
-    for(const r of worldSolids()){
+    for(const r of expansion==='moon'?shotBoxes():worldSolids()){
       const low=r.yMin??0,high=r.yMax??r.height??2;
       const mesh=r.shellVertices?new Mesh('expansion-collider-'+r.id,scene):box('expansion-collider-'+r.id,r.x,(low+high)/2,r.z,r.width,high-low,r.depth,metal);
       if(r.shellVertices){shellGeometry(r.shellVertices).applyToMesh(mesh);mesh.material=metal;}
@@ -570,6 +570,31 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
     }
     // Hidden collider meshes still need their real transforms before the first shot.
     for(const mesh of expansionFallback)mesh.freezeWorldMatrix();
+  }
+  const airlockPanels=geometry.automaticDoors.map(door=>{
+    const collider=box(door.id+'-collider',door.x,door.yMax!/2,door.z,door.width,door.yMax!,door.depth,metal);
+    collider.visibility=0;
+    collider.isPickable=!doors[door.id];
+    collider.freezeWorldMatrix();
+    const panels=[-1,1].map(side=>{
+      const panel=box(door.id+'-panel-'+side,door.x,door.yMax!/2,door.z+side*door.depth/4,door.width,door.yMax!,door.depth/2-.035,metal);
+      panel.isPickable=false;
+      const stripe=box(door.id+'-stripe-'+side,0,0,0,door.width+.016,.11,door.depth/2-.035,accent);
+      stripe.parent=panel;
+      return panel;
+    });
+    return {door,collider,panels,open:0};
+  });
+  function updateAirlockArt(dt:number){
+    for(const rig of airlockPanels){
+      const open=!!doors[rig.door.id];
+      rig.collider.isPickable=!open;
+      rig.open=open?Math.min(1,rig.open+dt*5):Math.max(0,rig.open-dt*5);
+      for(const panel of rig.panels){
+        panel.setEnabled(rig.open<1);
+        panel.position.y=rig.door.yMax!*(.5-rig.open);
+      }
+    }
   }
   const proceduralArt=expansion&&!options.expansionArtSource?createProceduralExpansion(scene,expansion,geometry,shadows):undefined;
   if(proceduralArt)for(const mesh of expansionFallback)mesh.visibility=0;
@@ -717,6 +742,12 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
       Object.assign(p,vertical.position);jumpState=vertical.jump;falling=(p.fallSpeed??0)>0;
       syncSlot(inventory,weapon,cooldown);advanceStowed(inventory,dt);tickPickups(pickups,dt);weapon=advanceWeapon(weapon,dt,spec);if(spec.automatic)weapon={...weapon,cadenceCarry:cadenceCarry(cooldown,dt)};cooldown=Math.max(0,cooldown-dt);
     }
+    if(!paused&&!preview&&!reference&&airlockPanels.length){
+      const battle=battleState();
+      const bots=battle.mode==='duel'?(duelMode&&battle.botHealth>0?[battle.position]:[]):battle.bots.filter(bot=>bot.health>0).map(bot=>bot.position);
+      geometry.updateAutomaticDoors(doors,battle.playerHealth>0?[p,...bots]:bots);
+    }
+    if(!onlineFrame)updateAirlockArt(dt);
     syncDoors();if(!paused)atmosphere.update(dt,p);
     const texel=64/shadows.mapSize;
     moon.position.set(Math.round((p.x+24.75)/texel)*texel,55,Math.round((p.z-13.75)/texel)*texel);
@@ -914,8 +945,8 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
   }
   function renderOnline(state:MatchState,id:string,look:Look,dt:number,predictedPosition?:Point,remotePosition?:(Point&{id:string})|Array<Point&{id:string}>,predictedJump?:JumpState){
     const me=state.players.find(p=>p.id===id);if(!me)return;if(expansion==='snow'){weatherSeconds=state.weatherTime??0;weatherSeed=state.weatherSeed??1;}stance=me.stance??'stand';remoteParent.setEnabled(true);doors=state.doors??{};environment.doors=doors;
-    duelMode=false;ffaMode=false;survivalMode=false;preview=false;reference=false;lobbyWeapons.show(lobbyWeaponId,false);character.poseLobby(false);if(weaponId!==me.weaponId||me.health===0)scoped=false;if(weaponId!==me.weaponId)equipAge=0;else equipAge+=dt;weaponId=me.weaponId;spec=WEAPONS[weaponId];weapon={...me.weapon};cooldown=me.cooldown;if(networkJumpTick!==state.tick){networkJumpTick=state.tick;networkJumpAge=0;}else networkJumpAge=Math.min(.15,networkJumpAge+dt);jumpState=predictedJump??advanceJump(me.jump,networkJumpAge);falling=(me.fallSpeed??0)>0;inventory=me.inventory??createInventory(me.weaponId);pickups=state.pickups??[];
-    recoil.update(dt);effects.update(dt);botEffects.update(dt);update(predictedPosition??me,0,look,true,true);drawWildlife(state.animals,predictedPosition??me,weatherSeconds+Math.min(.05,networkJumpAge));toolVisuals.update(state.projectiles??[],state.toolEvents??[],dt);for(const target of targets)target.root.setEnabled(false);
+    duelMode=false;ffaMode=false;survivalMode=false;preview=false;reference=false;lobbyWeapons.show(lobbyWeaponId,false);character.poseLobby(false);if(weaponId!==me.weaponId||me.health===0)scoped=false;if(weaponId!==me.weaponId)equipAge=0;else equipAge+=dt;weaponId=me.weaponId;spec=WEAPONS[weaponId];weapon={...me.weapon};cooldown=me.cooldown;if(networkJumpTick!==state.tick){networkJumpTick=state.tick;networkJumpAge=0;}else networkJumpAge=Math.min(.15,networkJumpAge+dt);jumpState=predictedJump??advanceJump(me.jump,networkJumpAge,geometry.jumpGravityAt(predictedPosition??me));falling=(me.fallSpeed??0)>0;inventory=me.inventory??createInventory(me.weaponId);pickups=state.pickups??[];
+    recoil.update(dt);effects.update(dt);botEffects.update(dt);update(predictedPosition??me,0,look,true,true);updateAirlockArt(dt);drawWildlife(state.animals,predictedPosition??me,weatherSeconds+Math.min(.05,networkJumpAge));toolVisuals.update(state.projectiles??[],state.toolEvents??[],dt);for(const target of targets)target.root.setEnabled(false);
     const estimates=new Map((Array.isArray(remotePosition)?remotePosition:remotePosition?[remotePosition]:[]).map(p=>[p.id,p]));const ids=new Set(state.players.filter(p=>p.id!==id&&!p.abandoned).map(p=>p.id));for(const key of remotes.keys())if(!ids.has(key))removeRemote(key);
     for(const other of state.players){if(other.id===id||other.abandoned)continue;let rig=remotes.get(other.id);
       if(!rig||rig.type!==other.character){removeRemote(other.id);const parent=new TransformNode('online-player-'+other.id,scene);parent.parent=remoteParent;const model=remoteModels.create(parent,other.character,other.weaponId!=='pistol',other.stance),body=model.meshes;

@@ -1,3 +1,4 @@
+import {moonCorridor,moonCrater} from './moon-layout.ts';
 import {snowShells,snowShellIds,snowEntryGalleries} from './igloo-layout.ts';
 import type {Scene} from '@babylonjs/core/scene.js';
 import {Mesh} from '@babylonjs/core/Meshes/mesh.js';
@@ -72,12 +73,15 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
   function label(x:number,y:number,z:number,index:number,yaw=0,pitch=0,width=3.2,height=.8){const v=VertexData.CreatePlane({width,height,sideOrientation:Mesh.DOUBLESIDE});const u=index%2*.5,t=Math.floor(index/2)*.25;v.uvs=v.uvs!.map((a,i)=>i%2?1-t-.25+a*.25:u+a*.5);add(v,x,y,z,'#ffffff',3,yaw,pitch);}
   const white=snow?'#d6e7ea':'#c6cfd2',dark=snow?'#284958':'#35404e',accent=snow?'#278c99':'#b79a55',warm='#e9a35d';
   // Exact shared rectangles are the visual foundation at all three levels.
-  for(const r of world.worldSolids()){
+  for(const r of snow?world.worldSolids():world.shotBoxes()){
    if(snow&&(snowShellIds.has(r.id)||r.id==='igloo-central-pillar'))continue;
    const min=r.yMin??0,max=r.yMax??r.height??2,wall=/wall|lintel/.test(r.id),roof=r.id.endsWith(' roof'),isDark=!snow&&r.id.startsWith('Operations');
-   const tint=wall?(isDark?dark:white):roof?(snow?'#edf3f1':dark):/basalt/.test(r.id)?'#555a63':/console|igloo-workbench/.test(r.id)?dark:/support/.test(r.id)?dark:accent;
+   const lunarRoom=!snow?world.BUILDINGS.find(b=>r.id.startsWith(b.id)):undefined;
+   const roomTint=(lunarRoom?.x??0)>0?'#dacbbc':'#738da3';
+   const floor=r.id.includes('floor-observation')||r.id.includes('stair-step');
+   const tint=floor?roomTint:lunarRoom&&wall?roomTint:wall?(isDark?dark:white):roof?(snow?'#edf3f1':dark):/basalt|moon-crater/.test(r.id)?'#555a63':/console|igloo-workbench/.test(r.id)?dark:/support/.test(r.id)?dark:accent;
    box(r.x,(min+max)/2,r.z,r.width,max-min,r.depth,tint);
-   if(wall&&min===0){
+   if(wall&&min===0&&!r.id.startsWith('moon-link')){
     // Inlays stay on solid walls; never bridge a walkable opening.
     const wide=r.width>r.depth,length=wide?r.width:r.depth;
     for(const side of [-1,1]){const x=r.x+(wide?0:side*(r.width/2+.006)),z=r.z+(wide?side*(r.depth/2+.006):0);
@@ -87,7 +91,7 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
     }
    }
    if(/lintel/.test(r.id)){const wide=r.width>r.depth;box(r.x,min+.1,r.z,wide?r.width:.54,.12,wide?.54:r.depth,warm,1);}
-   if(!wall&&!roof&&!/support|basalt/.test(r.id)){
+   if(!wall&&!roof&&!floor&&!/support|basalt|moon-crater/.test(r.id)){
     box(r.x,max+.012,r.z,r.width*.8,.024,r.depth*.75,dark);box(r.x,max*.65,r.z-r.depth/2-.012,r.width*.65,.18,.025,warm,1);
     if(profile.details>0){for(const side of [-1,1])box(r.x+side*r.width*.38,(min+max)/2,r.z,.065,(max-min)*.9,r.depth*1.01,white);}
    }
@@ -123,7 +127,7 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
    add(v,0,0,0,'#ffffff',0,0,0,0,new Vector3(1,1,1),terrain?'landscape':'ground');const batch=batches.get('0:'+(terrain?'landscape':'ground'))!;batch.colors.splice(batch.colors.length-c.length,c.length,...c);
   }
   grid(false);grid(true);
-  const landmarks=snow?['observatory','mountain-ridge','igloo-hub','arched-laboratories','heated-links']:['habitat-dome','communications-dish','landing-pad','earth'];
+  const landmarks=snow?['observatory','mountain-ridge','igloo-hub','arched-laboratories','heated-links']:['habitat-dome','communications-dish','landing-pad','earth','airlock-link','crater-route'];
   if(snow){
    for(const side of [-1,1]){
     box(0,.012,side*28,3.4,.014,28,'#aebfc5');
@@ -180,10 +184,22 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
 
   }else{
    const hab=world.BUILDINGS[0]!,ops=world.BUILDINGS[1]!;
-   cylinder(0,.008,0,12,.014,'#4d5965');
+   cylinder(moonCrater.x,.002,moonCrater.z,moonCrater.radius,.019,'#444550');
+   cylinder(0,.013,0,9.2,.014,'#4d5965');
+   const {z,halfWidth}=moonCorridor;
+   box(0,.018,z,halfWidth*2,.025,4.12,'#576574');
+   for(const side of [-1,1]){
+    box(0,3.09,z+side*1.75,halfWidth*2,.04,.14,'#78c9ed',1);
+    box(0,.038,z+side*1.8,halfWidth*2,.012,.11,'#82bdd6',1);
+   }
+   for(const room of [hab,ops]){
+    const trim=room===hab?'#ffd491':'#78c9ed';
+    for(const side of [-1,1])box(room.x+side*7.5,5.93,8.45,.19,.05,11.7,trim,1);
+    box(room.x,3.42,2.28,16.8,.018,.17,trim,1);
+   }
    for(const x of [-1,1])box(x*2,.024,0,.35,.008,5,'#b3bcc0');box(0,.024,0,4,.008,.35,'#b3bcc0');
    for(const side of [-1,1]){
-    box(side*17,.01,0,10,.012,3,'#58636b');
+    box(side*16,.01,0,12,.012,3,'#58636b');
     if(profile.details>0)for(let i=0;i<5;i++)box(side*(13+i*1.8),.024,0,.32,.008,2.5,warm);
     if(profile.details===2)for(let i=0;i<8;i++)box(side*(13+i*1.1),.024,2.2,.6,.008,.28,'#757d83',0,side*.28);
    }
@@ -194,7 +210,7 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
    for(let j=0;j<rings;j++)for(let i=0;i<segments;i++){const a=j*(segments+1)+i,b=a+1,c=a+segments+1;indices.push(a,b,c,b,c+1,c);}const v=new VertexData(),normals:number[]=[];VertexData.ComputeNormals(p,indices,normals);v.positions=p;v.indices=indices;v.normals=normals;v.uvs=uv;add(v,ops.x,9.3,0,'#b9ccd1',0,0,-.38);
    box(ops.x,10.6,-.6,.1,2,.1,accent);box(ops.x,8.1,7,9,.14,3,'#2e5b75');
    // Rings and solar cells are thin surface details, not additional cover.
-   for(let i=0;i<32;i++){const a=i/32*Math.PI*2;box(Math.sin(a)*12,.034,Math.cos(a)*12,.22,.025,1.45,warm,1,a);}
+   for(let i=0;i<28;i++){const a=i/28*Math.PI*2;box(Math.sin(a)*9.2,.038,Math.cos(a)*9.2,.20,.02,1.18,warm,1,a);}
    label(0,.048,0,6,0,Math.PI/2);
    for(const side of [-1,1])label(side*5,.048,side*15,6,side<0?0:Math.PI,Math.PI/2);
    const earth=VertexData.CreateSphere({diameter:24,segments:profile.segments});earth.colors=[];

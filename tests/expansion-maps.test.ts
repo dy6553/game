@@ -19,7 +19,7 @@ for(const [map,width,depth] of [['snow',160,120],['moon',100,80]] as const){
   const room=world.BUILDINGS[0]!;
   assert.ok(world.canStand({x:room.x,z:room.z-room.depth/2},.55,world.worldSolids(world.createDoors())));
   assert.ok(!world.canStand({x:room.x+room.width/2,z:room.z+5},.55,world.worldSolids()));
-  assert.equal(world.stairways(room).length,0,'do not invent stairs absent from Blender');
+  assert.equal(world.stairways(room).length,map==='moon'?1:0);
   for(const pickup of createMatchPickups(world,()=>.25))assert.ok(world.canStand(pickup,1,world.worldSolids()));
   const game=createNetworkGame(undefined,map);
   game.join('one');game.join('two');

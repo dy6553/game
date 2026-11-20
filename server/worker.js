@@ -47,7 +47,7 @@ export class Room extends DurableObject {
     if(typeof event.data!=='string'||event.data.length>2048){server.close(1008,'메시지 크기 초과');return;}
     const msg=JSON.parse(event.data);let id=this.sockets.get(server);
     if(!id){this.expirePlayers();if(msg.type!=='hello'||typeof msg.token!=='string'||!this.sessions[msg.token]){server.close(1008,'잘못된 입장 정보');return;}
-     if(this.game.state.layoutRevision&&msg.layoutRevision!==this.game.state.layoutRevision){server.send(JSON.stringify({type:'closed',reason:'설산 맵이 업데이트되었습니다. 페이지를 새로고침한 뒤 입장해 주세요.'}));clearTimeout(timeout);server.close(1008,'Map update required');return;}
+     if(this.game.state.layoutRevision&&(this.game.state.map==='moon'?msg.moonLayoutRevision:msg.layoutRevision)!==this.game.state.layoutRevision){server.send(JSON.stringify({type:'closed',reason:'전장 맵이 업데이트되었습니다. 페이지를 새로고침한 뒤 입장해 주세요.'}));clearTimeout(timeout);server.close(1008,'Map update required');return;}
      if((this.game.state.mode??'duel')==='duel'&&this.disconnectedAt&&Date.now()-this.disconnectedAt>30000){server.close(1008,'재접속 시간이 지났습니다.');this.closeRoom('상대 연결을 복구하지 못해 경기를 종료했습니다.');return;}
      id=this.sessions[msg.token];for(const [socket,other] of this.sockets)if(other===id){this.sockets.delete(socket);socket.close(1000,'새 연결로 복귀했습니다.');}
      this.sockets.set(server,id);this.protocols.set(server,msg.protocol===2?2:1);clearTimeout(timeout);delete this.disconnects[id];this.game.join(id);if(this.game.state.mode!=='duel'&&this.game.state.phase==='playing')this.game.deploy(id);this.last=Date.now();if(this.game.state.players.every(p=>p.connected))this.disconnectedAt=0;

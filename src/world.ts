@@ -1,8 +1,8 @@
+import {moonLayout,moonAirlocks,moonCovered,moonStairs,moonUpperFloors} from './moon-layout.ts';
 import {iglooLayout,snowShelter} from './igloo-layout.ts';
 import {stanceStats,type Stance} from './stance.ts';
 import {advanceJump,createJump,type JumpState} from './jump.ts';
-import {expansionLayouts} from './expansion-layouts.ts';
-import {isExpansionMap,type MapId} from './maps.ts';
+import {type MapId} from './maps.ts';
 export type {MapId} from './maps.ts';
 export type Point = { x: number; z: number; y?:number;fallSpeed?:number;stance?:Stance };
 export type Rect = { shellVertices?:readonly (readonly number[])[]; id: string; x: number; z: number; width: number; depth: number; height?:number; yMin?:number;yMax?:number;jumpClearance?:boolean;slope?:{start:Point&{y:number};end:Point&{y:number}} };
@@ -10,7 +10,7 @@ export type Building = Rect & { height: number; palette: number; enterable?:bool
 export type Doors=Record<string,boolean>;
 export type Stairway={building:string;start:Point&{y:number};end:Point&{y:number};width:number};
 export function createWorld(map:MapId='harbor'){
-const expansion=map==='snow'?iglooLayout:isExpansionMap(map)?expansionLayouts[map]:undefined;
+const expansion=map==='snow'?iglooLayout:map==='moon'?moonLayout:undefined;
 
 // Exploration values only; these are not final combat balance or map dimensions.
 const PROTOTYPE = {
@@ -46,7 +46,7 @@ function buildingWalls(b:Building):Rect[]{
 function interiorFurniture(b:Building):Rect[]{if(expansion)return [];return [
  {id:b.id+'-counter',x:b.x+b.width/2-1.3,z:b.z,width:1.4,depth:4},
  {id:b.id+'-table',x:b.x-1.5,z:b.z+(b.z<0?1:-1)*2,width:1.5,depth:1.5}];}
-function indoorAt(p:Point){if(map==='snow'){const id=snowShelter(p);return BUILDINGS.find(b=>b.id===id);}return BUILDINGS.find(b=>b.enterable&&Math.abs(p.x-b.x)<b.width/2-.4&&Math.abs(p.z-b.z)<b.depth/2-.4);}
+function indoorAt(p:Point){if(map==='snow'){const id=snowShelter(p);return BUILDINGS.find(b=>b.id===id);}return BUILDINGS.find(b=>b.enterable&&(map!=='moon'||(p.y??0)<b.height)&&Math.abs(p.x-b.x)<b.width/2-.4&&Math.abs(p.z-b.z)<b.depth/2-.4);}
 
 
 const COVERS: Rect[] = [
@@ -144,7 +144,7 @@ function normalized(x: number, y: number): { x: number; y: number } {
 
 const SECOND_FLOOR=3.4;
 const FENCE_HEIGHT=.65;
-function hasBalcony(y:number){return map==='factory'||Math.abs(y-SECOND_FLOOR)<.05;}
+function hasBalcony(y:number){return !expansion&&(map==='factory'||Math.abs(y-SECOND_FLOOR)<.05);}
 function balcony(b:Building,y:number):Rect{return {id:b.id+'-balcony',x:b.x,z:b.z+(b.z<0?1:-1)*(b.depth/2+1),width:map==='harbor'&&hasBalcony(y)?b.width:DOOR_WIDTH,depth:3,yMin:y-.12,yMax:y};}
 function harborFences(b:Building):Rect[]{
  const deck=balcony(b,SECOND_FLOOR),front=b.z<0?1:-1,thickness=.15;
@@ -178,7 +178,7 @@ function stairSupport(building:Building,p:Point,ceiling:number){
  return floor;
 }
 function advanceJumpOnTerrain(p:Point,state:JumpState,dt:number){
- const jump=advanceJump(state,dt),base=p.y??0;
+ const jump=advanceJump(state,dt,jumpGravityAt(p)),base=p.y??0;
  if(state.height>0&&jump.velocity<=0&&jump.height<state.height){
   let floor=base;
   for(const building of ENTERABLE_BUILDINGS){
@@ -205,13 +205,28 @@ function advanceFall(p:Point,dt:number):Point{
  }
  if(y<=floor+.05)return {...p,y:floor,fallSpeed:0};
  // Clamp the whole fall step to the highest surface below the actor.
- const speed=(p.fallSpeed??0)+18*dt,next=y-speed*dt;
+ const speed=(p.fallSpeed??0)+jumpGravityAt(p)*dt,next=y-speed*dt;
  return {...p,y:Math.max(floor,next),fallSpeed:next<=floor?0:speed};
 }
 function doorRect(b:Building):Rect{return {id:b.id+'-door',x:b.x,z:b.z+(b.z<0?1:-1)*(b.depth/2-.2),width:DOOR_WIDTH,depth:.4,yMin:0,yMax:3.2};}
-function createDoors():Doors{return expansion?{}:Object.fromEntries(ENTERABLE_BUILDINGS.map(b=>[b.id,false]));}
+function jumpGravityAt(p:Point){return map==='moon'&&!indoorAt(p)&&!moonCovered(p)?18/1.3:18;}
+const automaticDoors=map==='moon'?moonAirlocks:[];
+function updateAutomaticDoors(doors:Doors,actors:readonly Point[]){
+ for(const door of automaticDoors){
+  const reach=doors[door.id]?3.7:3;
+  doors[door.id]=actors.some(p=>(p.y??0)<door.yMax!&&Math.abs(p.z-door.z)<door.depth/2+.65&&Math.abs(p.x-door.x)<reach);
+ }
+}
+function createDoors():Doors{return map==='moon'?Object.fromEntries(automaticDoors.map(d=>[d.id,false])):expansion?{}:Object.fromEntries(ENTERABLE_BUILDINGS.map(b=>[b.id,false]));}
 const solidCache=new Map<string,Rect[]>();
 function worldSolids(doors?:Doors):Rect[]{
+ if(map==='moon'){
+  const key=doors?automaticDoors.map(d=>doors[d.id]?'1':'0').join(''):'open';
+  const cached=solidCache.get(key);if(cached)return cached;
+  const ramps=moonStairs.map(s=>({id:s.building+'-stair-volume',x:s.start.x,z:(s.start.z+s.end.z)/2,width:s.width,depth:Math.abs(s.end.z-s.start.z),yMin:0,yMax:s.end.y,slope:s}));
+  const result=[...SOLIDS,...ramps,...(doors?automaticDoors.filter(d=>!doors[d.id]):[])];
+  solidCache.set(key,result);if(!doors)openSolids=result;return result;
+ }
  if(expansion){openSolids=SOLIDS;return SOLIDS;}
  const key=doors?ENTERABLE_BUILDINGS.map(b=>doors[b.id]?'1':'0').join(''):'open';const cached=solidCache.get(key);if(cached)return cached;
  const result=[...SOLIDS.map(r=>{const b=BUILDINGS.find(b=>r.id===b.id||r.id.startsWith(b.id+'-'));return {...r,yMin:0,yMax:r.id.endsWith('-counter')?1.4:r.id.endsWith('-table')?1:b?.height??r.height??(r.id==='van'?2.15:1.05)};}),
@@ -222,14 +237,14 @@ function worldSolids(doors?:Doors):Rect[]{
  ...[-1,1].map(half=>({id:b.id+'-roof-rail-z',x:b.x+half*(DOOR_WIDTH/2+(b.width-DOOR_WIDTH)/4),z:b.z+side*(b.depth/2-.2),width:(b.width-DOOR_WIDTH)/2,depth:.15,yMin:b.height,yMax:b.height+1.2}))
  ]))];solidCache.set(key,result);if(!doors)openSolids=result;return result;
 }
-function nearbyDoor(p:Point,doors:Doors){return BUILDINGS.filter(b=>b.enterable&&Object.hasOwn(doors,b.id)).map(b=>({b,d:Math.hypot(p.x-doorRect(b).x,p.z-doorRect(b).z)})).filter(v=>v.d<=2.5&&(p.y??0)<.5).sort((a,b)=>a.d-b.d)[0]?.b;}
+function nearbyDoor(p:Point,doors:Doors){if(expansion)return undefined;return BUILDINGS.filter(b=>b.enterable&&Object.hasOwn(doors,b.id)).map(b=>({b,d:Math.hypot(p.x-doorRect(b).x,p.z-doorRect(b).z)})).filter(v=>v.d<=2.5&&(p.y??0)<.5).sort((a,b)=>a.d-b.d)[0]?.b;}
 function toggleDoor(doors:Doors,id:string,p:Point,actors:readonly Point[]):boolean{
  const b=BUILDINGS.find(b=>b.id===id&&b.enterable);if(!b||nearbyDoor(p,{[id]:doors[id]??false})?.id!==id)return false;
  if(doors[id]&&actors.some(a=>(a.y??0)<3.2&&circleOverlapsRect(a,PROTOTYPE.radius+.1,doorRect(b))))return false;
  doors[id]=!doors[id];return true;
 }
 const stairCache=new WeakMap<Building,readonly Stairway[]>();
-function stairways(b:Building):readonly Stairway[]{if(expansion)return [];const cached=stairCache.get(b);if(cached)return cached;const f=b.z<0?1:-1,z0=b.z+f*(b.depth/2-2.2),z1=b.z-f*(b.depth/2-2.2);const result:Stairway[]=[
+function stairways(b:Building):readonly Stairway[]{if(map==='moon')return moonStairs.filter(s=>s.building===b.id);if(expansion)return [];const cached=stairCache.get(b);if(cached)return cached;const f=b.z<0?1:-1,z0=b.z+f*(b.depth/2-2.2),z1=b.z-f*(b.depth/2-2.2);const result:Stairway[]=[
  {building:b.id,width:1.8,start:{x:b.x-b.width/2+1.5,z:z0,y:0},end:{x:b.x-b.width/2+1.5,z:z1,y:SECOND_FLOOR}},
  {building:b.id,width:1.8,start:{x:b.x+b.width/2-1.5,z:z1,y:SECOND_FLOOR},end:{x:b.x+b.width/2-1.5,z:z0,y:b.height}},
  ];for(const stair of result){Object.freeze(stair.start);Object.freeze(stair.end);Object.freeze(stair);}Object.freeze(result);stairCache.set(b,result);return result;}
@@ -254,6 +269,10 @@ function elevatedStep(from:Point,to:Point,radius:number):Point{
 }
 const floorCache=new WeakMap<Building,Map<number,readonly Rect[]>>();
 function floorPanels(b:Building,y:number):readonly Rect[]{
+ if(map==='moon'){
+  if(y===SECOND_FLOOR)return moonUpperFloors.filter(f=>f.id.startsWith(b.id));
+  return [];
+ }
  if(expansion)return [];
  let levels=floorCache.get(b);if(!levels){levels=new Map();floorCache.set(b,levels);}const cached=levels.get(y);if(cached)return cached;
  const [a,c]=stairways(b),w=a!.width+.1,filled=y===SECOND_FLOOR?c!:a!;const result:Rect[]=[...(hasBalcony(y)?[balcony(b,y)]:[]),
@@ -283,7 +302,7 @@ function shotBoxes(doors?:Doors):Rect[]{
  const result=[...solids.filter(r=>!r.slope),...fixedShotGeometry];shotCache.set(solids,result);return result;
 }
 
-return {advanceFall,advanceJumpOnTerrain,balcony,PROTOTYPE,BUILDINGS,DOOR_WIDTH,buildingWalls,interiorFurniture,indoorAt,COVERS,SOLIDS,circleOverlapsRect,canStand,moveWithCollisions,normalized,SECOND_FLOOR,doorRect,createDoors,worldSolids,nearbyDoor,toggleDoor,stairways,floorPanels,randomOutdoorSpawn,shotBoxes};
+return {automaticDoors,updateAutomaticDoors,jumpGravityAt,advanceFall,advanceJumpOnTerrain,balcony,PROTOTYPE,BUILDINGS,DOOR_WIDTH,buildingWalls,interiorFurniture,indoorAt,COVERS,SOLIDS,circleOverlapsRect,canStand,moveWithCollisions,normalized,SECOND_FLOOR,doorRect,createDoors,worldSolids,nearbyDoor,toggleDoor,stairways,floorPanels,randomOutdoorSpawn,shotBoxes};
 }
 export const harborWorld=createWorld();
 export const {PROTOTYPE,BUILDINGS,DOOR_WIDTH,buildingWalls,interiorFurniture,indoorAt,COVERS,SOLIDS,circleOverlapsRect,canStand,moveWithCollisions,normalized,SECOND_FLOOR,doorRect,createDoors,worldSolids,nearbyDoor,toggleDoor,stairways,floorPanels,randomOutdoorSpawn,shotBoxes}=harborWorld;

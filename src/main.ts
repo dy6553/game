@@ -1,6 +1,6 @@
 import {MEAT_CAPACITY,nearbyMeat} from './wildlife.ts';
 import {weatherMessage} from './snow-weather.ts';
-import {MAPS,normalizeMap,canAccessMap,isExpansionMap} from './maps.ts';
+import {MAPS,normalizeMap,canAccessMap} from './maps.ts';
 import {installCombatTools} from './combat-tools.ts';
 import {weaponSlotMarkup,combatIcon} from './combat-ui.ts';
 import {navigationLocation} from './wayfinding.ts';
@@ -862,7 +862,7 @@ async function start() {
         }
         observeOfflineResult(step);if(resultView.isOpen)break;
       }
-      zone.textContent=isExpansionMap(selectedMap)?(world.geometry.indoorAt(position)?'1층 · 출입 가능 건물':MAPS[selectedMap].name):navigationLocation(world.geometry??harborWorld,position).label;
+      zone.textContent=selectedMap==='snow'?(world.geometry.indoorAt(position)?'1층 · 출입 가능 건물':MAPS[selectedMap].name):navigationLocation(world.geometry??harborWorld,position).label;
     } else { localDash=cancelDash(localDash);input.consumeDashes();input.consumeShots();input.consumeReloads();input.consumeJumps();world.update(position, dt, input.look,true);world.consumeSounds(); }
     const dashButton=document.querySelector<HTMLButtonElement>('#dash')!,onlineMe=onlineState?.players.find(p=>p.id===onlineId),dashState=onlineActive?onlineMe?.dash:localDash;
     const dashGrounded=onlineActive?!!onlineMe&&onlineMe.jump.height===0&&onlineMe.jump.velocity===0:world.practiceState().grounded;
