@@ -47,7 +47,7 @@ import { Scene } from '@babylonjs/core/scene.js';
 import { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator.js';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
 import { PRACTICE_RULES,createWeapon,tryFire,beginReload,advanceWeapon,applyDamage } from './combat.ts';
-import { createJump,beginJump,advanceJump,type JumpState } from './jump.ts';
+import { createJump,advanceJump,type JumpState } from './jump.ts';
 import {harborWorld,createWorld,type MapId,type Doors} from './world.ts';
 import type { Point } from './world.ts';
 import { createCharacter } from './characters.ts';
@@ -996,7 +996,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
     doorState:()=>doors,
     move(p:Point,delta:Point){return moveWithCollisions(p,delta,worldSolids(doors),PROTOTYPE.radius,jumpState.height);},
     toggleDoor(p:Point,id:string){const state=battleState(),actors=[p,...state.bots.filter(b=>b.health>0).map(b=>b.position),...(state.mode==='duel'&&state.botHealth>0?[state.position]:[])];const result=toggleDoor(doors,id,p,actors);syncDoors();return result;},
-    jump(){if(preview||reference||falling||(battleState().playerHealth===0||!!battleState().winner))return false;const next=beginJump(jumpState);const started=next!==jumpState;jumpState=next;return started;},
+    jump(p:Point=localActor){if(preview||reference||falling||(battleState().playerHealth===0||!!battleState().winner))return false;const next=geometry.beginJumpAt(p,jumpState);const started=next!==jumpState;jumpState=next;return started;},
     selectWeapon(id:WeaponId){startWeapon=id;weaponId=id;spec=localSpec(id);resetPractice();},
     toggleScope(){if(weaponId!=='sniper'||preview||reference||(battleState().playerHealth===0||!!battleState().winner))return false;scoped=!scoped;return scoped;},
     resetJump(){jumpState=createJump();falling=false;},

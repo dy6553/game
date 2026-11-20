@@ -15,7 +15,7 @@ import {harborWorld,createWorld,type World,type MapId,type Doors,type Point} fro
 import {normalizeMap,MAPS} from './maps.ts';
 import { WEAPONS,pelletOffsets,isWeaponId,startBurst,advanceBurst,cancelBurst,type WeaponId } from './weapons.ts';
 import { createWeapon,beginReload,tryFire,type WeaponState } from './combat.ts';
-import { createJump,beginJump,type JumpState } from './jump.ts';
+import { createJump,type JumpState } from './jump.ts';
 import { viewMovement } from './view.ts';
 export type Player = GearActor & {meat?:number;revealedUntil?:number;nickname?:string;guest?:boolean;participated?:boolean;deaths:number;totalKills:number;playing?:boolean;abandoned?:boolean;id:string;y?:number;fallSpeed?:number;protection?:number;x:number;z:number;yaw:number;pitch:number;health:number;kills:number;dead:number;weaponId:WeaponId;weapon:WeaponState;jump:JumpState;cooldown:number;connected:boolean;character:'robot'|'robot-cat'|'welder';seq:number;startWeapon:WeaponId;inventory:Inventory;dash?:DashState};
 export type TeamPing={kind:'enemy'|'move'|'help';x:number;z:number;player:string;team:number;expires:number};
@@ -55,7 +55,7 @@ export function advancePlayerMotion(p:Pick<Player,'x'|'z'|'y'|'health'|'weapon'|
  let dash=p.dash,jump=p.jump??createJump();
  if(p.health<=0)return {x:p.x,z:p.z,y:p.y,jump,dash:dash?cancelDash(dash):undefined};
  if(dash&&c.dash&&(!c.stance||c.stance==='stand'))dash=beginDash(dash,{x:c.x,y:c.y,yaw:c.yaw,grounded:jump.height===0&&jump.velocity===0&&!(p.fallSpeed&&p.fallSpeed>0),canAct:true});
- if((!c.stance||c.stance==='stand')&&c.jump&&(!dash||dash.remaining===0)&&!(p.fallSpeed&&p.fallSpeed>0))jump=beginJump(jump);
+ if((!c.stance||c.stance==='stand')&&c.jump&&(!dash||dash.remaining===0)&&!(p.fallSpeed&&p.fallSpeed>0))jump=world.beginJumpAt(p,jump);
  let position:Point={x:p.x,z:p.z,y:p.y,fallSpeed:p.fallSpeed,stance:c.stance},walkTime=dt;
  if(dash){const result=advanceDash(dash,dt);dash=result.state;position=moveWithCollisions(position,result.delta,worldSolids(doors));walkTime-=result.activeSeconds;}
  if(walkTime>1e-8)position=moveNetworkPlayer({...p,...position},c,walkTime,doors,world,jump.height);

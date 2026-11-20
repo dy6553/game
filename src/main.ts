@@ -837,7 +837,7 @@ async function start() {
         if(dashRequested){const wasReady=localDash.cooldown<=1e-8;localDash=beginDash(localDash,{x:input.move.x,y:input.move.y,yaw:input.look.yaw,grounded:before.grounded,canAct});if(wasReady&&localDash.remaining>0)audio.play('dash');}
         const wasDashing=localDash.remaining>0,dashStep=advanceDash(localDash,step);localDash=dashStep.state;
         if(canAct){position=world.move?.(position,dashStep.delta)??moveWithCollisions(position,dashStep.delta);const walkTime=step-dashStep.activeSeconds;position=world.move?.(position,{x:movement.x*PROTOTYPE.speed*runScale*walkTime,z:movement.z*PROTOTYPE.speed*runScale*walkTime})??moveWithCollisions(position,{x:movement.x*PROTOTYPE.speed*runScale*walkTime,z:movement.z*PROTOTYPE.speed*runScale*walkTime});}
-        if(input.consumeJumps()>0&&canAct&&!wasDashing&&world.jump())audio.play('jump');
+        if(input.consumeJumps()>0&&canAct&&!wasDashing&&world.jump(oldPosition))audio.play('jump');
         if(canAct)world.wildlifeNoise?.(position,Math.hypot(position.x-oldPosition.x,position.z-oldPosition.z)/step);
         world.update(position, step, input.look);
         if(reloadRequested>0&&world.reload())audio.play('reload');

@@ -5,9 +5,11 @@ import {Ray} from '@babylonjs/core/Culling/ray.js';
 import {Vector3} from '@babylonjs/core/Maths/math.vector.js';
 import {createWorld} from '../src/world.ts';
 import {createHarborScene} from '../src/scene.ts';
-import {createNetworkGame} from '../src/network-game.ts';
+import {advancePlayerMotion,createNetworkGame} from '../src/network-game.ts';
 import {firstShotBox} from '../src/combat-geometry.ts';
-import {beginJump,createJump} from '../src/jump.ts';
+import {createJump} from '../src/jump.ts';
+import {createWeapon} from '../src/combat.ts';
+import {WEAPONS} from '../src/weapons.ts';
 import {MOON_LAYOUT_REVISION,moonCorridor} from '../src/moon-layout.ts';
 import {navigationLocation} from '../src/wayfinding.ts';
 
@@ -73,18 +75,53 @@ test('airlock artwork agrees with collision, including a full traversal between 
  }finally{scene.scene.dispose();engine.dispose();}
 });
 
-test('lower lunar gravity adds about thirty percent to outdoor jump height',()=>{
+test('scene and shared online motion rise and land at Earth and lunar rates',()=>{
  const world=createWorld('moon');
- const height=(p:{x:number;z:number})=>{
-  let state=beginJump(createJump()),peak=0;
-  for(let tick=0;tick<100;tick++){
-   state=world.advanceJumpOnTerrain(p,state,.01).jump;
-   peak=Math.max(peak,state.height);
+ const engine=new NullEngine();
+ const scene=createHarborScene(engine,{map:'moon',randomSpawns:false});
+ const command={x:0,y:0,yaw:0,pitch:0,fire:false,shot:false,reload:false,jump:false,sprint:false,scope:false};
+ try{
+  for(const [point,gravity,maxHeight] of [
+   [{x:31,z:0},9.81,1],
+   [{x:0,z:moonCorridor.z},9.81,1],
+   [{x:0,z:-8},1.62,1.3],
+  ] as const){
+   const p={...point},dt=.01;
+   const launch=Math.sqrt(2*gravity*maxHeight),apex=launch/gravity;
+   let player={...p,health:100,weapon:createWeapon(WEAPONS.pistol),cooldown:0,jump:createJump()};
+   let peak=0,landing=0;
+   scene.update(p,0);
+   assert.equal(scene.jump(p),true);
+   for(let tick=1;tick<=300;tick++){
+    player={...player,...advancePlayerMotion(player,{...command,jump:tick===1},dt,world.createDoors(),world)};
+    scene.update(p,dt);
+    const t=tick*dt,expected=Math.max(0,launch*t-gravity*t*t/2);
+    assert.ok(Math.abs(player.jump.height-expected)<1e-8,`online jump at ${t}s for gravity ${gravity}`);
+    assert.ok(Math.abs(scene.practiceState().jumpHeight-expected)<1e-8,`local jump at ${t}s for gravity ${gravity}`);
+    peak=Math.max(peak,player.jump.height);
+    if(player.jump.velocity===0&&scene.practiceState().grounded){landing=t;break;}
+   }
+   assert.ok(Math.abs(peak-maxHeight)<.001);
+   assert.ok(landing>=2*apex&&landing<=2*apex+dt);
   }
-  return peak;
- };
- const indoor=height({x:31,z:0}),outdoor=height({x:0,z:-8});
- assert.ok(indoor>.99&&indoor<=1.01);
- assert.ok(outdoor>1.29&&outdoor<1.31);
- assert.equal(world.jumpGravityAt({x:0,z:moonCorridor.z}),18);
+ }finally{scene.scene.dispose();engine.dispose();}
+});
+
+test('lunar falls accelerate continuously, including a jump off an upper floor',()=>{
+ const world=createWorld('moon');
+ for(const [point,gravity] of [[{x:31,z:0},9.81],[{x:0,z:-8},1.62]] as const){
+  const start={...point,y:world.SECOND_FLOOR};
+  const fall=world.advanceFall(start,.2);
+  assert.ok(Math.abs(fall.y!-(start.y-.5*gravity*.2**2))<1e-8);
+  assert.ok(Math.abs(fall.fallSpeed!-gravity*.2)<1e-8);
+  const landed=world.advanceFall(fall,3);
+  assert.equal(landed.y,0);
+  assert.equal(landed.fallSpeed,0);
+ }
+ const p={x:31,z:0,y:world.SECOND_FLOOR};
+ // The actor has moved beyond the mezzanine while still descending.
+ const result=world.advanceJumpOnTerrain(p,{height:.04,velocity:-3},.05);
+ assert.deepEqual(result.jump,createJump());
+ assert.ok(Math.abs(result.position.y!-(p.y+.04-3*.05-.5*9.81*.05**2))<1e-8);
+ assert.ok(Math.abs(result.position.fallSpeed!-(3+9.81*.05))<1e-8);
 });

@@ -1,7 +1,7 @@
 import {moonLayout,moonAirlocks,moonCovered,moonStairs,moonUpperFloors} from './moon-layout.ts';
 import {iglooLayout,snowShelter} from './igloo-layout.ts';
 import {stanceStats,type Stance} from './stance.ts';
-import {advanceJump,createJump,type JumpState} from './jump.ts';
+import {advanceJump,beginJump,createJump,JUMP_TUNING,type JumpState} from './jump.ts';
 import {type MapId} from './maps.ts';
 export type {MapId} from './maps.ts';
 export type Point = { x: number; z: number; y?:number;fallSpeed?:number;stance?:Stance };
@@ -9,6 +9,7 @@ export type Rect = { shellVertices?:readonly (readonly number[])[]; id: string; 
 export type Building = Rect & { height: number; palette: number; enterable?:boolean };
 export type Doors=Record<string,boolean>;
 export type Stairway={building:string;start:Point&{y:number};end:Point&{y:number};width:number};
+const EARTH_GRAVITY=9.81,LUNAR_GRAVITY=1.62;
 export function createWorld(map:MapId='harbor'){
 const expansion=map==='snow'?iglooLayout:map==='moon'?moonLayout:undefined;
 
@@ -178,7 +179,7 @@ function stairSupport(building:Building,p:Point,ceiling:number){
  return floor;
 }
 function advanceJumpOnTerrain(p:Point,state:JumpState,dt:number){
- const jump=advanceJump(state,dt,jumpGravityAt(p)),base=p.y??0;
+ const gravity=jumpGravityAt(p),jump=advanceJump(state,dt,gravity),base=p.y??0;
  if(state.height>0&&jump.velocity<=0&&jump.height<state.height){
   let floor=base;
   for(const building of ENTERABLE_BUILDINGS){
@@ -187,11 +188,18 @@ function advanceJumpOnTerrain(p:Point,state:JumpState,dt:number){
   }
   if(floor>base+.01&&base+jump.height<=floor)return {position:{...p,y:floor,fallSpeed:0},jump:createJump()};
  }
- return {position:jump.height>0||jump.velocity!==0?p:advanceFall(p,dt),jump};
+ if(jump.height>0||jump.velocity!==0)return {position:p,jump};
+ if(map==='moon'&&base>0&&(state.height>0||state.velocity!==0)){
+  // Beyond a ledge, keep the descending velocity when crossing the launch height.
+  const fallSpeed=Math.sqrt(state.velocity**2+2*gravity*state.height);
+  const remaining=Math.max(0,dt-(state.velocity+fallSpeed)/gravity);
+  return {position:advanceFall({...p,fallSpeed},remaining),jump};
+ }
+ return {position:advanceFall(p,dt),jump};
 }
 function advanceFall(p:Point,dt:number):Point{
  const y=p.y??0;
- if(y<=0||dt<=0)return p;
+ if(y<=0||dt<0||(dt===0&&map!=='moon'))return p;
  let floor=0;
  for(const building of ENTERABLE_BUILDINGS){
   if(Math.abs(p.x-building.x)>building.width/2||Math.abs(p.z-building.z)>building.depth/2+2.5)continue;
@@ -205,11 +213,20 @@ function advanceFall(p:Point,dt:number):Point{
  }
  if(y<=floor+.05)return {...p,y:floor,fallSpeed:0};
  // Clamp the whole fall step to the highest surface below the actor.
- const speed=(p.fallSpeed??0)+jumpGravityAt(p)*dt,next=y-speed*dt;
+ const initialSpeed=p.fallSpeed??0,speed=initialSpeed+jumpGravityAt(p)*dt;
+ const next=y-(map==='moon'?(initialSpeed+speed)/2:speed)*dt;
  return {...p,y:Math.max(floor,next),fallSpeed:next<=floor?0:speed};
 }
 function doorRect(b:Building):Rect{return {id:b.id+'-door',x:b.x,z:b.z+(b.z<0?1:-1)*(b.depth/2-.2),width:DOOR_WIDTH,depth:.4,yMin:0,yMax:3.2};}
-function jumpGravityAt(p:Point){return map==='moon'&&!indoorAt(p)&&!moonCovered(p)?18/1.3:18;}
+function jumpGravityAt(p:Point){
+ if(map!=='moon')return JUMP_TUNING.gravity;
+ return indoorAt(p)||moonCovered(p)?EARTH_GRAVITY:LUNAR_GRAVITY;
+}
+function beginJumpAt(p:Point,state:JumpState){
+ if(map!=='moon')return beginJump(state);
+ const gravity=jumpGravityAt(p),targetHeight=gravity===LUNAR_GRAVITY?1.3:1;
+ return beginJump(state,Math.sqrt(2*gravity*targetHeight));
+}
 const automaticDoors=map==='moon'?moonAirlocks:[];
 function updateAutomaticDoors(doors:Doors,actors:readonly Point[]){
  for(const door of automaticDoors){
@@ -302,7 +319,7 @@ function shotBoxes(doors?:Doors):Rect[]{
  const result=[...solids.filter(r=>!r.slope),...fixedShotGeometry];shotCache.set(solids,result);return result;
 }
 
-return {automaticDoors,updateAutomaticDoors,jumpGravityAt,advanceFall,advanceJumpOnTerrain,balcony,PROTOTYPE,BUILDINGS,DOOR_WIDTH,buildingWalls,interiorFurniture,indoorAt,COVERS,SOLIDS,circleOverlapsRect,canStand,moveWithCollisions,normalized,SECOND_FLOOR,doorRect,createDoors,worldSolids,nearbyDoor,toggleDoor,stairways,floorPanels,randomOutdoorSpawn,shotBoxes};
+return {automaticDoors,updateAutomaticDoors,jumpGravityAt,beginJumpAt,advanceFall,advanceJumpOnTerrain,balcony,PROTOTYPE,BUILDINGS,DOOR_WIDTH,buildingWalls,interiorFurniture,indoorAt,COVERS,SOLIDS,circleOverlapsRect,canStand,moveWithCollisions,normalized,SECOND_FLOOR,doorRect,createDoors,worldSolids,nearbyDoor,toggleDoor,stairways,floorPanels,randomOutdoorSpawn,shotBoxes};
 }
 export const harborWorld=createWorld();
 export const {PROTOTYPE,BUILDINGS,DOOR_WIDTH,buildingWalls,interiorFurniture,indoorAt,COVERS,SOLIDS,circleOverlapsRect,canStand,moveWithCollisions,normalized,SECOND_FLOOR,doorRect,createDoors,worldSolids,nearbyDoor,toggleDoor,stairways,floorPanels,randomOutdoorSpawn,shotBoxes}=harborWorld;
