@@ -1,3 +1,4 @@
+import {moonEclipse} from '../src/moon-environment.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {NullEngine} from '@babylonjs/core/Engines/nullEngine.js';
@@ -148,7 +149,13 @@ test('the eclipse clock warns, darkens the surface, and stays synchronized with 
   const game=createNetworkGame(undefined,'moon',{mode:'ffa'}),player=game.join('viewer','pistol');
   const outside={x:0,z:-8};
   Object.assign(player,outside);
-  for(const [seconds,warning,active] of [[81,4,false],[90,0,true],[111,0,false],[261,4,false]] as const){
+  const seed=game.state.weatherSeed!,cycle=moonEclipse(0,seed);
+  const restart=moonEclipse(cycle.end,seed);
+  assert.equal(createNetworkGame(game.checkpoint()).state.weatherSeed,seed);
+  assert.ok(restart.start-cycle.end>=55);
+  const lengths=new Set(Array.from({length:24},(_,i)=>moonEclipse(0,i+1)).map(e=>e.end-e.start));
+  assert.ok(lengths.size>1&&[...lengths].every(n=>n>=15&&n<=35));
+  for(const [seconds,warning,active] of [[cycle.start-4,4,false],[cycle.start+5,0,true],[cycle.end,0,false],[restart.start-4,4,false]] as const){
    game.state.weatherTime=seconds;
    scene.renderOnline(game.state,player.id,{yaw:0,pitch:0},.05);
    assert.equal(scene.eclipseState()?.warning,warning);
@@ -171,4 +178,23 @@ test('four refill shelters have walkable entrances and keep vacuum outdoors',()=
   assert.equal(world.hasLunarOxygen(point),true);
   assert.equal(world.hasLunarOxygen({...point,y:b.height+.5}),false);
  }
+});
+
+test('oxygen masks start unequipped and the server consumes one charge per selected type',()=>{
+ const game=createNetworkGame(undefined,'moon',{mode:'ffa'}),p=game.join('mask','pistol');
+ Object.assign(p,{x:0,z:-8,y:0});
+ assert.equal(p.oxygenMask?.remaining,0);
+ const command={seq:1,x:0,y:0,yaw:0,pitch:0,fire:false,shot:false,reload:false,jump:false,sprint:false,scope:false,oxygenMask:'light'};
+ assert.ok(game.input(p.id,command));
+ for(let tick=0;tick<20;tick++)game.step();
+ assert.equal(p.oxygen,100);
+ assert.ok(Math.abs(p.oxygenMask!.remaining-19)<.001);
+ for(let tick=0;tick<400;tick++)game.step();
+ assert.ok(p.oxygen!<100);
+ assert.ok(game.input(p.id,{...command,seq:2}));
+ game.step();
+ assert.equal(p.oxygenMask?.remaining,0);
+ assert.ok(game.input(p.id,{...command,seq:3,oxygenMask:'extended'}));
+ game.step();
+ assert.ok(p.oxygenMask!.remaining>49);
 });

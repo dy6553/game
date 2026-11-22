@@ -130,3 +130,7 @@ body.at-home #weather-notice,body.results-open #weather-notice,.comparing #weath
 
 #oxygen-status:not([hidden]){display:block;margin-top:4px;color:#9ce8df;font-size:11px;font-variant-numeric:tabular-nums}
 #oxygen-status.critical:not([hidden]){color:#ffd38f}
+
+#oxygen-mask-controls:not([hidden]){display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;pointer-events:auto}
+#oxygen-mask-controls button{font-size:10px;line-height:1.2;padding:4px 5px;min-height:27px;touch-action:manipulation}
+#oxygen-mask-controls button:disabled{opacity:.55}

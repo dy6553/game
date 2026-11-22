@@ -10,6 +10,7 @@ for(const map of ['snow','moon'] as const)test(`${map}: three code-built profile
   await w.setQuality(false);await w.setPerformanceLow(quality==='low');if(quality==='high')await w.setQuality(true);
   const s=w.mapArtState();assert.equal(s?.source,'procedural');assert.equal(s?.quality,quality);assert.equal(s?.map,map);assert.deepEqual(w.geometry.worldSolids(),solids);
   assert.equal(s?.collisionCount,solids.length);assert.ok(s!.landmarks.includes(map==='snow'?'observatory':'habitat-dome'));assert.ok(s!.landmarks.includes(map==='snow'?'mountain-ridge':'communications-dish'));
+  assert.equal(s!.landmarks.includes('milky-way'),map==='moon'&&quality==='high');
   const art=w.scene.meshes.filter(m=>m.metadata?.proceduralMap===map);assert.ok(art.length<=24);const ground=art.find(m=>m.name.endsWith('0:ground'))!;const normals=ground.getVerticesData('normal')!;assert.ok(normals[1]>.99,'ground faces upward and is visible from the play area');assert.ok(art.every(m=>!m.isPickable&&!m.checkCollisions&&m.material?.alpha===1));
   assert.equal(w.scene.transformNodes.filter(n=>n.name.startsWith(map+'-procedural-')).length,1);
   if(quality==='low'){assert.ok(s!.triangles<12000);assert.ok(s!.textureBytes<=128*128*3);assert.equal(w.scene.shadowsEnabled,false);if(map==='snow'){w.setPreview(false);w.update({x:0,z:-38},.016);assert.equal(w.snowfallState()?.running,false,'low profile avoids ambient particle overdraw');}}

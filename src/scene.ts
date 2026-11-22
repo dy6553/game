@@ -1,4 +1,4 @@
-import {advanceOxygen,moonEclipse} from './moon-environment.ts';
+import {advanceLunarAir,createOxygenMask,equipOxygenMask,moonEclipse,type OxygenMaskId} from './moon-environment.ts';
 import '@babylonjs/core/Meshes/Builders/torusBuilder.js';
 import {createWildlifeArt} from './wildlife-art.ts';
 import {frightenWildlife,WILDLIFE_SHOT_RANGE,wildlifeMovementRange,wildlifeSpawns,type Animal,advanceWildlife,meatRecovery,takeMeat,createWildlife,hurtWildlife,wildlifeBlastTargets,wildlifeHit} from './wildlife.ts';
@@ -647,7 +647,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
    corona.disableLighting=true;corona.emissiveColor=Color3.FromHexString('#ffc68a');
    eclipseRing.material=corona;eclipseRing.setEnabled(false);
   }
-  const eclipseState=()=>expansion==='moon'?moonEclipse(weatherSeconds):null;
+  const eclipseState=()=>expansion==='moon'?moonEclipse(weatherSeconds,weatherSeed):null;
   const weatherState=()=>expansion==='snow'?snowWeather(weatherSeconds,weatherSeed):null;
   let lastSnowSky=-Infinity,weatherSheltered=false;
   function applyWeather(sheltered:boolean){const weather=weatherState();if(!weather)return;const showing=!preview&&!reference;scene.fogMode=showing&&weather.intensity>.001?Scene.FOGMODE_LINEAR:Scene.FOGMODE_NONE;scene.fogColor.set(.78,.85,.88);scene.fogStart=weather.visibility*.5;scene.fogEnd=weather.visibility;snowfall?.setStormIntensity(weather.intensity);proceduralArt?.setSheltered(showing&&sheltered&&weather.intensity>.001);
@@ -712,7 +712,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
   }
   const matchPickups=()=>options.randomSpawns===false?createPickups():createMatchPickups(geometry);
   let localActor:GearActor={id:'player',...PROTOTYPE.spawn,yaw:0,pitch:0,health:100,gear:createGear(),healing:0,flash:0,gearCooldown:0};
-  let oxygen=100,localMeat=0,pendingMeatHeal:ToolEvent|undefined;
+  let oxygen=100,oxygenMask=createOxygenMask(),localMeat=0,pendingMeatHeal:ToolEvent|undefined;
   let localProjectiles:Projectile[]=[],toolSequence=0,toolDamageVersion=0,lastToolHealth=100;
   const toolVisuals=createEquipmentVisuals(scene);
   let upgradeTier=0;
@@ -804,15 +804,15 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
       const state=battleState();
       if(state.mode==='survival'&&state.ammoRefreshVersion!==seenResupply){seenResupply=state.ammoRefreshVersion;syncSlot(inventory,weapon,cooldown);for(const slot of inventory.slots)slot.weapon=createWeapon(WEAPONS[slot.id]);weapon=inventory.slots[inventory.active]!.weapon;}
       if(wasBotDead&&state.botHealth>0){robotImpact.reset();botFlashes.delete('bot-1');}
-      if(state.respawnVersion!==seenRespawn){seenRespawn=state.respawnVersion;localMeat=0;oxygen=100;p.x=state.playerPosition.x;p.z=state.playerPosition.z;if(p.y!==undefined)p.y=0;p.fallSpeed=0;falling=false;weaponId=startWeapon;spec=localSpec(weaponId);inventory=createInventory(startWeapon);weapon=createWeapon(spec);if(survivalMode)pickups=pickups.map(c=>({...c,remaining:0}));localActor.gear=createGear();localActor.healing=0;localActor.flash=0;cooldown=0;scoped=false;jumpState=createJump();recoil.clear();}
+      if(state.respawnVersion!==seenRespawn){seenRespawn=state.respawnVersion;localMeat=0;oxygen=100;oxygenMask=createOxygenMask();p.x=state.playerPosition.x;p.z=state.playerPosition.z;if(p.y!==undefined)p.y=0;p.fallSpeed=0;falling=false;weaponId=startWeapon;spec=localSpec(weaponId);inventory=createInventory(startWeapon);weapon=createWeapon(spec);if(survivalMode)pickups=pickups.map(c=>({...c,remaining:0}));localActor.gear=createGear();localActor.healing=0;localActor.flash=0;cooldown=0;scoped=false;jumpState=createJump();recoil.clear();}
     }
-    if(!duelMode&&!paused&&!preview&&!reference){duel.update(dt,p,()=>false,()=>false,false);const d=duel.state();if(d.respawnVersion!==seenRespawn){seenRespawn=d.respawnVersion;localMeat=0;oxygen=100;p.x=d.playerPosition.x;p.z=d.playerPosition.z;p.y=0;inventory=createInventory(startWeapon);equip();localActor.gear=createGear();localActor.healing=0;localActor.flash=0;}}
+    if(!duelMode&&!paused&&!preview&&!reference){duel.update(dt,p,()=>false,()=>false,false);const d=duel.state();if(d.respawnVersion!==seenRespawn){seenRespawn=d.respawnVersion;localMeat=0;oxygen=100;oxygenMask=createOxygenMask();p.x=d.playerPosition.x;p.z=d.playerPosition.z;p.y=0;inventory=createInventory(startWeapon);equip();localActor.gear=createGear();localActor.healing=0;localActor.flash=0;}}
     if(!paused&&!preview&&!reference){
       const battle=battleState(),group=survivalMode?survival:ffaMode?ffa:duel;
       if(battle.damageVersion!==toolDamageVersion){localActor.healing=0;toolDamageVersion=battle.damageVersion;}
       if(lastToolHealth>0&&battle.playerHealth<=0){localMeat=0;localActor.gear=createGear();localActor.healing=0;}
       if(expansion==='moon'&&battle.playerHealth>0&&!battle.winner){
-       const air=advanceOxygen(oxygen,geometry.hasLunarOxygen({...p,y:(p.y??0)+jumpState.height}),dt);
+       const air=advanceLunarAir(oxygen,oxygenMask,geometry.hasLunarOxygen({...p,y:(p.y??0)+jumpState.height}),dt);
        oxygen=air.oxygen;
        if(air.damage>0)group.hurtSelf(air.damage);
       }
@@ -946,7 +946,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
     const next=beginReload(weapon,spec);const started=next!==weapon;weapon=started?cancelBurst(next):next;return started;
   }
   function resetPractice() {
-    animals=wildlifeArt?createWildlife():undefined;localMeat=0;oxygen=100;pendingMeatHeal=undefined;
+    animals=wildlifeArt?createWildlife():undefined;localMeat=0;oxygen=100;oxygenMask=createOxygenMask();pendingMeatHeal=undefined;
     weatherSeconds=0;weatherSeed=options.weatherSeed??newWeatherSeed();
     localActor={id:'player',...PROTOTYPE.spawn,yaw:0,pitch:0,health:100,gear:createGear(),healing:0,flash:0,gearCooldown:0};localProjectiles=[];toolSequence=0;toolDamageVersion=0;lastToolHealth=100;botFlashes.clear();toolVisuals.clear();
     highShotNotices.length=0;botReveals.clear();autoShotResults.length=0;weaponId=startWeapon;spec=localSpec(weaponId);inventory=createInventory(startWeapon);pickups=matchPickups();weapon=createWeapon(spec);cooldown=0;scoped=false;jumpState=createJump();falling=false;hits=0;destroyed=0;shots=0;
@@ -994,7 +994,8 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
       jumpHeight:jumpState.height,grounded:jumpState.height===0&&jumpState.velocity===0&&!falling};
   }
   return {
-    geometry,weatherState,eclipseState,oxygenLevel:()=>oxygen,isWeatherSheltered:()=>weatherSheltered,mapArtState:()=>proceduralArt?.state()??null,
+    geometry,weatherState,eclipseState,oxygenLevel:()=>oxygen,oxygenMaskState:()=>oxygenMask,
+    wearOxygenMask(id:OxygenMaskId){const battle=battleState();return expansion==='moon'&&!preview&&!reference&&battle.playerHealth>0&&!battle.winner&&equipOxygenMask(oxygenMask,id);},isWeatherSheltered:()=>weatherSheltered,mapArtState:()=>proceduralArt?.state()??null,
     get scoped(){return scoped;},
     get thirdPerson(){return thirdPerson;},
     aimReticle(){if(!thirdPerson||scoped||preview||reference)return {x:50,y:50};const direction=camera.getDirection(Vector3.Forward()),pick=scene.pickWithRay(new Ray(aimOrigin.clone(),direction,150),m=>m.isPickable&&m.isEnabled());const end=pick?.pickedPoint??aimOrigin.add(direction.scale(150)),viewport=camera.viewport.toGlobal(engine.getRenderWidth(),engine.getRenderHeight()),v=Vector3.Project(end,Matrix.Identity(),camera.getViewMatrix().multiply(camera.getProjectionMatrix()),viewport);return {x:Math.max(0,Math.min(100,v.x/engine.getRenderWidth()*100)),y:Math.max(0,Math.min(100,v.y/engine.getRenderHeight()*100))};},togglePerspective(){thirdPerson=!thirdPerson;return thirdPerson;},

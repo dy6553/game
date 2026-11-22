@@ -5,7 +5,7 @@ export const SNOW_WEATHER_TIMING={clearMin:40,clearMax:80,stormMin:20,stormMax:3
 export const newWeatherSeed=()=>1+Math.floor(Math.random()*0xffffffff);
 type Cycle={start:number;end:number};
 const schedules=new Map<number,Cycle[]>();
-function random(seed:number,index:number){
+export function weatherRandom(seed:number,index:number){
  let x=(seed+Math.imul(index+1,0x9e3779b9))|0;x=Math.imul(x^(x>>>16),0x21f0aaad);x=Math.imul(x^(x>>>15),0x735a2d97);return ((x^(x>>>15))>>>0)/4294967296;
 }
 function schedule(seed:number,time:number){
@@ -14,8 +14,8 @@ function schedule(seed:number,time:number){
  // ordinary render frames reuse the schedule and binary-search its boundaries.
  while(!cycles.length||cycles[cycles.length-1]!.end<=time){
   const i=cycles.length,t=SNOW_WEATHER_TIMING,previous=cycles[i-1]?.end??0;
-  const start=previous+t.clearMin+Math.floor(random(seed,i*2)*(t.clearMax-t.clearMin+1));
-  cycles.push({start,end:start+t.stormMin+Math.floor(random(seed,i*2+1)*(t.stormMax-t.stormMin+1))});
+  const start=previous+t.clearMin+Math.floor(weatherRandom(seed,i*2)*(t.clearMax-t.clearMin+1));
+  cycles.push({start,end:start+t.stormMin+Math.floor(weatherRandom(seed,i*2+1)*(t.stormMax-t.stormMin+1))});
  }
  let lo=0,hi=cycles.length-1;while(lo<hi){const mid=(lo+hi)>>>1;if(cycles[mid]!.end<=time)lo=mid+1;else hi=mid;}
  return cycles[lo]!;
@@ -40,7 +40,7 @@ export function weatherMessage(weather:SnowWeather|null){
 /** Shared match-time lighting; durations are independent of the storm schedule. */
 export function snowDaylight(seconds:number,seed=1){
  const time=Number.isFinite(seconds)?Math.max(0,seconds):0;let start=0,index=0,end=0;
- do{start=end;end=start+40+Math.floor(random((seed>>>0)^0x61c88647,index+733)*41);index++;}while(end<=time);
+ do{start=end;end=start+40+Math.floor(weatherRandom((seed>>>0)^0x61c88647,index+733)*41);index++;}while(end<=time);
  const target=(index-1)%2,previous=1-target,progress=index===1?1:Math.min(1,(time-start)/6),smooth=progress*progress*(3-2*progress);
  return {night:index===1?0:previous+(target-previous)*smooth,nextChange:end};
 }

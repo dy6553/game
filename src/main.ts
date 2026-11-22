@@ -1,3 +1,4 @@
+import {oxygenMasks,type OxygenMaskId} from './moon-environment.ts';
 import {MEAT_CAPACITY,nearbyMeat} from './wildlife.ts';
 import {weatherMessage} from './snow-weather.ts';
 import {MAPS,normalizeMap,canAccessMap} from './maps.ts';
@@ -244,7 +245,7 @@ async function start() {
   let combatTools:ReturnType<typeof installCombatTools>|undefined;
   let pendingPing:Command['ping'],pingSentAt=-Infinity;
   let pendingDoor:string|undefined;
-  let pendingEquipment:EquipmentId|undefined,pendingEat=false;let onlineToolEventId=-1;
+  let pendingEquipment:EquipmentId|undefined,pendingEat=false,pendingMask:OxygenMaskId|undefined;let onlineToolEventId=-1;
   let onlineBoardKey='';const onlineBoard=document.querySelector<HTMLDetailsElement>('#online-scoreboard')!;onlineBoard.addEventListener('toggle',()=>{if(onlineBoard.open){onlineBoardKey='';input.reset();}});
   let pendingSlot:number|undefined,pendingTake:{pickup:string;replace?:number}|undefined,choosePickupId:string|undefined;
   const inventoryUi=document.querySelector<HTMLElement>('#inventory-ui')!,slotButtons=[...document.querySelectorAll<HTMLButtonElement>('#weapon-slots button')];
@@ -432,7 +433,7 @@ async function start() {
   const refreshCharacter = () => choices.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.character === world.characterType)));
   const openPicker = () => { picker.hidden=false;setComparison(false);input.setEnabled(false);document.querySelector<HTMLSelectElement>('#start-mode')!.value=document.querySelector<HTMLSelectElement>('#game-mode')!.value;document.querySelector<HTMLSelectElement>('#start-difficulty')!.value=document.querySelector<HTMLSelectElement>('#bot-difficulty')!.value;document.querySelector<HTMLSelectElement>('#start-weapon')!.value=document.querySelector<HTMLSelectElement>('#weapon-select')!.value;input.reset();world.setPreview(true);refreshCharacter();choices[0]!.focus(); };
   const home=document.querySelector<HTMLElement>('#home-screen')!;
-  const openHome=()=>{settingsView.close();roomWaiting=false;guestPromptPending=false;nicknameDialog.cancel();waitingView.hide();nameplates.clear();document.querySelector('#online-player-list')!.replaceChildren();document.querySelector('#roster-lines')!.replaceChildren();document.body.classList.remove('in-waiting-room');onlineBoard.open=false;pendingEquipment=undefined;pendingEat=false;onlineToolEventId=-1;void accountView.refreshGrowth().catch(()=>{});predictionDash=predictionJump=false;localDash=cancelDash(localDash);lobbyPolish.cancelDeploy();lobbyPolish.cancelDrag();gameChoices.close();syncHomeSelection();resultTracker.cancel();resultView.hide();online.leave();onlineMotion.reset();remoteMotion.reset();onlineAudio.reset();pendingPing=undefined;pendingDoor=undefined;pendingSlot=undefined;pendingTake=undefined;choosePickupId=undefined;onlineActive=false;onlineState=null;onlineShots.reset();onlineTools.reset();onlineId='';onlineEventId=-1;world.endOnline();onlineLobby.hidden=true;updateOnlineControls(false);homeOpen=true;home.hidden=false;document.body.classList.add('at-home');manualPaused=false;pausePanel.hidden=true;closeMenu();document.querySelector<HTMLElement>('#help')!.hidden=true;picker.hidden=true;setComparison(false);input.setEnabled(false);world.setPreview(true,true);document.querySelector<HTMLButtonElement>('#home-start')!.focus();};
+  const openHome=()=>{settingsView.close();roomWaiting=false;guestPromptPending=false;nicknameDialog.cancel();waitingView.hide();nameplates.clear();document.querySelector('#online-player-list')!.replaceChildren();document.querySelector('#roster-lines')!.replaceChildren();document.body.classList.remove('in-waiting-room');onlineBoard.open=false;pendingEquipment=undefined;pendingEat=false;pendingMask=undefined;onlineToolEventId=-1;void accountView.refreshGrowth().catch(()=>{});predictionDash=predictionJump=false;localDash=cancelDash(localDash);lobbyPolish.cancelDeploy();lobbyPolish.cancelDrag();gameChoices.close();syncHomeSelection();resultTracker.cancel();resultView.hide();online.leave();onlineMotion.reset();remoteMotion.reset();onlineAudio.reset();pendingPing=undefined;pendingDoor=undefined;pendingSlot=undefined;pendingTake=undefined;choosePickupId=undefined;onlineActive=false;onlineState=null;onlineShots.reset();onlineTools.reset();onlineId='';onlineEventId=-1;world.endOnline();onlineLobby.hidden=true;updateOnlineControls(false);homeOpen=true;home.hidden=false;document.body.classList.add('at-home');manualPaused=false;pausePanel.hidden=true;closeMenu();document.querySelector<HTMLElement>('#help')!.hidden=true;picker.hidden=true;setComparison(false);input.setEnabled(false);world.setPreview(true,true);document.querySelector<HTMLButtonElement>('#home-start')!.focus();};
   document.querySelector('#online-back')!.addEventListener('click',openHome);
   document.querySelector('#home-open')!.addEventListener('click',openHome);
   document.querySelector('#setup-home')!.addEventListener('click',openHome);
@@ -592,6 +593,19 @@ async function start() {
     else if(world.eatMeat(position))refreshEquipment();
   }
   bindInventoryAction(eatButton,requestEat);
+  const maskControls=document.querySelector<HTMLElement>('#oxygen-mask-controls')!;
+  const maskButtons=(Object.keys(oxygenMasks) as OxygenMaskId[]).map(id=>{
+    const button=document.createElement('button'),mask=oxygenMasks[id];
+    button.type='button';button.textContent=`${mask.label} ${mask.seconds}초`;button.setAttribute('aria-label',`${mask.label} 산소 마스크 착용, ${mask.seconds}초`);
+    button.addEventListener('click',()=>{
+      if(selectedMap!=='moon'||!canUseInventory()||inventoryData().blocked)return;
+      if(onlineActive)pendingMask=id;
+      else world.wearOxygenMask(id);
+      canvas.focus();
+    });
+    maskControls.append(button);
+    return {id,button};
+  });
   function requestEquipment(kind:EquipmentId){if(!canUseInventory()||inventoryData().blocked)return;if(onlineActive)pendingEquipment=kind;else world.useEquipment?.(kind,position,input.look);}
   for(const b of document.querySelectorAll<HTMLButtonElement>('[data-equipment]'))bindInventoryAction(b,()=>requestEquipment(b.dataset.equipment as EquipmentId));
   window.addEventListener('keydown',event=>{if(event.repeat||event.ctrlKey||event.metaKey||event.altKey||!canUseInventory())return;const kind=controls.mapCode(event.code)==='KeyG'?'grenade':controls.mapCode(event.code)==='KeyB'?'flash':controls.mapCode(event.code)==='KeyH'?'medkit':null;if(kind){event.preventDefault();requestEquipment(kind);}});
@@ -633,15 +647,17 @@ async function start() {
     }
     const navigation=navigationLocation(geometry,me??position),locationLabel=document.querySelector<HTMLElement>('#map-location')!;if(locationLabel.textContent!==navigation.label)locationLabel.textContent=navigation.label;locationLabel.style.borderColor=navigation.color;
     const oxygenLabel=document.querySelector<HTMLElement>('#oxygen-status')!,lunar=selectedMap==='moon';
-    oxygenLabel.hidden=!lunar;
+    oxygenLabel.hidden=!lunar;maskControls.hidden=!lunar;
     if(lunar){
       const oxygen=me?.oxygen??world.oxygenLevel(),refill=geometry.hasLunarOxygen(p);
-      const text=`산소 ${Math.ceil(oxygen)}% · ${refill?'충전 구역':oxygen<=0?'산소 고갈':oxygen<=20?'산소 부족':'마스크 작동'}`;
+      const mask=me?me.oxygenMask:world.oxygenMaskState(),remaining=Math.ceil(mask?.remaining??0);
+      const text=`산소 ${Math.ceil(oxygen)}% · ${refill?'충전':oxygen<=0&&!remaining?'고갈':oxygen<=20&&!remaining?'부족':'실외'} · ${remaining?`마스크 ${remaining}초`:'미장착'}`;
+      for(const {id,button} of maskButtons)button.disabled=health<=0||remaining>0||!!mask?.used.includes(id);
       if(oxygenLabel.textContent!==text)oxygenLabel.textContent=text;
       oxygenLabel.classList.toggle('critical',oxygen<=20);
     }
     const eclipse=world.eclipseState(),weather=world.weatherState(),weatherLabel=document.querySelector<HTMLElement>('#weather-status')!;
-    const weatherText=eclipse?(eclipse.warning?`일식까지 ${eclipse.warning}초`:eclipse.active?'일식 진행 중':'달 기지 · 맑음'):weather?.intensity&&world.isWeatherSheltered()?'실내 · 폭설 차단':weatherMessage(weather);
+    const weatherText=eclipse?(eclipse.warning?`일식까지 ${eclipse.warning}초`:eclipse.active?`일식 · ${Math.ceil(eclipse.endsIn)}초 남음`:'달 기지 · 맑음'):weather?.intensity&&world.isWeatherSheltered()?'실내 · 폭설 차단':weatherMessage(weather);
     weatherLabel.hidden=!weather&&!eclipse;
     if(weatherLabel.textContent!==weatherText)weatherLabel.textContent=weatherText;
     weatherNotice.hidden=!(weather?.warning||eclipse?.warning||eclipse?.active);
@@ -777,9 +793,9 @@ async function start() {
     const can=onlineCanPlay();
     if(!can)retained={};
     const command:Omit<Command,'seq'>={stance:input.stance,x:can?input.move.x:0,y:can?input.move.y:0,yaw:input.look.yaw,pitch:input.look.pitch,fire:can&&input.firing,shot:can&&(input.consumeShots()>0||!!retained.shot),reload:can&&(input.consumeReloads()>0||!!retained.reload),jump:can&&(input.consumeJumps()>0||!!retained.jump),sprint:can&&input.sprintingRequested,scope:world.practiceState().scoped,dash:can&&(input.consumeDashes()>0||!!retained.dash)};
-    if(can){command.ping=pendingPing??retained.ping;command.door=pendingDoor??retained.door;command.slot=pendingSlot??retained.slot;command.pickup=pendingTake?.pickup??retained.pickup;command.replace=pendingTake?.replace??retained.replace;command.equipment=pendingEquipment??retained.equipment;command.eatMeat=pendingEat||retained.eatMeat||undefined;}
+    if(can){command.ping=pendingPing??retained.ping;command.door=pendingDoor??retained.door;command.slot=pendingSlot??retained.slot;command.pickup=pendingTake?.pickup??retained.pickup;command.replace=pendingTake?.replace??retained.replace;command.equipment=pendingEquipment??retained.equipment;command.eatMeat=pendingEat||retained.eatMeat||undefined;command.oxygenMask=pendingMask??retained.oxygenMask;}
     const seq=online.send(command);
-    if(seq!==null){onlineMotion.sent(seq,command);predictionDash ||=!!command.dash;predictionJump ||=command.jump;retained={};pendingPing=undefined;pendingDoor=undefined;pendingSlot=undefined;pendingTake=undefined;pendingEquipment=undefined;pendingEat=false;}else retained={...command};
+    if(seq!==null){onlineMotion.sent(seq,command);predictionDash ||=!!command.dash;predictionJump ||=command.jump;retained={};pendingPing=undefined;pendingDoor=undefined;pendingSlot=undefined;pendingTake=undefined;pendingEquipment=undefined;pendingEat=false;pendingMask=undefined;}else retained={...command};
   });
   let networkTimer:ReturnType<typeof setInterval>|null=null;
   const startNetworkTimer=()=>{if(networkTimer===null)networkTimer=setInterval(()=>inputPump.pump(),25);};startNetworkTimer();
@@ -828,7 +844,7 @@ async function start() {
     if(onlineActive&&onlineState&&!roomWaiting){
       updateOnlineControls(true);
       const command:Omit<Command,'seq'>={stance:input.stance,x:canPlay?input.move.x:0,y:canPlay?input.move.y:0,yaw:input.look.yaw,pitch:input.look.pitch,fire:canPlay&&input.firing,shot:false,reload:false,jump:false,sprint:canPlay&&input.sprintingRequested,scope:world.practiceState().scoped};
-      inputPump.pump(!!(input.actionsPending||pendingDoor||pendingSlot!==undefined||pendingTake||pendingEquipment||pendingEat));command.jump=canPlay&&predictionJump;command.dash=canPlay&&predictionDash;predictionJump=predictionDash=false;
+      inputPump.pump(!!(input.actionsPending||pendingDoor||pendingSlot!==undefined||pendingTake||pendingEquipment||pendingEat||pendingMask));command.jump=canPlay&&predictionJump;command.dash=canPlay&&predictionDash;predictionJump=predictionDash=false;
       const predictedPosition=onlineMotion.advance(elapsed,command,online.connected);
       onlineVisualTime=Math.min(.25,onlineVisualTime+elapsed);
       if(drawFrame){

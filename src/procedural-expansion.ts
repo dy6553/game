@@ -220,10 +220,38 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
    for(let i=0;i<28;i++){const a=i/28*Math.PI*2;box(Math.sin(a)*9.2,.038,Math.cos(a)*9.2,.20,.02,1.18,warm,1,a);}
    label(0,.048,0,6,0,Math.PI/2);
    for(const side of [-1,1])label(side*5,.048,side*15,6,side<0?0:Math.PI,Math.PI/2);
-   const earth=VertexData.CreateSphere({diameter:24,segments:profile.segments});earth.colors=[];
-   for(let i=0;i<earth.positions!.length;i+=3){const x=earth.positions![i]!,y=earth.positions![i+1]!,z=earth.positions![i+2]!,land=Math.sin(x*.42+Math.sin(z*.4)*2)*Math.cos(y*.31)> .28,col=Math.abs(y)>10?color('#d8e7e7'):land?color('#57918c'):color('#386ba2');earth.colors.push(col.r,col.g,col.b,1);}
+   const detailedSky=quality==='high';
+   const earth=VertexData.CreateSphere({diameter:24,segments:detailedSky?56:profile.segments});earth.colors=[];
+   const ocean=color('#164779'),landColor=color('#51856b'),cloud=color('#eaf5ff');
+   for(let i=0;i<earth.positions!.length;i+=3){
+    const x=earth.positions![i]!,y=earth.positions![i+1]!,z=earth.positions![i+2]!;
+    const land=Math.sin(x*.42+Math.sin(z*.4)*2)*Math.cos(y*.31);
+    let col:Color3;
+    if(detailedSky){
+     const terrain=land+.26*Math.sin(x*1.4+z*.7)*Math.cos(y*.92);
+     col=terrain>.3?Color3.Lerp(landColor,color('#a88e66'),Math.max(0,terrain-.63)):ocean.scale(.86+.22*Math.cos(y*.24));
+     const clouds=Math.sin(y*.76+Math.sin(x*.36)*3+z*.25)*Math.cos(x*.9-z*.56)+.25*Math.sin(z*2+y);
+     if(Math.abs(y)>10.1)col=Color3.Lerp(col,cloud,Math.min(1,(Math.abs(y)-10.1)*.8));
+     if(clouds>.46)col=Color3.Lerp(col,cloud,Math.min(.88,(clouds-.46)*1.6));
+     const light=.25+.75*Math.max(0,(x*.49+y*.62-z*.61)/12);
+     col=col.scale(light);
+    }else col=Math.abs(y)>10?color('#d8e7e7'):land>.28?color('#57918c'):color('#386ba2');
+    earth.colors.push(col.r,col.g,col.b,1);
+   }
    add(earth,-94,76,135,'#ffffff',2);const eb=batches.get('2:global')!;eb.colors.splice(eb.colors.length-earth.colors.length,earth.colors.length,...earth.colors);
-   const stars=quality==='low'?48:quality==='medium'?96:144;for(let i=0;i<stars;i++){const a=hash(i,11)*Math.PI*2,e=.12+hash(i,7)*1.25,r=210;const x=Math.cos(a)*Math.cos(e)*r,z=Math.sin(a)*Math.cos(e)*r,y=Math.sin(e)*r;box(x,y,z,.17,.17,.17,'#b8c7d3',2);}
+   const stars=quality==='low'?48:quality==='medium'?96:280;
+   for(let i=0;i<stars;i++){const a=hash(i,11)*Math.PI*2,e=.12+hash(i,7)*1.25,r=210;const x=Math.cos(a)*Math.cos(e)*r,z=Math.sin(a)*Math.cos(e)*r,y=Math.sin(e)*r;const size=detailedSky?.09+hash(i,9)*.24:.17;box(x,y,z,size,size,size,i%5===0?'#ead5c1':'#b8c7e3',2);}
+   if(detailedSky){
+    // A dense, tilted stream of faint stars gives the Milky Way its soft edges.
+    for(let i=0;i<860;i++){
+     const angle=hash(i,31)*Math.PI*2,spread=(hash(i,32)+hash(i,33)+hash(i,34)-1.5)*.16;
+     const elevation=.58+.31*Math.sin(angle+.9)+spread;
+     const r=216,scale=.13+hash(i,35)*.23;
+     const tint=['#627194','#b5b3cd','#7f87ae','#c9b6c7'][i%4]!;
+     box(Math.cos(angle)*Math.cos(elevation)*r,Math.sin(elevation)*r,Math.sin(angle)*Math.cos(elevation)*r,scale,scale,scale,tint,2);
+    }
+    landmarks.push('milky-way');
+   }
   }
   if(profile.details>0&&!snow){
    for(const b of world.BUILDINGS){const count=profile.details===2?5:2;for(let i=0;i<count;i++)box(b.x-3+i*1.5,b.height+.9,b.z+b.depth*.28,.8,.65,1.6,dark);}
