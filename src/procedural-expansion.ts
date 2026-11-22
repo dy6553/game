@@ -1,4 +1,4 @@
-import {moonCorridor,moonCrater} from './moon-layout.ts';
+import {moonCorridor,moonCrater,moonShelters} from './moon-layout.ts';
 import {snowShells,snowShellIds,snowEntryGalleries} from './igloo-layout.ts';
 import type {Scene} from '@babylonjs/core/scene.js';
 import {Mesh} from '@babylonjs/core/Meshes/mesh.js';
@@ -23,7 +23,7 @@ type Batch={positions:number[];normals:number[];indices:number[];uvs:number[];co
 export type ProceduralMapState={source:'procedural';map:ExpansionMapId;quality:ExpansionQuality;triangles:number;meshCount:number;textureBytes:number;collisionCount:number;landmarks:string[]};
 const color=(hex:string)=>Color3.FromHexString(hex),hash=(x:number,z:number)=>{const t=Math.sin(x*127.1+z*311.7)*43758.5453;return t-Math.floor(t);};
 const FONT:Record<string,string>={A:'01110100011000111111100011000110001',B:'11110100011000111110100011000111110',C:'01111100001000010000100001000001111',D:'11110100011000110001100011000111110',E:'11111100001000011110100001000011111',H:'10001100011000111111100011000110001',I:'11111001000010000100001000010011111',L:'10000100001000010000100001000011111',N:'10001110011010110011100011000110001',O:'01110100011000110001100011000101110',P:'11110100011000111110100001000010000',R:'11110100011000111110101001001010001',S:'01111100001000001110000010000111110',T:'11111001000010000100001000010000100',U:'10001100011000110001100011000101110','0':'01110100011001110101110011000101110','1':'00100011000010000100001000010001110','2':'01110100010000100010001000100011111','-':'00000000000000011111000000000000000'};
-function signTexture(scene:Scene){const w=128,h=64,p=new Uint8Array(w*h*3),labels=['OBS 01','A1 LAB','A2 LAB','HAB 01','OPS 02','AIRLOCK','PAD 01','CAUTION'];labels.forEach((text,index)=>{const ox=index%2*64,oy=Math.floor(index/2)*16;for(let y=0;y<16;y++)for(let x=0;x<64;x++){const i=((h-1-oy-y)*w+ox+x)*3;p[i]=12;p[i+1]=36;p[i+2]=45;}for(let k=0;k<text.length;k++){const glyph=FONT[text[k]!]??'0'.repeat(35);for(let y=0;y<7;y++)for(let x=0;x<5;x++)if(glyph[y*5+x]==='1'){const i=((h-1-oy-4-y)*w+ox+4+k*6+x)*3;p[i]=210;p[i+1]=238;p[i+2]=226;}}});const t=RawTexture.CreateRGBTexture(p,w,h,scene,false,false,Texture.NEAREST_SAMPLINGMODE);t.name='procedural-map-signs';return t;}
+function signTexture(scene:Scene){const w=128,h=64,p=new Uint8Array(w*h*3),labels=['OBS 01','A1 LAB','A2 LAB','HAB 01','OPS 02','AIRLOCK','PAD 01','O2'];labels.forEach((text,index)=>{const ox=index%2*64,oy=Math.floor(index/2)*16;for(let y=0;y<16;y++)for(let x=0;x<64;x++){const i=((h-1-oy-y)*w+ox+x)*3;p[i]=12;p[i+1]=36;p[i+2]=45;}for(let k=0;k<text.length;k++){const glyph=FONT[text[k]!]??'0'.repeat(35);for(let y=0;y<7;y++)for(let x=0;x<5;x++)if(glyph[y*5+x]==='1'){const i=((h-1-oy-4-y)*w+ox+4+k*6+x)*3;p[i]=210;p[i+1]=238;p[i+2]=226;}}});const t=RawTexture.CreateRGBTexture(p,w,h,scene,false,false,Texture.NEAREST_SAMPLINGMODE);t.name='procedural-map-signs';return t;}
 
 
 function shellFace(points:readonly (readonly number[])[],center:readonly number[],inset=1,lift=0){
@@ -102,7 +102,7 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
    box(b.x,.018,b.z,b.width-.5,.03,b.depth-.5,snow?'#708990':'#66717b');
    for(const side of [-1,1]){
     box(b.x, b.height+.48,b.z+side*(b.depth/2-.25),b.width,.06,.25,white);
-    label(b.x+(b.width/2+3)/2,3.45,b.z+side*(b.depth/2+.28),snow?(i===0?0:i):i===0?3:4,side===-1?0:Math.PI,0,Math.min(3.2,(b.width-6)/2-.2));
+    label(b.x+(b.width/2+3)/2,3.45,b.z+side*(b.depth/2+.28),i===0?3:i===1?4:7,side===-1?0:Math.PI,0,Math.min(3.2,(b.width-6)/2-.2));
     box(b.x,.025,b.z+side*(b.depth/2+2),2.8,.025,3.6,dark);
     for(const x of [-1,1])box(b.x+x*1.3,.046,b.z+side*(b.depth/2+2),.11,.018,3.6,warm,1);
    }
@@ -186,6 +186,13 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
    const hab=world.BUILDINGS[0]!,ops=world.BUILDINGS[1]!;
    cylinder(moonCrater.x,.002,moonCrater.z,moonCrater.radius,.019,'#444550');
    cylinder(0,.013,0,9.2,.014,'#4d5965');
+   for(const shelter of moonShelters){
+    const direction=shelter.z<0?1:-1;
+    const entrance=shelter.z+direction*3.55;
+    label(shelter.x,3.22,entrance,7,direction>0?Math.PI:0,0,1.5,.55);
+    for(const side of [-1,1])box(shelter.x+side*1.62,1.4,entrance,.16,2.7,.09,'#4ee4c5',1);
+    box(shelter.x,1.16,shelter.z-direction*2.6,1.6,.06,.42,'#5cffe0',1);
+   }
    const {z,halfWidth}=moonCorridor;
    box(0,.018,z,halfWidth*2,.025,4.12,'#576574');
    for(const side of [-1,1]){

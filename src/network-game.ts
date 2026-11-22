@@ -1,3 +1,4 @@
+import {advanceOxygen} from './moon-environment.ts';
 import {MOON_LAYOUT_REVISION} from './moon-layout.ts';
 import {frightenWildlife,WILDLIFE_SHOT_RANGE,wildlifeMovementRange,advanceWildlife,meatRecovery,takeMeat,createWildlife,hurtWildlife,wildlifeBlastTargets,wildlifeHit,type Animal} from './wildlife.ts';
 import {newWeatherSeed} from './snow-weather.ts';
@@ -17,7 +18,7 @@ import { WEAPONS,pelletOffsets,isWeaponId,startBurst,advanceBurst,cancelBurst,ty
 import { createWeapon,beginReload,tryFire,type WeaponState } from './combat.ts';
 import { createJump,type JumpState } from './jump.ts';
 import { viewMovement } from './view.ts';
-export type Player = GearActor & {meat?:number;revealedUntil?:number;nickname?:string;guest?:boolean;participated?:boolean;deaths:number;totalKills:number;playing?:boolean;abandoned?:boolean;id:string;y?:number;fallSpeed?:number;protection?:number;x:number;z:number;yaw:number;pitch:number;health:number;kills:number;dead:number;weaponId:WeaponId;weapon:WeaponState;jump:JumpState;cooldown:number;connected:boolean;character:'robot'|'robot-cat'|'welder';seq:number;startWeapon:WeaponId;inventory:Inventory;dash?:DashState};
+export type Player = GearActor & {oxygen?:number;meat?:number;revealedUntil?:number;nickname?:string;guest?:boolean;participated?:boolean;deaths:number;totalKills:number;playing?:boolean;abandoned?:boolean;id:string;y?:number;fallSpeed?:number;protection?:number;x:number;z:number;yaw:number;pitch:number;health:number;kills:number;dead:number;weaponId:WeaponId;weapon:WeaponState;jump:JumpState;cooldown:number;connected:boolean;character:'robot'|'robot-cat'|'welder';seq:number;startWeapon:WeaponId;inventory:Inventory;dash?:DashState};
 export type TeamPing={kind:'enemy'|'move'|'help';x:number;z:number;player:string;team:number;expires:number};
 export type Command={eatMeat?:boolean;ping?:Pick<TeamPing,'kind'|'x'|'z'>;stance?:Stance;seq:number;x:number;y:number;yaw:number;pitch:number;fire:boolean;shot:boolean;reload:boolean;jump:boolean;sprint:boolean;scope:boolean;door?:string;dash?:boolean;slot?:number;pickup?:string;replace?:number;equipment?:EquipmentId};
 export type ShotEvent={id:number;player:string;weapon:WeaponId;from:{x:number;y:number;z:number};to:{x:number;y:number;z:number};hit:boolean;killed:boolean;target?:string;headshot?:boolean;protected?:boolean;elevated?:boolean};
@@ -91,12 +92,13 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
  if(mapId==='snow'){state.animals=createWildlife(state.animals);state.weatherTime??=0;state.weatherSeed??=newWeatherSeed();state.layoutRevision=SNOW_LAYOUT_REVISION;}
  if(mapId==='moon'){
   state.layoutRevision=MOON_LAYOUT_REVISION;
+  state.weatherTime??=0;
   state.doors={...world.createDoors(),...state.doors};
  }
  const pingAt=new Map<string,number>();state.pings=[];
  const inputs=new Map<string,{command:Command;at:number}>();let now=0,eventId=state.tick*1000;
  const id=()=>++eventId;
- const spawn=(p:Player,index:number,respawn=false)=>{const point=respawn||mode!=='duel'?world.randomOutdoorSpawn(state.players.filter(o=>o!==p&&o.health>0&&o.playing!==false)):{x:0,z:index===0?-8:18};p.x=point.x;p.z=point.z;p.y=0;p.fallSpeed=0;p.stance='stand';p.protection=respawn||mode!=='duel'?3:0;p.yaw=index===0?0:Math.PI;p.pitch=0;p.health=100;p.dead=0;p.jump=createJump();p.dash=createDash();p.weaponId=p.startWeapon;p.inventory=createInventory(p.startWeapon);p.weapon=createWeapon(WEAPONS[p.weaponId]);p.cooldown=0;p.gear=createGear();if(mapId==='snow')p.meat=0;p.flash=0;p.healing=0;p.gearCooldown=0;};
+ const spawn=(p:Player,index:number,respawn=false)=>{const point=respawn||mode!=='duel'?world.randomOutdoorSpawn(state.players.filter(o=>o!==p&&o.health>0&&o.playing!==false)):{x:0,z:index===0?-8:18};p.x=point.x;p.z=point.z;p.y=0;p.fallSpeed=0;p.stance='stand';p.protection=respawn||mode!=='duel'?3:0;p.yaw=index===0?0:Math.PI;p.pitch=0;p.health=100;p.dead=0;p.jump=createJump();p.dash=createDash();p.weaponId=p.startWeapon;p.inventory=createInventory(p.startWeapon);p.weapon=createWeapon(WEAPONS[p.weaponId]);p.cooldown=0;p.gear=createGear();if(mapId==='snow')p.meat=0;if(mapId==='moon')p.oxygen=100;else delete p.oxygen;p.flash=0;p.healing=0;p.gearCooldown=0;};
  for(const p of state.players){p.connected=false;p.weapon=cancelBurst(p.weapon);p.dash=cancelDash(p.dash??createDash());p.startWeapon??=p.weaponId;p.inventory??=createInventory(p.weaponId);p.gear??=createGear();p.healing=0;p.flash??=0;p.gearCooldown??=0;p.deaths??=0;p.totalKills??=p.kills;syncSlot(p.inventory,p.weapon,p.cooldown);}
  if(saved&&state.layoutRevision&&saved.layoutRevision!==state.layoutRevision)for(const p of state.players)if(!world.canStand(p,world.PROTOTYPE.radius,world.worldSolids()))Object.assign(p,world.randomOutdoorSpawn(state.players.filter(o=>o!==p)),{y:0,fallSpeed:0});
  function finish(winner:string,members:string[]){state.winner=winner;state.winningIds=members;for(const p of state.players)p.healing=0;}
@@ -118,7 +120,8 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
    state.doors=world.createDoors();state.pickups=options.randomPickups?createMatchPickups(world):createPickups();
    delete state.animals;delete state.weatherTime;delete state.weatherSeed;delete state.layoutRevision;
    if(map==='snow'){state.animals=createWildlife();state.weatherTime=0;state.weatherSeed=newWeatherSeed();state.layoutRevision=SNOW_LAYOUT_REVISION;}
-   if(map==='moon')state.layoutRevision=MOON_LAYOUT_REVISION;
+   if(map==='moon'){state.layoutRevision=MOON_LAYOUT_REVISION;state.weatherTime=0;}
+   for(const p of state.players){if(map==='moon')p.oxygen=100;else delete p.oxygen;}
    return true;
   },
   startMatch(playerId:string){if(state.phase!=='waiting'||state.hostId!==playerId)return false;const host=state.players.find(p=>p.id===playerId);if(!host?.connected||host.guest&&!normalizeNickname(host.nickname))return false;const players=state.players.filter(p=>p.connected&&!p.abandoned&&(!p.guest||!!normalizeNickname(p.nickname)));if(players.length<(mode==='duel'?2:1))return false;state.phase='playing';state.started=true;inputs.clear();for(const p of players){p.playing=true;p.participated=true;}for(const p of players)spawn(p,state.players.indexOf(p));return true;},
@@ -129,7 +132,7 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
   abandon(playerId:string){const p=state.players.find(p=>p.id===playerId);if(p){p.abandoned=true;p.connected=false;if(p.guest)delete p.nickname;p.healing=0;}inputs.delete(playerId);},
   input(playerId:string,raw:unknown){const c=parseCommand(raw,world.PROTOTYPE),p=state.players.find(p=>p.id===playerId);if(!c||!p?.connected||p.abandoned||state.phase==='waiting'||p.playing===false||p.guest&&!normalizeNickname(p.nickname)||c.seq<=Math.max(p.seq,inputs.get(playerId)?.command.seq??-1))return false;const old=inputs.get(playerId)?.command;c.shot ||=old?.shot??false;c.reload ||=old?.reload??false;c.jump ||=old?.jump??false;c.dash ||=old?.dash??false;c.door??=old?.door;c.slot??=old?.slot;if(c.pickup===undefined){c.pickup=old?.pickup;c.replace=old?.replace;}c.equipment??=old?.equipment;c.eatMeat ||=old?.eatMeat;c.ping??=old?.ping;inputs.set(playerId,{command:c,at:options.clock?options.clock()/1000:now});return true;},
   step(){const dt=.05;now+=dt;const inputTime=options.clock?options.clock()/1000:now;state.tick++;state.pings=state.pings!.filter(p=>p.expires>state.tick);state.events=[];state.toolEvents=[];
-   if(!onlinePlaying(state)){inputs.clear();return;}state.started=true;if(mapId==='snow')state.weatherTime=(state.weatherTime??0)+dt;
+   if(!onlinePlaying(state)){inputs.clear();return;}state.started=true;if(mapId==='snow'||mapId==='moon')state.weatherTime=(state.weatherTime??0)+dt;
    const wildlifeTime=state.weatherTime??0;
    if(state.animals)advanceWildlife(state.animals,wildlifeTime);
    tickPickups(state.pickups,dt);
@@ -145,6 +148,11 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
     c.stance??=p.stance??'stand';p.stance=c.stance;const sequence=advanceBurst(p.weapon,dt);p.weapon=sequence.state;
     const previousX=p.x,previousZ=p.z;
     Object.assign(p,advancePlayerMotion(p,c,dt,state.doors,world));
+    if(mapId==='moon'){
+     const oxygen=advanceOxygen(p.oxygen??100,world.hasLunarOxygen({...p,y:(p.y??0)+p.jump.height}),dt);
+     p.oxygen=oxygen.oxygen;
+     if(oxygen.damage>0){hurt(p,oxygen.damage,p.id);if(p.health<=0)continue;}
+    }
     frightenWildlife(state.animals,wildlifeTime,p,wildlifeMovementRange(Math.hypot(p.x-previousX,p.z-previousZ)/dt),world,state.doors!);
     if(state.animals){
       const count=p.meat??0;

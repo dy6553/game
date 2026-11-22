@@ -127,3 +127,6 @@ body.at-home #weather-notice,body.results-open #weather-notice,.comparing #weath
 .legal-choices{min-width:0;border:1px solid #688b8b77;border-radius:7px;padding:12px;margin:14px 0}.legal-choices legend{font-size:12px;color:#ead9a7}.legal-choices p,#account-privacy-controls p{font-size:12px;line-height:1.75;color:#c0d4d3}.legal-choices label,#account-privacy-controls label{display:flex;align-items:flex-start;gap:9px;font-size:12px;line-height:1.7;margin:12px 0;cursor:pointer}.legal-choices input[type=checkbox],#account-public-choice{width:19px;height:19px;min-width:19px;accent-color:#e6d19b;margin:2px 0 0}.legal-choices a,.account-legal-links a,.lobby-footer a{color:#f0dfb0;text-underline-offset:3px}.account-legal-links{font-size:12px;line-height:1.8}.lobby-footer>span:first-child{pointer-events:auto}.lobby-footer a{white-space:nowrap}
 
 @media(max-width:600px){.shooter-lobby .lobby-footer span:first-child{display:block}.shooter-lobby .lobby-footer{flex-wrap:wrap;gap:6px;line-height:1.7}.lobby-footer a{font-size:10px}}
+
+#oxygen-status:not([hidden]){display:block;margin-top:4px;color:#9ce8df;font-size:11px;font-variant-numeric:tabular-nums}
+#oxygen-status.critical:not([hidden]){color:#ffd38f}

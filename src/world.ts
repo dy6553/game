@@ -218,9 +218,10 @@ function advanceFall(p:Point,dt:number):Point{
  return {...p,y:Math.max(floor,next),fallSpeed:next<=floor?0:speed};
 }
 function doorRect(b:Building):Rect{return {id:b.id+'-door',x:b.x,z:b.z+(b.z<0?1:-1)*(b.depth/2-.2),width:DOOR_WIDTH,depth:.4,yMin:0,yMax:3.2};}
+function hasLunarOxygen(p:Point){return map==='moon'&&(!!indoorAt(p)||moonCovered(p));}
 function jumpGravityAt(p:Point){
  if(map!=='moon')return JUMP_TUNING.gravity;
- return indoorAt(p)||moonCovered(p)?EARTH_GRAVITY:LUNAR_GRAVITY;
+ return hasLunarOxygen(p)?EARTH_GRAVITY:LUNAR_GRAVITY;
 }
 function beginJumpAt(p:Point,state:JumpState){
  if(map!=='moon')return beginJump(state);
@@ -319,7 +320,7 @@ function shotBoxes(doors?:Doors):Rect[]{
  const result=[...solids.filter(r=>!r.slope),...fixedShotGeometry];shotCache.set(solids,result);return result;
 }
 
-return {automaticDoors,updateAutomaticDoors,jumpGravityAt,beginJumpAt,advanceFall,advanceJumpOnTerrain,balcony,PROTOTYPE,BUILDINGS,DOOR_WIDTH,buildingWalls,interiorFurniture,indoorAt,COVERS,SOLIDS,circleOverlapsRect,canStand,moveWithCollisions,normalized,SECOND_FLOOR,doorRect,createDoors,worldSolids,nearbyDoor,toggleDoor,stairways,floorPanels,randomOutdoorSpawn,shotBoxes};
+return {hasLunarOxygen,automaticDoors,updateAutomaticDoors,jumpGravityAt,beginJumpAt,advanceFall,advanceJumpOnTerrain,balcony,PROTOTYPE,BUILDINGS,DOOR_WIDTH,buildingWalls,interiorFurniture,indoorAt,COVERS,SOLIDS,circleOverlapsRect,canStand,moveWithCollisions,normalized,SECOND_FLOOR,doorRect,createDoors,worldSolids,nearbyDoor,toggleDoor,stairways,floorPanels,randomOutdoorSpawn,shotBoxes};
 }
 export const harborWorld=createWorld();
 export const {PROTOTYPE,BUILDINGS,DOOR_WIDTH,buildingWalls,interiorFurniture,indoorAt,COVERS,SOLIDS,circleOverlapsRect,canStand,moveWithCollisions,normalized,SECOND_FLOOR,doorRect,createDoors,worldSolids,nearbyDoor,toggleDoor,stairways,floorPanels,randomOutdoorSpawn,shotBoxes}=harborWorld;

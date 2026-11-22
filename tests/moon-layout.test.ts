@@ -15,7 +15,7 @@ import {navigationLocation} from '../src/wayfinding.ts';
 
 test('both interior ramps reach a supported second floor with a view of the landing area',()=>{
  const world=createWorld('moon'),doors=world.createDoors();
- for(const room of world.BUILDINGS){
+ for(const room of world.BUILDINGS.slice(0,2)){
   const ramp=world.stairways(room)[0]!;
   let position={...ramp.start,z:ramp.start.z-.5};
   for(let step=0;step<110;step++){
@@ -124,4 +124,51 @@ test('lunar falls accelerate continuously, including a jump off an upper floor',
  assert.deepEqual(result.jump,createJump());
  assert.ok(Math.abs(result.position.y!-(p.y+.04-3*.05-.5*9.81*.05**2))<1e-8);
  assert.ok(Math.abs(result.position.fallSpeed!-(3+9.81*.05))<1e-8);
+});
+
+test('the suit drains in vacuum, refills in an outer shelter and takes damage when empty',()=>{
+ const world=createWorld('moon'),game=createNetworkGame(undefined,'moon',{mode:'ffa'});
+ const player=game.join('oxygen','pistol');
+ Object.assign(player,{x:0,z:-8,y:0,protection:0});
+ for(let i=0;i<200;i++)game.step();
+ assert.ok(Math.abs(player.oxygen!-80)<.001);
+ const shelter=world.BUILDINGS.find(b=>b.id.startsWith('moon-shelter-'))!;
+ assert.ok(shelter&&Math.abs(shelter.x)>50);
+ Object.assign(player,{x:shelter.x,z:shelter.z});
+ for(let i=0;i<40;i++)game.step();
+ assert.equal(player.oxygen,100);
+ Object.assign(player,{x:0,z:-8,oxygen:0});
+ for(let i=0;i<20;i++)game.step();
+ assert.ok(Math.abs(player.health-92)<.001);
+});
+
+test('the eclipse clock warns, darkens the surface, and stays synchronized with an online match',()=>{
+ const engine=new NullEngine(),scene=createHarborScene(engine,{map:'moon',randomSpawns:false});
+ try{
+  const game=createNetworkGame(undefined,'moon',{mode:'ffa'}),player=game.join('viewer','pistol');
+  const outside={x:0,z:-8};
+  Object.assign(player,outside);
+  for(const [seconds,warning,active] of [[81,4,false],[90,0,true],[111,0,false],[261,4,false]] as const){
+   game.state.weatherTime=seconds;
+   scene.renderOnline(game.state,player.id,{yaw:0,pitch:0},.05);
+   assert.equal(scene.eclipseState()?.warning,warning);
+   assert.equal(scene.eclipseState()?.active,active);
+   assert.equal(scene.scene.getMeshByName('eclipse-solar-corona')?.isEnabled(),active);
+  }
+ }finally{scene.scene.dispose();engine.dispose();}
+});
+
+test('four refill shelters have walkable entrances and keep vacuum outdoors',()=>{
+ const world=createWorld('moon'),solids=world.worldSolids(world.createDoors());
+ const shelters=world.BUILDINGS.filter(b=>b.id.startsWith('moon-shelter-'));
+ assert.equal(shelters.length,4);
+ for(const b of shelters){
+  const side=b.z<0?1:-1;
+  let point={x:b.x,z:b.z+side*5};
+  assert.equal(world.hasLunarOxygen(point),false);
+  for(let i=0;i<25;i++)point=world.moveWithCollisions(point,{x:0,z:-side*.2},solids);
+  assert.ok(Math.abs(b.z-point.z)<.01);
+  assert.equal(world.hasLunarOxygen(point),true);
+  assert.equal(world.hasLunarOxygen({...point,y:b.height+.5}),false);
+ }
 });

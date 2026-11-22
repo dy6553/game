@@ -9,7 +9,7 @@ import {createHarborScene} from '../src/scene.ts';
 import {Ray} from '@babylonjs/core/Culling/ray.js';
 import {Vector3} from '@babylonjs/core/Maths/math.vector.js';
 
-for(const [map,width,depth] of [['snow',160,120],['moon',100,80]] as const){
+for(const [map,width,depth] of [['snow',160,120],['moon',140,112]] as const){
  test(`${map}: approved bounds, open entrances, solid walls, safe supplies and restored server map`,()=>{
   const world=createWorld(map);
   assert.equal(world.PROTOTYPE.halfWidth,width/2);

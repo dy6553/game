@@ -1,3 +1,5 @@
+import {advanceOxygen,moonEclipse} from './moon-environment.ts';
+import '@babylonjs/core/Meshes/Builders/torusBuilder.js';
 import {createWildlifeArt} from './wildlife-art.ts';
 import {frightenWildlife,WILDLIFE_SHOT_RANGE,wildlifeMovementRange,wildlifeSpawns,type Animal,advanceWildlife,meatRecovery,takeMeat,createWildlife,hurtWildlife,wildlifeBlastTargets,wildlifeHit} from './wildlife.ts';
 import {snowWeather,inWeatherRange,newWeatherSeed,snowDaylight} from './snow-weather.ts';
@@ -634,6 +636,18 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
   let animals = wildlifeArt ? createWildlife() : undefined;
   const drawWildlife = (state: typeof animals,viewer: Point,time=weatherSeconds) =>
     wildlifeArt?.(state,time,viewer,lowPerformance?'low':onlineQualityHigh?'high':'medium',weatherState()?.visibility??150);
+  const eclipseRing=expansion==='moon'?MeshBuilder.CreateTorus('eclipse-solar-corona',{diameter:24.5,thickness:.6,tessellation:32},scene):undefined;
+  if(eclipseRing){
+   eclipseRing.rotation.x=Math.PI/2;
+   eclipseRing.bakeCurrentTransformIntoVertices();
+   eclipseRing.position.set(-94,76,135);
+   eclipseRing.billboardMode=Mesh.BILLBOARDMODE_ALL;
+   eclipseRing.isPickable=false;
+   const corona=new StandardMaterial('eclipse-corona',scene);
+   corona.disableLighting=true;corona.emissiveColor=Color3.FromHexString('#ffc68a');
+   eclipseRing.material=corona;eclipseRing.setEnabled(false);
+  }
+  const eclipseState=()=>expansion==='moon'?moonEclipse(weatherSeconds):null;
   const weatherState=()=>expansion==='snow'?snowWeather(weatherSeconds,weatherSeed):null;
   let lastSnowSky=-Infinity,weatherSheltered=false;
   function applyWeather(sheltered:boolean){const weather=weatherState();if(!weather)return;const showing=!preview&&!reference;scene.fogMode=showing&&weather.intensity>.001?Scene.FOGMODE_LINEAR:Scene.FOGMODE_NONE;scene.fogColor.set(.78,.85,.88);scene.fogStart=weather.visibility*.5;scene.fogEnd=weather.visibility;snowfall?.setStormIntensity(weather.intensity);proceduralArt?.setSheltered(showing&&sheltered&&weather.intensity>.001);
@@ -698,7 +712,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
   }
   const matchPickups=()=>options.randomSpawns===false?createPickups():createMatchPickups(geometry);
   let localActor:GearActor={id:'player',...PROTOTYPE.spawn,yaw:0,pitch:0,health:100,gear:createGear(),healing:0,flash:0,gearCooldown:0};
-  let localMeat=0,pendingMeatHeal:ToolEvent|undefined;
+  let oxygen=100,localMeat=0,pendingMeatHeal:ToolEvent|undefined;
   let localProjectiles:Projectile[]=[],toolSequence=0,toolDamageVersion=0,lastToolHealth=100;
   const toolVisuals=createEquipmentVisuals(scene);
   let upgradeTier=0;
@@ -734,7 +748,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
   const flashTargetColor=Color3.FromHexString('#67d6ca'),idleTargetColor=Color3.FromHexString('#543524');
   const highShotNotices:string[]=[];const botReveals=new Map<string,number>();let stance:Stance='stand';
   function update(p: Point, dt: number, look: Look = { yaw: 0, pitch: 0 }, paused=false,onlineFrame=false) {
-    if(!paused&&!preview&&!reference&&expansion==='snow')weatherSeconds+=Math.max(0,dt);
+    if(!paused&&!preview&&!reference&&(expansion==='snow'||expansion==='moon'))weatherSeconds+=Math.max(0,dt);
     if(!paused){for(const [id,left] of botReveals){if(left<=dt)botReveals.delete(id);else botReveals.set(id,left-dt);}}
     if(!paused&&!preview&&!reference){
       if(stance==='stand')delete p.stance;else p.stance=stance;
@@ -790,14 +804,19 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
       const state=battleState();
       if(state.mode==='survival'&&state.ammoRefreshVersion!==seenResupply){seenResupply=state.ammoRefreshVersion;syncSlot(inventory,weapon,cooldown);for(const slot of inventory.slots)slot.weapon=createWeapon(WEAPONS[slot.id]);weapon=inventory.slots[inventory.active]!.weapon;}
       if(wasBotDead&&state.botHealth>0){robotImpact.reset();botFlashes.delete('bot-1');}
-      if(state.respawnVersion!==seenRespawn){seenRespawn=state.respawnVersion;localMeat=0;p.x=state.playerPosition.x;p.z=state.playerPosition.z;if(p.y!==undefined)p.y=0;p.fallSpeed=0;falling=false;weaponId=startWeapon;spec=localSpec(weaponId);inventory=createInventory(startWeapon);weapon=createWeapon(spec);if(survivalMode)pickups=pickups.map(c=>({...c,remaining:0}));localActor.gear=createGear();localActor.healing=0;localActor.flash=0;cooldown=0;scoped=false;jumpState=createJump();recoil.clear();}
+      if(state.respawnVersion!==seenRespawn){seenRespawn=state.respawnVersion;localMeat=0;oxygen=100;p.x=state.playerPosition.x;p.z=state.playerPosition.z;if(p.y!==undefined)p.y=0;p.fallSpeed=0;falling=false;weaponId=startWeapon;spec=localSpec(weaponId);inventory=createInventory(startWeapon);weapon=createWeapon(spec);if(survivalMode)pickups=pickups.map(c=>({...c,remaining:0}));localActor.gear=createGear();localActor.healing=0;localActor.flash=0;cooldown=0;scoped=false;jumpState=createJump();recoil.clear();}
     }
-    if(!duelMode&&!paused&&!preview&&!reference){duel.update(dt,p,()=>false,()=>false,false);const d=duel.state();if(d.respawnVersion!==seenRespawn){seenRespawn=d.respawnVersion;localMeat=0;p.x=d.playerPosition.x;p.z=d.playerPosition.z;p.y=0;inventory=createInventory(startWeapon);equip();localActor.gear=createGear();localActor.healing=0;localActor.flash=0;}}
+    if(!duelMode&&!paused&&!preview&&!reference){duel.update(dt,p,()=>false,()=>false,false);const d=duel.state();if(d.respawnVersion!==seenRespawn){seenRespawn=d.respawnVersion;localMeat=0;oxygen=100;p.x=d.playerPosition.x;p.z=d.playerPosition.z;p.y=0;inventory=createInventory(startWeapon);equip();localActor.gear=createGear();localActor.healing=0;localActor.flash=0;}}
     if(!paused&&!preview&&!reference){
       const battle=battleState(),group=survivalMode?survival:ffaMode?ffa:duel;
       if(battle.damageVersion!==toolDamageVersion){localActor.healing=0;toolDamageVersion=battle.damageVersion;}
       if(lastToolHealth>0&&battle.playerHealth<=0){localMeat=0;localActor.gear=createGear();localActor.healing=0;}
-      Object.assign(localActor,{stance,jump:jumpState,x:p.x,y:p.y??0,z:p.z,yaw:look.yaw,pitch:look.pitch,health:battle.playerHealth,protection:battle.protection});
+      if(expansion==='moon'&&battle.playerHealth>0&&!battle.winner){
+       const air=advanceOxygen(oxygen,geometry.hasLunarOxygen({...p,y:(p.y??0)+jumpState.height}),dt);
+       oxygen=air.oxygen;
+       if(air.damage>0)group.hurtSelf(air.damage);
+      }
+      Object.assign(localActor,{stance,jump:jumpState,x:p.x,y:p.y??0,z:p.z,yaw:look.yaw,pitch:look.pitch,health:group.state().playerHealth,protection:battle.protection});
       const bots:GearActor[]=duelMode?(battle.mode==='duel'?[{id:'bot-1',...battle.position,health:battle.botHealth}]:battle.bots.map(b=>({id:b.id,...b.position,health:b.health}))).map(b=>({...b,yaw:Math.atan2(p.x-b.x,p.z-b.z),pitch:0,gear:createGear(),healing:0,flash:botFlashes.get(b.id)??0,gearCooldown:0})):targets.map((t,i)=>({id:'target-'+i,x:t.x,y:0,z:t.z,yaw:0,pitch:0,health:t.health,gear:createGear(),healing:0,flash:0,gearCooldown:0}));
       const blastTargets=localProjectiles.length?wildlifeBlastTargets(animals,weatherSeconds):[];
       const events=advanceEquipment([localActor,...bots,...blastTargets],localProjectiles,dt,geometry,doors,(target,amount)=>{
@@ -843,6 +862,14 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
     }
     weatherSheltered=expansion==='snow'&&!preview&&!reference&&!!geometry.indoorAt(camera.position);
     applyWeather(weatherSheltered);
+    if(eclipseRing){
+     const eclipse=eclipseState()!,darkness=preview||reference?0:eclipse.darkness;
+     eclipseRing.setEnabled(darkness>.05);
+     eclipseRing.visibility=darkness;
+     const sheltered=geometry.hasLunarOxygen({...p,y:(p.y??0)+jumpState.height});
+     sky.intensity=.55-darkness*(sheltered?.04:.18);
+     moon.intensity=1.2-darkness*(sheltered?.26:1.03);
+    }
     snowfall?.update(p,snowfallEnabled&&(!proceduralArt||!lowPerformance)&&(!paused||onlineFrame)&&!preview&&!reference&&!weatherSheltered,look.yaw);
     launcher.setEnabled(weaponId==='bazooka');launcherRim.setEnabled(weaponId==='bazooka');muzzle.setEnabled(weaponId!=='bazooka');muzzleInset.setEnabled(weaponId!=='bazooka');
     scopeBody.setEnabled(weaponId==='sniper');secondBarrel.setEnabled(weaponId==='shotgun');
@@ -919,7 +946,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
     const next=beginReload(weapon,spec);const started=next!==weapon;weapon=started?cancelBurst(next):next;return started;
   }
   function resetPractice() {
-    animals=wildlifeArt?createWildlife():undefined;localMeat=0;pendingMeatHeal=undefined;
+    animals=wildlifeArt?createWildlife():undefined;localMeat=0;oxygen=100;pendingMeatHeal=undefined;
     weatherSeconds=0;weatherSeed=options.weatherSeed??newWeatherSeed();
     localActor={id:'player',...PROTOTYPE.spawn,yaw:0,pitch:0,health:100,gear:createGear(),healing:0,flash:0,gearCooldown:0};localProjectiles=[];toolSequence=0;toolDamageVersion=0;lastToolHealth=100;botFlashes.clear();toolVisuals.clear();
     highShotNotices.length=0;botReveals.clear();autoShotResults.length=0;weaponId=startWeapon;spec=localSpec(weaponId);inventory=createInventory(startWeapon);pickups=matchPickups();weapon=createWeapon(spec);cooldown=0;scoped=false;jumpState=createJump();falling=false;hits=0;destroyed=0;shots=0;
@@ -944,7 +971,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
     for(const texture of scene.textures)texture.anisotropicFilteringLevel=lowPerformance?2:onlineQualityHigh?8:4;
   }
   function renderOnline(state:MatchState,id:string,look:Look,dt:number,predictedPosition?:Point,remotePosition?:(Point&{id:string})|Array<Point&{id:string}>,predictedJump?:JumpState){
-    const me=state.players.find(p=>p.id===id);if(!me)return;if(expansion==='snow'){weatherSeconds=state.weatherTime??0;weatherSeed=state.weatherSeed??1;}stance=me.stance??'stand';remoteParent.setEnabled(true);doors=state.doors??{};environment.doors=doors;
+    const me=state.players.find(p=>p.id===id);if(!me)return;if(expansion==='snow'||expansion==='moon'){weatherSeconds=state.weatherTime??0;weatherSeed=state.weatherSeed??1;}stance=me.stance??'stand';remoteParent.setEnabled(true);doors=state.doors??{};environment.doors=doors;
     duelMode=false;ffaMode=false;survivalMode=false;preview=false;reference=false;lobbyWeapons.show(lobbyWeaponId,false);character.poseLobby(false);if(weaponId!==me.weaponId||me.health===0)scoped=false;if(weaponId!==me.weaponId)equipAge=0;else equipAge+=dt;weaponId=me.weaponId;spec=WEAPONS[weaponId];weapon={...me.weapon};cooldown=me.cooldown;if(networkJumpTick!==state.tick){networkJumpTick=state.tick;networkJumpAge=0;}else networkJumpAge=Math.min(.15,networkJumpAge+dt);jumpState=predictedJump??advanceJump(me.jump,networkJumpAge,geometry.jumpGravityAt(predictedPosition??me));falling=(me.fallSpeed??0)>0;inventory=me.inventory??createInventory(me.weaponId);pickups=state.pickups??[];
     recoil.update(dt);effects.update(dt);botEffects.update(dt);update(predictedPosition??me,0,look,true,true);updateAirlockArt(dt);drawWildlife(state.animals,predictedPosition??me,weatherSeconds+Math.min(.05,networkJumpAge));toolVisuals.update(state.projectiles??[],state.toolEvents??[],dt);for(const target of targets)target.root.setEnabled(false);
     const estimates=new Map((Array.isArray(remotePosition)?remotePosition:remotePosition?[remotePosition]:[]).map(p=>[p.id,p]));const ids=new Set(state.players.filter(p=>p.id!==id&&!p.abandoned).map(p=>p.id));for(const key of remotes.keys())if(!ids.has(key))removeRemote(key);
@@ -967,7 +994,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
       jumpHeight:jumpState.height,grounded:jumpState.height===0&&jumpState.velocity===0&&!falling};
   }
   return {
-    geometry,weatherState,isWeatherSheltered:()=>weatherSheltered,mapArtState:()=>proceduralArt?.state()??null,
+    geometry,weatherState,eclipseState,oxygenLevel:()=>oxygen,isWeatherSheltered:()=>weatherSheltered,mapArtState:()=>proceduralArt?.state()??null,
     get scoped(){return scoped;},
     get thirdPerson(){return thirdPerson;},
     aimReticle(){if(!thirdPerson||scoped||preview||reference)return {x:50,y:50};const direction=camera.getDirection(Vector3.Forward()),pick=scene.pickWithRay(new Ray(aimOrigin.clone(),direction,150),m=>m.isPickable&&m.isEnabled());const end=pick?.pickedPoint??aimOrigin.add(direction.scale(150)),viewport=camera.viewport.toGlobal(engine.getRenderWidth(),engine.getRenderHeight()),v=Vector3.Project(end,Matrix.Identity(),camera.getViewMatrix().multiply(camera.getProjectionMatrix()),viewport);return {x:Math.max(0,Math.min(100,v.x/engine.getRenderWidth()*100)),y:Math.max(0,Math.min(100,v.y/engine.getRenderHeight()*100))};},togglePerspective(){thirdPerson=!thirdPerson;return thirdPerson;},

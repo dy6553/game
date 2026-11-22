@@ -5,7 +5,7 @@ const cache=new WeakMap<World,readonly BuildingLandmark[]>();
 export function buildingLandmarks(world:World):readonly BuildingLandmark[]{
  let result=cache.get(world);if(result)return result;
  const snow=world.BUILDINGS[0]?.id==='Research hub',lunar=world.BUILDINGS[0]?.id.startsWith('Habitat'),factory=world.BUILDINGS[0]?.id.startsWith('factory');
- result=world.BUILDINGS.filter(b=>b.enterable).map((b,i)=>({id:b.id,code:(snow?'S':lunar?'L':factory?'F':'A')+(i+1),name:snow?(i===0?'중앙 이글루':`아치 연구동 ${i}`):lunar?(i===0?'거주 돔':'운영·통신동'):factory?`${b.z<0?'남':'북'}${b.x<0?'서':'동'} 생산동`:b.z< -28?`${b.x<0?'서':'동'} 물류동`:`${b.z<0?'남':'북'}${b.x<0?'서':'동'} 상가`,color:b.z< -28?'#e7bc78':b.x<0?'#79cbbd':'#8ab9ef'}));
+ result=world.BUILDINGS.filter(b=>b.enterable).map((b,i)=>({id:b.id,code:(snow?'S':lunar?'L':factory?'F':'A')+(i+1),name:snow?(i===0?'중앙 이글루':`아치 연구동 ${i}`):lunar?(i===0?'거주 돔':i===1?'운영·통신동':`산소 쉼터 ${i-1}`):factory?`${b.z<0?'남':'북'}${b.x<0?'서':'동'} 생산동`:b.z< -28?`${b.x<0?'서':'동'} 물류동`:`${b.z<0?'남':'북'}${b.x<0?'서':'동'} 상가`,color:b.id.startsWith('moon-shelter-')?'#69f1d4':b.z< -28?'#e7bc78':b.x<0?'#79cbbd':'#8ab9ef'}));
  cache.set(world,result);return result;
 }
 export function navigationLocation(world:World,point:Point){

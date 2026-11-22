@@ -22,5 +22,5 @@ for(const map of ['snow','moon'] as const)test(`${map}: three code-built profile
 
 test('team pings validate against each expansion map rather than the old harbor bounds',async()=>{
  const {createNetworkGame}=await import('../src/network-game.ts');
- for(const [map,x,z] of [['snow',76,54],['moon',46,36]] as const){const g=createNetworkGame(undefined,map,{mode:'team'});g.join('a');g.join('b');const command={seq:1,x:0,y:0,yaw:0,pitch:0,fire:false,shot:false,reload:false,jump:false,sprint:false,scope:false,ping:{kind:'move',x,z}};assert.equal(g.input('a',command),true,'valid ping at the new map edge must work');g.step();assert.equal(g.state.pings?.[0]?.x,x);assert.equal(g.input('a',{...command,seq:2,ping:{kind:'move',x:map==='snow'?81:51,z}}),false);}
+ for(const [map,x,z] of [['snow',76,54],['moon',66,52]] as const){const g=createNetworkGame(undefined,map,{mode:'team'});g.join('a');g.join('b');const command={seq:1,x:0,y:0,yaw:0,pitch:0,fire:false,shot:false,reload:false,jump:false,sprint:false,scope:false,ping:{kind:'move',x,z}};assert.equal(g.input('a',command),true,'valid ping at the new map edge must work');g.step();assert.equal(g.state.pings?.[0]?.x,x);assert.equal(g.input('a',{...command,seq:2,ping:{kind:'move',x:map==='snow'?81:71,z}}),false);}
 });

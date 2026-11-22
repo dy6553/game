@@ -632,7 +632,20 @@ async function start() {
       bar.value=target.health;
     }
     const navigation=navigationLocation(geometry,me??position),locationLabel=document.querySelector<HTMLElement>('#map-location')!;if(locationLabel.textContent!==navigation.label)locationLabel.textContent=navigation.label;locationLabel.style.borderColor=navigation.color;
-    const weather=world.weatherState(),weatherLabel=document.querySelector<HTMLElement>('#weather-status')!,weatherText=weather?.intensity&&world.isWeatherSheltered()?'실내 · 폭설 차단':weatherMessage(weather);weatherLabel.hidden=!weather;if(weatherLabel.textContent!==weatherText)weatherLabel.textContent=weatherText;weatherNotice.hidden=!weather?.warning;if(weatherNotice.textContent!==weatherText)weatherNotice.textContent=weatherText;
+    const oxygenLabel=document.querySelector<HTMLElement>('#oxygen-status')!,lunar=selectedMap==='moon';
+    oxygenLabel.hidden=!lunar;
+    if(lunar){
+      const oxygen=me?.oxygen??world.oxygenLevel(),refill=geometry.hasLunarOxygen(p);
+      const text=`산소 ${Math.ceil(oxygen)}% · ${refill?'충전 구역':oxygen<=0?'산소 고갈':oxygen<=20?'산소 부족':'마스크 작동'}`;
+      if(oxygenLabel.textContent!==text)oxygenLabel.textContent=text;
+      oxygenLabel.classList.toggle('critical',oxygen<=20);
+    }
+    const eclipse=world.eclipseState(),weather=world.weatherState(),weatherLabel=document.querySelector<HTMLElement>('#weather-status')!;
+    const weatherText=eclipse?(eclipse.warning?`일식까지 ${eclipse.warning}초`:eclipse.active?'일식 진행 중':'달 기지 · 맑음'):weather?.intensity&&world.isWeatherSheltered()?'실내 · 폭설 차단':weatherMessage(weather);
+    weatherLabel.hidden=!weather&&!eclipse;
+    if(weatherLabel.textContent!==weatherText)weatherLabel.textContent=weatherText;
+    weatherNotice.hidden=!(weather?.warning||eclipse?.warning||eclipse?.active);
+    if(weatherNotice.textContent!==weatherText)weatherNotice.textContent=weatherText;
     const pings=onlineState?.pings?.filter(q=>q.expires>(onlineState?.tick??0))??[];
     combatTools?.updateTeam({enabled:onlineActive&&online.connected&&onlineState?.mode==='team'&&health>0,world:geometry,me:p,yaw:input.look.yaw,pings});
     const pingNotice=document.querySelector<HTMLElement>('#map-ping-alert')!,latest=pings.at(-1),pingText=latest?`${latest.kind==='enemy'?'! 적 발견':latest.kind==='help'?'+ 지원 요청':'◆ 이동'} · ${playerName(onlineState!.players.find(p=>p.id===latest.player)!,'아군')}`:'';if(pingNotice.textContent!==pingText)pingNotice.textContent=pingText;pingNotice.hidden=!latest;
