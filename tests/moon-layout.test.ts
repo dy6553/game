@@ -11,7 +11,7 @@ import {firstShotBox} from '../src/combat-geometry.ts';
 import {createJump} from '../src/jump.ts';
 import {createWeapon} from '../src/combat.ts';
 import {WEAPONS} from '../src/weapons.ts';
-import {MOON_LAYOUT_REVISION,moonCorridor} from '../src/moon-layout.ts';
+import {MOON_LAYOUT_REVISION,moonCorridor,nearbyMoonMaskRack,moonMaskRacks} from '../src/moon-layout.ts';
 import {navigationLocation} from '../src/wayfinding.ts';
 
 test('both interior ramps reach a supported second floor with a view of the landing area',()=>{
@@ -187,7 +187,9 @@ test('the server only gives one wall mask and requires discarding it after use',
  Object.assign(p,{x:0,z:-8,y:0});
  act('light');
  assert.equal(p.oxygenMask?.id,undefined);
- Object.assign(p,{x:38.6,z:6,y:0});
+ const rack=moonMaskRacks(game.state.weatherSeed!)[0]!;
+ const spot={x:rack.x-rack.side*.85,z:rack.z};
+ Object.assign(p,{...spot,y:0});
  act('light');
  assert.equal(p.oxygenMask?.id,'light');
  assert.equal(p.oxygenMask?.remaining,0);
@@ -202,10 +204,27 @@ test('the server only gives one wall mask and requires discarding it after use',
  assert.equal(p.oxygenMask?.remaining,0);
  act('discard');
  assert.equal(p.oxygenMask?.id,undefined);
- Object.assign(p,{x:38.6,z:6,y:3.4});
+ Object.assign(p,{...spot,y:3.4});
  act('extended');
  assert.equal(p.oxygenMask?.id,undefined);
  Object.assign(p,{y:0});
  act('extended');
  assert.equal(p.oxygenMask?.id,'extended');
+});
+
+test('match seeds choose multiple wall racks in every building',()=>{
+ const world=createWorld('moon');
+ const layout=(seed:number)=>world.BUILDINGS.map(room=>{
+  const racks=new Set();
+  for(let x=room.x-room.width/2+.6;x<=room.x+room.width/2-.5;x+=.5){
+   for(let z=room.z-room.depth/2+.6;z<room.z+room.depth/2-.5;z+=.5){
+    const rack=nearbyMoonMaskRack({x,z},seed);
+    if(rack)racks.add(`${rack.x},${rack.z}`);
+   }
+  }
+  return [...racks].sort();
+ });
+ assert.deepEqual(layout(101).map(racks=>racks.length),[3,3,2,2,2,2]);
+ assert.deepEqual(layout(101),layout(101));
+ assert.notDeepEqual(layout(101),layout(501));
 });

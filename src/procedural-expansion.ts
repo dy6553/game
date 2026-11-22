@@ -46,12 +46,12 @@ const shellFaceKey=(points:readonly (readonly number[])[])=>points.map(p=>p.map(
 const shellFaceCounts=new Map<string,number>();
 for(const shell of snowShells)for(const face of SHELL_FACES){const key=shellFaceKey(face.map(i=>shell.vertices[i]!));shellFaceCounts.set(key,(shellFaceCounts.get(key)??0)+1);}
 
-export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:World,shadows?:ShadowGenerator){
+export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:World,shadows?:ShadowGenerator,rackSeed=1){
  let high=false,low=false,sheltered=false,root:TransformNode|undefined,owned:StandardMaterial[]=[],textures:RawTexture[]=[],meshes:Mesh[]=[],state:ProceduralMapState;
  const snow=map==='snow',bounds=world.PROTOTYPE;
  function release(){for(const m of meshes)shadows?.removeShadowCaster(m,false);root?.dispose();meshes=[];for(const m of owned)m.dispose();for(const t of textures)t.dispose();owned=[];textures=[];root=undefined;}
- function build(quality:ExpansionQuality){
-  if(scene.isDisposed||state?.quality===quality)return;release();const profile=EXPANSION_PROFILES[quality],batches=new Map<string,Batch>();
+ function build(quality:ExpansionQuality,refresh=false){
+  if(scene.isDisposed||(!refresh&&state?.quality===quality))return;release();const profile=EXPANSION_PROFILES[quality],batches=new Map<string,Batch>();
   root=new TransformNode(`${map}-procedural-${quality}`,scene);
   const surface=new StandardMaterial('procedural-map-surface',scene);surface.diffuseColor=Color3.White();surface.specularColor=new Color3(.035,.035,.035);surface.ambientColor=new Color3(.22,.22,.22);surface.emissiveColor=new Color3(.07,.075,.08);surface.maxSimultaneousLights=2;
   const grain=new Uint8Array(profile.texture*profile.texture*3);for(let i=0;i<grain.length;i+=3){const v=246+Math.floor(hash((i/3)%profile.texture,Math.floor(i/3/profile.texture))*9);grain[i]=grain[i+1]=grain[i+2]=v;}
@@ -193,7 +193,7 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
     for(const side of [-1,1])box(shelter.x+side*1.62,1.4,entrance,.16,2.7,.09,'#4ee4c5',1);
     box(shelter.x,1.16,shelter.z-direction*2.6,1.6,.06,.42,'#5cffe0',1);
    }
-   for(const rack of moonMaskRacks){
+   for(const rack of moonMaskRacks(rackSeed)){
     const {x,z,side}=rack;
     box(x,1.5,z,.12,.72,1.65,'#243c49');
     box(x-side*.075,1.83,z,.03,.045,1.5,'#59e5cd',1);
@@ -274,7 +274,7 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
   root.metadata={proceduralMap:map,quality,landmarks};state={source:'procedural',map,quality,triangles,meshCount:meshes.length,textureBytes:grain.byteLength+128*64*3,collisionCount:world.worldSolids().length,landmarks};
  }
  build('medium');scene.onDisposeObservable.addOnce(release);
- return {setQuality(value:boolean){high=value;build(high?'high':low?'low':'medium');},setPerformanceLow(value:boolean){low=value;build(high?'high':low?'low':'medium');},syncDoors(){},setSheltered(value:boolean){
+ return {setRackSeed(seed:number){if(!snow&&rackSeed!==seed){rackSeed=seed;build(state.quality,true);}},setQuality(value:boolean){high=value;build(high?'high':low?'low':'medium');},setPerformanceLow(value:boolean){low=value;build(high?'high':low?'low':'medium');},syncDoors(){},setSheltered(value:boolean){
   if(value===sheltered)return;
   sheltered=value;
   for(const mesh of meshes)if(mesh.metadata.indoor)mesh.applyFog=!value;

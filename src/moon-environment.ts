@@ -20,7 +20,7 @@ export const createOxygenMask=():OxygenMask=>({remaining:0});
 export const isOxygenMaskAction=(value:unknown):value is OxygenMaskAction=>
  value==='wear'||value==='discard'||(typeof value==='string'&&Object.hasOwn(oxygenMasks,value));
 
-export function applyOxygenMaskAction(mask:OxygenMask,action:OxygenMaskAction,position:Point){
+export function applyOxygenMaskAction(mask:OxygenMask,action:OxygenMaskAction,position:Point,seed:number){
  if(action==='discard'){
   if(!mask.id||!mask.worn||mask.remaining>0)return false;
   delete mask.id;delete mask.worn;
@@ -29,7 +29,7 @@ export function applyOxygenMaskAction(mask:OxygenMask,action:OxygenMaskAction,po
   mask.worn=true;
   mask.remaining=oxygenMasks[mask.id].seconds;
  }else{
-  if(mask.id||!nearbyMoonMaskRack(position))return false;
+  if(mask.id||!nearbyMoonMaskRack(position,seed))return false;
   mask.id=action;
  }
  return true;

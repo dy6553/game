@@ -153,7 +153,7 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
     Object.assign(p,advancePlayerMotion(p,c,dt,state.doors,world));
     if(mapId==='moon'){
      p.oxygenMask??=createOxygenMask();
-     if(c.oxygenMask)applyOxygenMaskAction(p.oxygenMask,c.oxygenMask,{...p,y:(p.y??0)+p.jump.height});
+     if(c.oxygenMask)applyOxygenMaskAction(p.oxygenMask,c.oxygenMask,{...p,y:(p.y??0)+p.jump.height},state.weatherSeed??1);
 
      const oxygen=advanceLunarAir(p.oxygen??100,p.oxygenMask,world.hasLunarOxygen({...p,y:(p.y??0)+p.jump.height}),dt);
      p.oxygen=oxygen.oxygen;

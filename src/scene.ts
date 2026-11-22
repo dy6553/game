@@ -1,3 +1,4 @@
+import {nearbyMoonMaskRack} from './moon-layout.ts';
 import {advanceLunarAir,createOxygenMask,applyOxygenMaskAction,moonEclipse,type OxygenMaskAction} from './moon-environment.ts';
 import '@babylonjs/core/Meshes/Builders/torusBuilder.js';
 import {createWildlifeArt} from './wildlife-art.ts';
@@ -598,7 +599,8 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
       }
     }
   }
-  const proceduralArt=expansion&&!options.expansionArtSource?createProceduralExpansion(scene,expansion,geometry,shadows):undefined;
+  let weatherSeconds=0,weatherSeed=options.weatherSeed??newWeatherSeed();
+  const proceduralArt=expansion&&!options.expansionArtSource?createProceduralExpansion(scene,expansion,geometry,shadows,weatherSeed):undefined;
   if(proceduralArt)for(const mesh of expansionFallback)mesh.visibility=0;
   const mapArt = expansion?proceduralArt??createExpansionMapArt(scene,expansion,expansionFallback,options.expansionArtSource,shadows):options.mapArtSource && options.map !== 'factory'
     ? createHarborMapArt(scene, options.mapArtSource, scene.meshes.filter(mesh => !mesh.parent && mesh !== skyDome),
@@ -631,7 +633,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
     : createAtmosphere(scene,options.map!=='factory');
   let snowfallEnabled=true;
   const snowfall=expansion==='snow'?createSnowfall(scene):null;
-  let weatherSeconds=0,weatherSeed=options.weatherSeed??newWeatherSeed();
+
   const wildlifeArt = expansion==='snow' ? createWildlifeArt(scene) : undefined;
   let animals = wildlifeArt ? createWildlife() : undefined;
   const drawWildlife = (state: typeof animals,viewer: Point,time=weatherSeconds) =>
@@ -863,6 +865,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
     weatherSheltered=expansion==='snow'&&!preview&&!reference&&!!geometry.indoorAt(camera.position);
     applyWeather(weatherSheltered);
     if(eclipseRing){
+     proceduralArt?.setRackSeed(weatherSeed);
      const eclipse=eclipseState()!,darkness=preview||reference?0:eclipse.darkness;
      eclipseRing.setEnabled(darkness>.05);
      eclipseRing.visibility=darkness;
@@ -994,8 +997,8 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
       jumpHeight:jumpState.height,grounded:jumpState.height===0&&jumpState.velocity===0&&!falling};
   }
   return {
-    geometry,weatherState,eclipseState,oxygenLevel:()=>oxygen,oxygenMaskState:()=>oxygenMask,
-    useOxygenMask(action:OxygenMaskAction,p:Point){const battle=battleState();return expansion==='moon'&&!preview&&!reference&&battle.playerHealth>0&&!battle.winner&&applyOxygenMaskAction(oxygenMask,action,{...p,y:(p.y??0)+jumpState.height});},isWeatherSheltered:()=>weatherSheltered,mapArtState:()=>proceduralArt?.state()??null,
+    geometry,weatherState,eclipseState,oxygenLevel:()=>oxygen,oxygenMaskState:()=>oxygenMask,nearMaskRack:(p:Point,seed=weatherSeed)=>!!nearbyMoonMaskRack(p,seed),
+    useOxygenMask(action:OxygenMaskAction,p:Point){const battle=battleState();return expansion==='moon'&&!preview&&!reference&&battle.playerHealth>0&&!battle.winner&&applyOxygenMaskAction(oxygenMask,action,{...p,y:(p.y??0)+jumpState.height},weatherSeed);},isWeatherSheltered:()=>weatherSheltered,mapArtState:()=>proceduralArt?.state()??null,
     get scoped(){return scoped;},
     get thirdPerson(){return thirdPerson;},
     aimReticle(){if(!thirdPerson||scoped||preview||reference)return {x:50,y:50};const direction=camera.getDirection(Vector3.Forward()),pick=scene.pickWithRay(new Ray(aimOrigin.clone(),direction,150),m=>m.isPickable&&m.isEnabled());const end=pick?.pickedPoint??aimOrigin.add(direction.scale(150)),viewport=camera.viewport.toGlobal(engine.getRenderWidth(),engine.getRenderHeight()),v=Vector3.Project(end,Matrix.Identity(),camera.getViewMatrix().multiply(camera.getProjectionMatrix()),viewport);return {x:Math.max(0,Math.min(100,v.x/engine.getRenderWidth()*100)),y:Math.max(0,Math.min(100,v.y/engine.getRenderHeight()*100))};},togglePerspective(){thirdPerson=!thirdPerson;return thirdPerson;},

@@ -1,7 +1,8 @@
+import {weatherRandom} from './snow-weather.ts';
 import {expansionLayouts} from './expansion-layouts.ts';
 import type {Point,Rect,Stairway} from './world.ts';
 
-export const MOON_LAYOUT_REVISION='moon-v6';
+export const MOON_LAYOUT_REVISION='moon-v7';
 const original=expansionLayouts.moon;
 const wall=(id:string,x:number,z:number,width:number,depth:number,yMin:number,yMax:number):Rect=>({id,x,z,width,depth,yMin,yMax});
 
@@ -57,14 +58,22 @@ export function moonCovered(p:Point){
  return Math.abs(p.x)<moonCorridor.halfWidth&&Math.abs(p.z-moonCorridor.z)<moonCorridor.halfDepth&&(p.y??0)<moonCorridor.height;
 }
 
-// Both main buildings and all four oxygen shelters have a ground-floor rack.
-export const moonMaskRacks=moonLayout.rooms.map(room=>{
- const side=Math.sign(room.x);
- return {room,side,x:room.x+side*(room.width/2-.6),z:room.depth>10?room.z+6:room.z};
-});
-export function nearbyMoonMaskRack(point:Point){
- return moonMaskRacks.find(rack=>(point.y??0)<.8
-  &&Math.abs(point.x-rack.room.x)<rack.room.width/2-.4
+export function moonMaskRacks(seed:number){
+ return moonLayout.rooms.flatMap((room,index)=>{
+  const main=room.depth>10;
+  const candidates=main
+   ? [-11,-8,-5,5,8,11].map(offset=>({side:Math.sign(room.x),offset}))
+   : [-1,1].map(side=>({side,offset:[-1.5,0,1.5][Math.floor(weatherRandom(seed,index*8+side+2)*3)]!}));
+  if(main)candidates.sort((a,b)=>weatherRandom(seed,index*30+a.offset+12)-weatherRandom(seed,index*30+b.offset+12));
+  return candidates.slice(0,main?3:2).map(({side,offset})=>({
+   room,side,x:room.x+side*(room.width/2-.6),z:room.z+offset,
+  }));
+ });
+}
+export function nearbyMoonMaskRack(point:Point,seed:number){
+ if((point.y??0)>=.8)return;
+ return moonMaskRacks(seed).find(rack=>
+  Math.abs(point.x-rack.room.x)<rack.room.width/2-.4
   &&Math.abs(point.z-rack.room.z)<rack.room.depth/2-.4
   &&Math.hypot(point.x-rack.x,point.z-rack.z)<2.2);
 }

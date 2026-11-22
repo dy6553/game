@@ -1,4 +1,3 @@
-import {nearbyMoonMaskRack} from './moon-layout.ts';
 import {oxygenMasks,type OxygenMaskId,type OxygenMaskAction} from './moon-environment.ts';
 import {MEAT_CAPACITY,nearbyMeat} from './wildlife.ts';
 import {weatherMessage} from './snow-weather.ts';
@@ -659,7 +658,7 @@ async function start() {
       const oxygen=me?.oxygen??world.oxygenLevel(),refill=geometry.hasLunarOxygen(p);
       const mask=me?me.oxygenMask:world.oxygenMaskState(),remaining=Math.ceil(mask?.remaining??0);
       const text=`산소 ${Math.ceil(oxygen)}% · ${refill?'충전':oxygen<=0&&!remaining?'고갈':oxygen<=20&&!remaining?'부족':'실외'} · ${remaining?`마스크 ${remaining}초`:mask?.id?(mask.worn?'빈 마스크':`${oxygenMasks[mask.id].label} 미착용`):'마스크 없음'}`;
-      const take=!mask?.id&&!!nearbyMoonMaskRack(p),wear=!!mask?.id&&!mask.worn,discard=!!mask?.id&&!!mask.worn&&!remaining;
+      const take=!mask?.id&&world.nearMaskRack(p,onlineActive?onlineState?.weatherSeed:undefined),wear=!!mask?.id&&!mask.worn,discard=!!mask?.id&&!!mask.worn&&!remaining;
       maskControls.hidden=health<=0||!(take||wear||discard);
       for(const button of maskButtons)button.hidden=!take;
       wearMaskButton.hidden=!wear;discardMaskButton.hidden=!discard;
