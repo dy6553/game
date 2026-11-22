@@ -1,3 +1,5 @@
+import {nearbyMoonMaskRack} from './moon-layout.ts';
+import type {Point} from './world.ts';
 import {weatherRandom} from './snow-weather.ts';
 
 export function advanceOxygen(oxygen:number,sheltered:boolean,seconds:number){
@@ -12,14 +14,24 @@ export const oxygenMasks={
  extended:{label:'장시간',seconds:50},
 } as const;
 export type OxygenMaskId=keyof typeof oxygenMasks;
-export type OxygenMask={remaining:number;used:OxygenMaskId[]};
-export const createOxygenMask=():OxygenMask=>({remaining:0,used:[]});
-export const isOxygenMaskId=(value:unknown):value is OxygenMaskId=>typeof value==='string'&&Object.hasOwn(oxygenMasks,value);
+export type OxygenMaskAction=OxygenMaskId|'wear'|'discard';
+export type OxygenMask={id?:OxygenMaskId;remaining:number;worn?:boolean};
+export const createOxygenMask=():OxygenMask=>({remaining:0});
+export const isOxygenMaskAction=(value:unknown):value is OxygenMaskAction=>
+ value==='wear'||value==='discard'||(typeof value==='string'&&Object.hasOwn(oxygenMasks,value));
 
-export function equipOxygenMask(mask:OxygenMask,id:OxygenMaskId){
- if(mask.remaining>0||mask.used.includes(id))return false;
- mask.used.push(id);
- mask.remaining=oxygenMasks[id].seconds;
+export function applyOxygenMaskAction(mask:OxygenMask,action:OxygenMaskAction,position:Point){
+ if(action==='discard'){
+  if(!mask.id||!mask.worn||mask.remaining>0)return false;
+  delete mask.id;delete mask.worn;
+ }else if(action==='wear'){
+  if(!mask.id||mask.worn)return false;
+  mask.worn=true;
+  mask.remaining=oxygenMasks[mask.id].seconds;
+ }else{
+  if(mask.id||!nearbyMoonMaskRack(position))return false;
+  mask.id=action;
+ }
  return true;
 }
 

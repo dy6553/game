@@ -180,21 +180,32 @@ test('four refill shelters have walkable entrances and keep vacuum outdoors',()=
  }
 });
 
-test('oxygen masks start unequipped and the server consumes one charge per selected type',()=>{
+test('the server only gives one wall mask and requires discarding it after use',()=>{
  const game=createNetworkGame(undefined,'moon',{mode:'ffa'}),p=game.join('mask','pistol');
+ const command={seq:0,x:0,y:0,yaw:0,pitch:0,fire:false,shot:false,reload:false,jump:false,sprint:false,scope:false};
+ const act=(oxygenMask:string)=>{assert.ok(game.input(p.id,{...command,seq:++command.seq,oxygenMask}));game.step();};
  Object.assign(p,{x:0,z:-8,y:0});
+ act('light');
+ assert.equal(p.oxygenMask?.id,undefined);
+ Object.assign(p,{x:38.6,z:6,y:0});
+ act('light');
+ assert.equal(p.oxygenMask?.id,'light');
  assert.equal(p.oxygenMask?.remaining,0);
- const command={seq:1,x:0,y:0,yaw:0,pitch:0,fire:false,shot:false,reload:false,jump:false,sprint:false,scope:false,oxygenMask:'light'};
- assert.ok(game.input(p.id,command));
- for(let tick=0;tick<20;tick++)game.step();
- assert.equal(p.oxygen,100);
- assert.ok(Math.abs(p.oxygenMask!.remaining-19)<.001);
+ act('extended');act('discard');
+ assert.equal(p.oxygenMask?.id,'light');
+ Object.assign(p,{x:0,z:-8,y:0});
+ act('wear');
+ assert.ok(p.oxygenMask!.remaining>19);
+ act('discard');
+ assert.equal(p.oxygenMask?.id,'light');
  for(let tick=0;tick<400;tick++)game.step();
- assert.ok(p.oxygen!<100);
- assert.ok(game.input(p.id,{...command,seq:2}));
- game.step();
  assert.equal(p.oxygenMask?.remaining,0);
- assert.ok(game.input(p.id,{...command,seq:3,oxygenMask:'extended'}));
- game.step();
- assert.ok(p.oxygenMask!.remaining>49);
+ act('discard');
+ assert.equal(p.oxygenMask?.id,undefined);
+ Object.assign(p,{x:38.6,z:6,y:3.4});
+ act('extended');
+ assert.equal(p.oxygenMask?.id,undefined);
+ Object.assign(p,{y:0});
+ act('extended');
+ assert.equal(p.oxygenMask?.id,'extended');
 });

@@ -1,4 +1,5 @@
-import {oxygenMasks,type OxygenMaskId} from './moon-environment.ts';
+import {nearbyMoonMaskRack} from './moon-layout.ts';
+import {oxygenMasks,type OxygenMaskId,type OxygenMaskAction} from './moon-environment.ts';
 import {MEAT_CAPACITY,nearbyMeat} from './wildlife.ts';
 import {weatherMessage} from './snow-weather.ts';
 import {MAPS,normalizeMap,canAccessMap} from './maps.ts';
@@ -245,7 +246,7 @@ async function start() {
   let combatTools:ReturnType<typeof installCombatTools>|undefined;
   let pendingPing:Command['ping'],pingSentAt=-Infinity;
   let pendingDoor:string|undefined;
-  let pendingEquipment:EquipmentId|undefined,pendingEat=false,pendingMask:OxygenMaskId|undefined;let onlineToolEventId=-1;
+  let pendingEquipment:EquipmentId|undefined,pendingEat=false,pendingMask:OxygenMaskAction|undefined;let onlineToolEventId=-1;
   let onlineBoardKey='';const onlineBoard=document.querySelector<HTMLDetailsElement>('#online-scoreboard')!;onlineBoard.addEventListener('toggle',()=>{if(onlineBoard.open){onlineBoardKey='';input.reset();}});
   let pendingSlot:number|undefined,pendingTake:{pickup:string;replace?:number}|undefined,choosePickupId:string|undefined;
   const inventoryUi=document.querySelector<HTMLElement>('#inventory-ui')!,slotButtons=[...document.querySelectorAll<HTMLButtonElement>('#weapon-slots button')];
@@ -594,18 +595,24 @@ async function start() {
   }
   bindInventoryAction(eatButton,requestEat);
   const maskControls=document.querySelector<HTMLElement>('#oxygen-mask-controls')!;
-  const maskButtons=(Object.keys(oxygenMasks) as OxygenMaskId[]).map(id=>{
-    const button=document.createElement('button'),mask=oxygenMasks[id];
-    button.type='button';button.textContent=`${mask.label} ${mask.seconds}초`;button.setAttribute('aria-label',`${mask.label} 산소 마스크 착용, ${mask.seconds}초`);
+  function maskButton(action:OxygenMaskAction,text:string){
+    const button=document.createElement('button');
+    button.type='button';button.textContent=text;
     button.addEventListener('click',()=>{
       if(selectedMap!=='moon'||!canUseInventory()||inventoryData().blocked)return;
-      if(onlineActive)pendingMask=id;
-      else world.wearOxygenMask(id);
+      if(onlineActive)pendingMask=action;
+      else world.useOxygenMask(action,position);
       canvas.focus();
     });
     maskControls.append(button);
-    return {id,button};
+    return button;
+  }
+  const maskButtons=(Object.keys(oxygenMasks) as OxygenMaskId[]).map(id=>{
+    const type=oxygenMasks[id];
+    return maskButton(id,`${type.label} ${type.seconds}초 줍기`);
   });
+  const wearMaskButton=maskButton('wear','마스크 착용');
+  const discardMaskButton=maskButton('discard','빈 마스크 버리기');
   function requestEquipment(kind:EquipmentId){if(!canUseInventory()||inventoryData().blocked)return;if(onlineActive)pendingEquipment=kind;else world.useEquipment?.(kind,position,input.look);}
   for(const b of document.querySelectorAll<HTMLButtonElement>('[data-equipment]'))bindInventoryAction(b,()=>requestEquipment(b.dataset.equipment as EquipmentId));
   window.addEventListener('keydown',event=>{if(event.repeat||event.ctrlKey||event.metaKey||event.altKey||!canUseInventory())return;const kind=controls.mapCode(event.code)==='KeyG'?'grenade':controls.mapCode(event.code)==='KeyB'?'flash':controls.mapCode(event.code)==='KeyH'?'medkit':null;if(kind){event.preventDefault();requestEquipment(kind);}});
@@ -647,12 +654,15 @@ async function start() {
     }
     const navigation=navigationLocation(geometry,me??position),locationLabel=document.querySelector<HTMLElement>('#map-location')!;if(locationLabel.textContent!==navigation.label)locationLabel.textContent=navigation.label;locationLabel.style.borderColor=navigation.color;
     const oxygenLabel=document.querySelector<HTMLElement>('#oxygen-status')!,lunar=selectedMap==='moon';
-    oxygenLabel.hidden=!lunar;maskControls.hidden=!lunar;
+    oxygenLabel.hidden=!lunar;if(!lunar)maskControls.hidden=true;
     if(lunar){
       const oxygen=me?.oxygen??world.oxygenLevel(),refill=geometry.hasLunarOxygen(p);
       const mask=me?me.oxygenMask:world.oxygenMaskState(),remaining=Math.ceil(mask?.remaining??0);
-      const text=`산소 ${Math.ceil(oxygen)}% · ${refill?'충전':oxygen<=0&&!remaining?'고갈':oxygen<=20&&!remaining?'부족':'실외'} · ${remaining?`마스크 ${remaining}초`:'미장착'}`;
-      for(const {id,button} of maskButtons)button.disabled=health<=0||remaining>0||!!mask?.used.includes(id);
+      const text=`산소 ${Math.ceil(oxygen)}% · ${refill?'충전':oxygen<=0&&!remaining?'고갈':oxygen<=20&&!remaining?'부족':'실외'} · ${remaining?`마스크 ${remaining}초`:mask?.id?(mask.worn?'빈 마스크':`${oxygenMasks[mask.id].label} 미착용`):'마스크 없음'}`;
+      const take=!mask?.id&&!!nearbyMoonMaskRack(p),wear=!!mask?.id&&!mask.worn,discard=!!mask?.id&&!!mask.worn&&!remaining;
+      maskControls.hidden=health<=0||!(take||wear||discard);
+      for(const button of maskButtons)button.hidden=!take;
+      wearMaskButton.hidden=!wear;discardMaskButton.hidden=!discard;
       if(oxygenLabel.textContent!==text)oxygenLabel.textContent=text;
       oxygenLabel.classList.toggle('critical',oxygen<=20);
     }

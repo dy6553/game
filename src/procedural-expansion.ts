@@ -1,4 +1,4 @@
-import {moonCorridor,moonCrater,moonShelters} from './moon-layout.ts';
+import {moonCorridor,moonCrater,moonShelters,moonMaskRacks} from './moon-layout.ts';
 import {snowShells,snowShellIds,snowEntryGalleries} from './igloo-layout.ts';
 import type {Scene} from '@babylonjs/core/scene.js';
 import {Mesh} from '@babylonjs/core/Meshes/mesh.js';
@@ -192,6 +192,16 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
     label(shelter.x,3.22,entrance,7,direction>0?Math.PI:0,0,1.5,.55);
     for(const side of [-1,1])box(shelter.x+side*1.62,1.4,entrance,.16,2.7,.09,'#4ee4c5',1);
     box(shelter.x,1.16,shelter.z-direction*2.6,1.6,.06,.42,'#5cffe0',1);
+   }
+   for(const rack of moonMaskRacks){
+    const {x,z,side}=rack;
+    box(x,1.5,z,.12,.72,1.65,'#243c49');
+    box(x-side*.075,1.83,z,.03,.045,1.5,'#59e5cd',1);
+    for(const [i,tint] of ['#64dcda','#eebd77','#9ba7ed'].entries()){
+     const slot=z+(i-1)*.49;
+     box(x-side*.16,1.48,slot,.18,.29,.28,tint);
+     box(x-side*.24,1.44,slot,.08,.095,.14,'#344c5a');
+    }
    }
    const {z,halfWidth}=moonCorridor;
    box(0,.018,z,halfWidth*2,.025,4.12,'#576574');

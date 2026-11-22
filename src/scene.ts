@@ -1,4 +1,4 @@
-import {advanceLunarAir,createOxygenMask,equipOxygenMask,moonEclipse,type OxygenMaskId} from './moon-environment.ts';
+import {advanceLunarAir,createOxygenMask,applyOxygenMaskAction,moonEclipse,type OxygenMaskAction} from './moon-environment.ts';
 import '@babylonjs/core/Meshes/Builders/torusBuilder.js';
 import {createWildlifeArt} from './wildlife-art.ts';
 import {frightenWildlife,WILDLIFE_SHOT_RANGE,wildlifeMovementRange,wildlifeSpawns,type Animal,advanceWildlife,meatRecovery,takeMeat,createWildlife,hurtWildlife,wildlifeBlastTargets,wildlifeHit} from './wildlife.ts';
@@ -995,7 +995,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
   }
   return {
     geometry,weatherState,eclipseState,oxygenLevel:()=>oxygen,oxygenMaskState:()=>oxygenMask,
-    wearOxygenMask(id:OxygenMaskId){const battle=battleState();return expansion==='moon'&&!preview&&!reference&&battle.playerHealth>0&&!battle.winner&&equipOxygenMask(oxygenMask,id);},isWeatherSheltered:()=>weatherSheltered,mapArtState:()=>proceduralArt?.state()??null,
+    useOxygenMask(action:OxygenMaskAction,p:Point){const battle=battleState();return expansion==='moon'&&!preview&&!reference&&battle.playerHealth>0&&!battle.winner&&applyOxygenMaskAction(oxygenMask,action,{...p,y:(p.y??0)+jumpState.height});},isWeatherSheltered:()=>weatherSheltered,mapArtState:()=>proceduralArt?.state()??null,
     get scoped(){return scoped;},
     get thirdPerson(){return thirdPerson;},
     aimReticle(){if(!thirdPerson||scoped||preview||reference)return {x:50,y:50};const direction=camera.getDirection(Vector3.Forward()),pick=scene.pickWithRay(new Ray(aimOrigin.clone(),direction,150),m=>m.isPickable&&m.isEnabled());const end=pick?.pickedPoint??aimOrigin.add(direction.scale(150)),viewport=camera.viewport.toGlobal(engine.getRenderWidth(),engine.getRenderHeight()),v=Vector3.Project(end,Matrix.Identity(),camera.getViewMatrix().multiply(camera.getProjectionMatrix()),viewport);return {x:Math.max(0,Math.min(100,v.x/engine.getRenderWidth()*100)),y:Math.max(0,Math.min(100,v.y/engine.getRenderHeight()*100))};},togglePerspective(){thirdPerson=!thirdPerson;return thirdPerson;},

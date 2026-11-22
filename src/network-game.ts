@@ -1,4 +1,4 @@
-import {advanceLunarAir,createOxygenMask,equipOxygenMask,isOxygenMaskId,type OxygenMask,type OxygenMaskId} from './moon-environment.ts';
+import {advanceLunarAir,createOxygenMask,applyOxygenMaskAction,isOxygenMaskAction,type OxygenMask,type OxygenMaskAction} from './moon-environment.ts';
 import {MOON_LAYOUT_REVISION} from './moon-layout.ts';
 import {frightenWildlife,WILDLIFE_SHOT_RANGE,wildlifeMovementRange,advanceWildlife,meatRecovery,takeMeat,createWildlife,hurtWildlife,wildlifeBlastTargets,wildlifeHit,type Animal} from './wildlife.ts';
 import {newWeatherSeed} from './snow-weather.ts';
@@ -20,7 +20,7 @@ import { createJump,type JumpState } from './jump.ts';
 import { viewMovement } from './view.ts';
 export type Player = GearActor & {oxygen?:number;oxygenMask?:OxygenMask;meat?:number;revealedUntil?:number;nickname?:string;guest?:boolean;participated?:boolean;deaths:number;totalKills:number;playing?:boolean;abandoned?:boolean;id:string;y?:number;fallSpeed?:number;protection?:number;x:number;z:number;yaw:number;pitch:number;health:number;kills:number;dead:number;weaponId:WeaponId;weapon:WeaponState;jump:JumpState;cooldown:number;connected:boolean;character:'robot'|'robot-cat'|'welder';seq:number;startWeapon:WeaponId;inventory:Inventory;dash?:DashState};
 export type TeamPing={kind:'enemy'|'move'|'help';x:number;z:number;player:string;team:number;expires:number};
-export type Command={oxygenMask?:OxygenMaskId;eatMeat?:boolean;ping?:Pick<TeamPing,'kind'|'x'|'z'>;stance?:Stance;seq:number;x:number;y:number;yaw:number;pitch:number;fire:boolean;shot:boolean;reload:boolean;jump:boolean;sprint:boolean;scope:boolean;door?:string;dash?:boolean;slot?:number;pickup?:string;replace?:number;equipment?:EquipmentId};
+export type Command={oxygenMask?:OxygenMaskAction;eatMeat?:boolean;ping?:Pick<TeamPing,'kind'|'x'|'z'>;stance?:Stance;seq:number;x:number;y:number;yaw:number;pitch:number;fire:boolean;shot:boolean;reload:boolean;jump:boolean;sprint:boolean;scope:boolean;door?:string;dash?:boolean;slot?:number;pickup?:string;replace?:number;equipment?:EquipmentId};
 export type ShotEvent={id:number;player:string;weapon:WeaponId;from:{x:number;y:number;z:number};to:{x:number;y:number;z:number};hit:boolean;killed:boolean;target?:string;headshot?:boolean;protected?:boolean;elevated?:boolean};
 export type OnlineMode='duel'|'ffa'|'team';
 export type NetworkOptions={clock?:()=>number;waitingRoom?:boolean;mode?:OnlineMode;randomPickups?:boolean};
@@ -35,7 +35,7 @@ export function parseCommand(v:unknown,bounds:Pick<World['PROTOTYPE'],'halfWidth
  if(p.eatMeat!==undefined&&typeof p.eatMeat!=='boolean')return null;
  if(p.equipment!==undefined&&!isEquipmentId(p.equipment))return null;
  if(p.door!==undefined&&(typeof p.door!=='string'||p.door.length>40))return null;
- if(p.oxygenMask!==undefined&&!isOxygenMaskId(p.oxygenMask))return null;
+ if(p.oxygenMask!==undefined&&!isOxygenMaskAction(p.oxygenMask))return null;
  if(p.stance!==undefined&&!isStance(p.stance))return null;
  if(p.dash!==undefined&&typeof p.dash!=='boolean')return null;
  if(p.slot!==undefined&&(!Number.isInteger(p.slot)||Number(p.slot)<0||Number(p.slot)>2))return null;
@@ -92,6 +92,7 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
  if(!saved&&options.waitingRoom)state.phase='waiting';state.map=mapId;state.mode=mode;state.capacity=mode==='duel'?2:20;state.teamScores??=[0,0];state.projectiles??=[];state.toolEvents??=[];state.pickups??=createMatchPickups(world);state.doors??=world.createDoors();
  if(mapId==='snow'){state.animals=createWildlife(state.animals);state.weatherTime??=0;state.weatherSeed??=newWeatherSeed();state.layoutRevision=SNOW_LAYOUT_REVISION;}
  if(mapId==='moon'){
+  if(saved&&saved.layoutRevision!==MOON_LAYOUT_REVISION)for(const p of state.players)p.oxygenMask=createOxygenMask();
   state.layoutRevision=MOON_LAYOUT_REVISION;
   state.weatherTime??=0;
   state.weatherSeed??=newWeatherSeed();
@@ -152,8 +153,8 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
     Object.assign(p,advancePlayerMotion(p,c,dt,state.doors,world));
     if(mapId==='moon'){
      p.oxygenMask??=createOxygenMask();
-     if(c.oxygenMask)equipOxygenMask(p.oxygenMask,c.oxygenMask);
-     c.oxygenMask=undefined;
+     if(c.oxygenMask)applyOxygenMaskAction(p.oxygenMask,c.oxygenMask,{...p,y:(p.y??0)+p.jump.height});
+
      const oxygen=advanceLunarAir(p.oxygen??100,p.oxygenMask,world.hasLunarOxygen({...p,y:(p.y??0)+p.jump.height}),dt);
      p.oxygen=oxygen.oxygen;
      if(oxygen.damage>0){hurt(p,oxygen.damage,p.id);if(p.health<=0)continue;}
@@ -187,7 +188,7 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
       const hit=!!target&&(target.protection??0)<=0&&(p.team===undefined||target.team!==p.team);const headDistance=target?actorHit(origin,d,target,true):Infinity;const headshot=!!hit&&headDistance<wall;const before=target?.deaths??0;if(hit)hurt(target!,rangedDamage(p.weaponId,spec.damage,range)*(headshot?1.5:1),p.id);state.events.push({elevated:(p.y??0)>=3.35,id:id(),player:p.id,weapon:p.weaponId,from:{x:origin[0]!,y:origin[1]!,z:origin[2]!},to:{x:origin[0]!+d[0]!*range,y:origin[1]!+d[1]!*range,z:origin[2]!+d[2]!*range},hit,killed:hit&&target!.deaths>before,target:target?.id,headshot,protected:!!target&&(target.protection??0)>0&&(p.team===undefined||target.team!==p.team)});if(state.winner)break;
      }
      frightenWildlife(state.animals,wildlifeTime,p,WILDLIFE_SHOT_RANGE,world,state.doors!);
-    }}syncSlot(p.inventory,p.weapon,p.cooldown);c.door=undefined;c.shot=false;c.reload=false;c.jump=false;c.dash=false;c.slot=undefined;c.pickup=undefined;c.replace=undefined;c.equipment=undefined;c.eatMeat=undefined;if(state.winner)break;
+    }}syncSlot(p.inventory,p.weapon,p.cooldown);c.door=undefined;c.shot=false;c.reload=false;c.jump=false;c.dash=false;c.slot=undefined;c.pickup=undefined;c.replace=undefined;c.equipment=undefined;c.eatMeat=undefined;c.oxygenMask=undefined;if(state.winner)break;
    }
    if(!state.winner){
     const blastTargets=state.projectiles!.length?wildlifeBlastTargets(state.animals,wildlifeTime):[];

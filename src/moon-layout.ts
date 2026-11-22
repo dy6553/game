@@ -1,7 +1,7 @@
 import {expansionLayouts} from './expansion-layouts.ts';
 import type {Point,Rect,Stairway} from './world.ts';
 
-export const MOON_LAYOUT_REVISION='moon-v5';
+export const MOON_LAYOUT_REVISION='moon-v6';
 const original=expansionLayouts.moon;
 const wall=(id:string,x:number,z:number,width:number,depth:number,yMin:number,yMax:number):Rect=>({id,x,z,width,depth,yMin,yMax});
 
@@ -55,4 +55,16 @@ export const moonLayout={...original,width:140,depth:112,rooms:[...original.room
 
 export function moonCovered(p:Point){
  return Math.abs(p.x)<moonCorridor.halfWidth&&Math.abs(p.z-moonCorridor.z)<moonCorridor.halfDepth&&(p.y??0)<moonCorridor.height;
+}
+
+// Both main buildings and all four oxygen shelters have a ground-floor rack.
+export const moonMaskRacks=moonLayout.rooms.map(room=>{
+ const side=Math.sign(room.x);
+ return {room,side,x:room.x+side*(room.width/2-.6),z:room.depth>10?room.z+6:room.z};
+});
+export function nearbyMoonMaskRack(point:Point){
+ return moonMaskRacks.find(rack=>(point.y??0)<.8
+  &&Math.abs(point.x-rack.room.x)<rack.room.width/2-.4
+  &&Math.abs(point.z-rack.room.z)<rack.room.depth/2-.4
+  &&Math.hypot(point.x-rack.x,point.z-rack.z)<2.2);
 }
