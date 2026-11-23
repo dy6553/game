@@ -574,30 +574,38 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
     // Hidden collider meshes still need their real transforms before the first shot.
     for(const mesh of expansionFallback)mesh.freezeWorldMatrix();
   }
+  const closedHatchLamp=expansion==='moon'?material('lunar-hatch-closed','#e1a858','#bd6223'):warm;
+  const openHatchLamp=expansion==='moon'?material('lunar-hatch-open','#78f9db','#31c8a7'):accent;
   const airlockPanels=geometry.automaticDoors.map(door=>{
-    const collider=box(door.id+'-collider',door.x,door.yMax!/2,door.z,door.width,door.yMax!,door.depth,metal);
+    const bottom=door.yMin??0,height=door.yMax!-bottom,mid=bottom+height/2;
+    const collider=box(door.id+'-collider',door.x,mid,door.z,door.width,height,door.depth,metal);
     collider.visibility=0;
     collider.isPickable=!doors[door.id];
     collider.freezeWorldMatrix();
     const acrossX=door.width>door.depth;
     const panels=[-1,1].map(side=>{
       const width=acrossX?door.width/2-.035:door.width,depth=acrossX?door.depth:door.depth/2-.035;
-      const panel=box(door.id+'-panel-'+side,door.x+(acrossX?side*door.width/4:0),door.yMax!/2,door.z+(acrossX?0:side*door.depth/4),width,door.yMax!,depth,metal);
+      const panel=box(door.id+'-panel-'+side,door.x+(acrossX?side*door.width/4:0),mid,door.z+(acrossX?0:side*door.depth/4),width,height,depth,metal);
       panel.isPickable=false;
       const stripe=box(door.id+'-stripe-'+side,0,0,0,width+.016,.11,depth+.016,accent);
       stripe.parent=panel;
       return panel;
     });
-    return {door,collider,panels,open:0};
+    const lamp=box(door.id+'-indicator',door.x,door.yMax!+.09,door.z,acrossX?.84:.34,.11,acrossX?.34:.84,closedHatchLamp);
+    return {door,collider,panels,lamp,mid,height,open:0};
   });
   function updateAirlockArt(dt:number){
     for(const rig of airlockPanels){
       const open=!!doors[rig.door.id];
       rig.collider.isPickable=!open;
+      rig.lamp.material=open?openHatchLamp:closedHatchLamp;
       rig.open=open?Math.min(1,rig.open+dt*5):Math.max(0,rig.open-dt*5);
       for(const panel of rig.panels){
         panel.setEnabled(rig.open<1);
-        panel.position.y=rig.door.yMax!*(.5-rig.open);
+        if(rig.door.yMin){
+         panel.scaling.y=1-rig.open;
+         panel.position.y=rig.mid+rig.height*rig.open/2;
+        }else panel.position.y=rig.mid-rig.height*rig.open;
       }
     }
   }
@@ -872,8 +880,8 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
      eclipseRing.setEnabled(darkness>.05);
      eclipseRing.visibility=darkness;
      const sheltered=geometry.hasLunarOxygen({...p,y:(p.y??0)+jumpState.height});
-     sky.intensity=.55-darkness*(sheltered?.025:.07);
-     moon.intensity=1.2-darkness*(sheltered?.18:.46);
+     sky.intensity=(sheltered?.79:.53)-darkness*(sheltered?.018:.065);
+     moon.intensity=(sheltered?.89:1.2)-darkness*(sheltered?.1:.46);
     }
     snowfall?.update(p,snowfallEnabled&&(!proceduralArt||!lowPerformance)&&(!paused||onlineFrame)&&!preview&&!reference&&!weatherSheltered,look.yaw);
     launcher.setEnabled(weaponId==='bazooka');launcherRim.setEnabled(weaponId==='bazooka');muzzle.setEnabled(weaponId!=='bazooka');muzzleInset.setEnabled(weaponId!=='bazooka');

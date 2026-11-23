@@ -235,7 +235,7 @@ function jumpGravityAt(p:Point){
 function beginJumpAt(p:Point,state:JumpState){
  if(map!=='moon')return beginJump(state);
  const gravity=jumpGravityAt(p);
- return beginJump(state,gravity===LUNAR_GRAVITY?1.7:Math.sqrt(2*gravity));
+ return beginJump(state,gravity===LUNAR_GRAVITY?1.7:3.6);
 }
 const automaticDoors=map==='moon'?moonAirlocks:[];
 function updateAutomaticDoors(doors:Doors,actors:readonly Point[]){
@@ -244,7 +244,8 @@ function updateAutomaticDoors(doors:Doors,actors:readonly Point[]){
   const acrossX=door.width>door.depth;
   doors[door.id]=actors.some(p=>{
    const dx=Math.abs(p.x-door.x),dz=Math.abs(p.z-door.z);
-   return (p.y??0)<door.yMax!&&(acrossX?dx<door.width/2+.65&&dz<reach:dz<door.depth/2+.65&&dx<reach);
+   const feet=p.y??0;
+   return feet>=Math.max(0,(door.yMin??0)-1.1)&&feet<door.yMax!&&(acrossX?dx<door.width/2+.65&&dz<reach:dz<door.depth/2+.65&&dx<reach);
   });
  }
 }

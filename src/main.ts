@@ -647,7 +647,7 @@ async function start() {
     if(lunar){
       const refill=geometry.hasLunarOxygen(p);
       const mask=me?me.oxygenMask:world.oxygenMaskState(),remaining=Math.ceil(mask?.remaining??0);
-      const text=`${refill?'충전':oxygen<=0&&!remaining?'고갈':oxygen<=20&&!remaining?'부족':'실외'} · ${remaining?`마스크 ${remaining}초`:mask?.id?(mask.worn?'빈 마스크':`${oxygenMasks[mask.id].label} 미착용`):'마스크 없음'}`;
+      const text=`${refill?'실내 · 충전':oxygen<=0&&!remaining?'실외 · 고갈':oxygen<=20&&!remaining?'실외 · 부족':'실외 · 저중력'} · ${remaining?`마스크 ${remaining}초`:mask?.id?(mask.worn?'빈 마스크':`${oxygenMasks[mask.id].label} 미착용`):'마스크 없음'}`;
       const take=!mask?.id&&world.nearMaskRack(p,onlineActive?onlineState?.weatherSeed:undefined),wear=!!mask?.id&&!mask.worn,discard=!!mask?.id&&!!mask.worn&&!remaining;
       maskControls.hidden=health<=0||!(take||wear||discard);
       for(const button of maskButtons)button.hidden=!take;

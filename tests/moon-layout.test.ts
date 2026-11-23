@@ -26,7 +26,12 @@ test('both interior ramps reach a supported second floor with a view of the land
   assert.equal(position.y,world.SECOND_FLOOR);
   assert.equal(navigationLocation(world,position).floor,'2F');
   const side=Math.sign(room.x);
-  assert.ok(!firstShotBox(world,doors,{x:side*23,y:5.1,z:5.5},{x:side*9,y:4.7,z:4.5}));
+  const observationShot=()=>firstShotBox(world,doors,{x:side*23,y:5.1,z:5.5},{x:side*9,y:4.7,z:4.5});
+  world.updateAutomaticDoors(doors,[{x:side*23,y:0,z:5.5}]);
+  assert.ok(observationShot());
+  assert.equal(doors[room.id+' observation hatch'],false);
+  world.updateAutomaticDoors(doors,[{x:side*23,y:3.4,z:5.5}]);
+  assert.equal(observationShot(),null);
   assert.ok(firstShotBox(world,doors,{x:side*23,y:3.75,z:5.5},{x:side*9,y:3.75,z:4.5}));
  }
 });
@@ -83,7 +88,7 @@ test('scene and shared online motion rise and land at Earth and lunar rates',()=
  const command={x:0,y:0,yaw:0,pitch:0,fire:false,shot:false,reload:false,jump:false,sprint:false,scope:false};
  try{
   for(const [point,gravity,maxHeight] of [
-   [{x:31,z:0},9.81,1],
+   [{x:31,z:0},9.81,3.6**2/(2*9.81)],
       [{x:0,z:-8},1.62,1.7**2/(2*1.62)],
   ] as const){
    const p={...point},dt=.01;
@@ -241,7 +246,7 @@ test('exterior airlocks block shots until approached and moon ceilings stop jump
  const point={x:8,z:moonCorridor.z};
  let jump=world.beginJumpAt(point,createJump()),peak=0;
  for(let i=0;i<100;i++){jump=world.advanceJumpOnTerrain(point,jump,.01).jump;peak=Math.max(peak,jump.height);}
- assert.ok(peak>.6&&peak<=.68001);
+ assert.ok(peak>.6&&peak<.67);
  assert.deepEqual(jump,createJump());
 });
 

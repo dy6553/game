@@ -2,7 +2,7 @@ import {weatherRandom} from './snow-weather.ts';
 import {expansionLayouts} from './expansion-layouts.ts';
 import type {Point,Rect,Stairway} from './world.ts';
 
-export const MOON_LAYOUT_REVISION='moon-v9';
+export const MOON_LAYOUT_REVISION='moon-v10';
 const original=expansionLayouts.moon;
 const wall=(id:string,x:number,z:number,width:number,depth:number,yMin:number,yMax:number):Rect=>({id,x,z,width,depth,yMin,yMax});
 
@@ -36,8 +36,10 @@ export const moonExteriorAirlocks=[
  ...original.rooms.flatMap(room=>[-1,1].map(side=>wall(room.id+' exterior hatch '+side,room.x,side*room.depth/2,6,.28,0,4.4))),
  ...moonShelters.map(room=>wall(room.id+' exterior hatch',room.x,room.z-Math.sign(room.z)*3.4,2.8,.24,0,2.95)),
 ];
+export const moonObservationAirlocks=original.rooms.map(room=>
+ wall(room.id+' observation hatch',Math.sign(room.x)*22,6,.27,4,4.15,5.8));
 export const moonAirlocks=[
- ...corridorAirlocks,...moonExteriorAirlocks,
+ ...corridorAirlocks,...moonExteriorAirlocks,...moonObservationAirlocks,
  ...[-1,1].map(side=>wall('moon-crossing-airlock-'+side,side*(moonCorridor.crossingHalfWidth+.25),11,.28,4.2,0,3.18)),
 ];
 const shelterWalls=moonShelters.flatMap(b=>{
@@ -54,6 +56,13 @@ const shelterWalls=moonShelters.flatMap(b=>{
 });
 export const moonLayout={...original,width:140,depth:112,rooms:[...original.rooms,...moonShelters],solids:[
  ...shelterWalls,
+ ...original.rooms.flatMap(room=>{
+  const side=Math.sign(room.x);
+  return [
+   wall(room.id+' observation console',room.x-side*1.4,10,3.2,1.05,3.4,4.45),
+   wall(room.id+' mezzanine rail',room.x-side*2.4,2.36,12.25,.14,3.4,4.28),
+  ];
+ }),
  ...original.rooms.map(room=>wall(room.id+' sealed outer wall',room.x+Math.sign(room.x)*room.width/2,room.z,.5,6,0,room.height)),
  ...original.solids.filter(s=>!facingWalls.includes(s)&&!(Math.abs(s.x)===19&&s.z===11)),
  ...apertures,
