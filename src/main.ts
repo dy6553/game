@@ -4,7 +4,7 @@ import {weatherMessage} from './snow-weather.ts';
 import {MAPS,normalizeMap,canAccessMap} from './maps.ts';
 import {installCombatTools} from './combat-tools.ts';
 import {weaponSlotMarkup,combatIcon} from './combat-ui.ts';
-import {navigationLocation} from './wayfinding.ts';
+import {navigationLocation,oxygenGuidance} from './wayfinding.ts';
 import {createControlSettings} from './control-settings.ts';
 import {installControlEditor} from './control-editor.ts';
 import {chooseOnlineNickname} from './member-nickname-entry.ts';
@@ -633,10 +633,19 @@ async function start() {
     const card=document.querySelector<HTMLElement>('#target-vitals')!;if(!active){card.hidden=true;nameplates.clear();document.querySelector<HTMLElement>('#match-roster')!.hidden=true;return;}if(now-combatHudAt<100)return;combatHudAt=now;
     const reticle=world.aimReticle();crosshair.style.left=reticle.x+'%';crosshair.style.top=reticle.y+'%';
     const battle=world.duelState(),me=onlineActive?onlineState?.players.find(p=>p.id===onlineId):undefined,health=me?.health??(battle.active?battle.playerHealth:readGear().health),p=me?{...me,y:(me.y??0)+me.jump.height}:{...position,y:(position.y??0)+(world.practiceState().jumpHeight??0)},geometry=world.geometry??harborWorld,doors=(onlineActive?onlineState?.doors:world.doorState?.())??{};
+    const oxygen=me?.oxygen??world.oxygenLevel(),guide=health>0?oxygenGuidance(geometry,p,input.look.yaw,oxygen):undefined;
+    const guideNode=document.querySelector<HTMLElement>('#oxygen-guide')!;
+    guideNode.hidden=!guide;
+    if(guide){
+      const text=document.querySelector<HTMLElement>('#oxygen-guide-text')!;
+      const next=`${guide.name} 입구 · ${guide.direction} ${guide.distance}m`;
+      if(text.textContent!==next)text.textContent=next;
+      document.querySelector<HTMLElement>('#oxygen-guide-arrow')!.style.transform=`rotate(${guide.angle}rad)`;
+    }
     const oxygenLabel=document.querySelector<HTMLElement>('#oxygen-status')!,lunar=(onlineActive?onlineState?.map??selectedMap:selectedMap)==='moon';
     document.querySelector<HTMLElement>('#oxygen-panel')!.hidden=!lunar;if(!lunar)maskControls.hidden=true;
     if(lunar){
-      const oxygen=me?.oxygen??world.oxygenLevel(),refill=geometry.hasLunarOxygen(p);
+      const refill=geometry.hasLunarOxygen(p);
       const mask=me?me.oxygenMask:world.oxygenMaskState(),remaining=Math.ceil(mask?.remaining??0);
       const text=`${refill?'충전':oxygen<=0&&!remaining?'고갈':oxygen<=20&&!remaining?'부족':'실외'} · ${remaining?`마스크 ${remaining}초`:mask?.id?(mask.worn?'빈 마스크':`${oxygenMasks[mask.id].label} 미착용`):'마스크 없음'}`;
       const take=!mask?.id&&world.nearMaskRack(p,onlineActive?onlineState?.weatherSeed:undefined),wear=!!mask?.id&&!mask.worn,discard=!!mask?.id&&!!mask.worn&&!remaining;
@@ -677,7 +686,7 @@ async function start() {
     const pings=onlineState?.pings?.filter(q=>q.expires>(onlineState?.tick??0))??[];
     combatTools?.updateTeam({enabled:onlineActive&&online.connected&&onlineState?.mode==='team'&&health>0,world:geometry,me:p,yaw:input.look.yaw,pings});
     const pingNotice=document.querySelector<HTMLElement>('#map-ping-alert')!,latest=pings.at(-1),pingText=latest?`${latest.kind==='enemy'?'! 적 발견':latest.kind==='help'?'+ 지원 요청':'◆ 이동'} · ${playerName(onlineState!.players.find(p=>p.id===latest.player)!,'아군')}`:'';if(pingNotice.textContent!==pingText)pingNotice.textContent=pingText;pingNotice.hidden=!latest;
-    if(showMinimap)drawCombatMap(document.querySelector<HTMLCanvasElement>('#minimap')!,geometry,p,input.look.yaw,view.radar,pings);
+    if(showMinimap)drawCombatMap(document.querySelector<HTMLCanvasElement>('#minimap')!,geometry,p,input.look.yaw,view.radar,pings,guide);
     nameplates.update(onlineActive&&onlineState&&online.connected?(world.onlineNameplates?.(onlineState,onlineId)??[]):[]);refreshRoster();
   }
   const reset = () => { position = { ...world.geometry.PROTOTYPE.spawn }; input.resetLook();world.resetJump(); };

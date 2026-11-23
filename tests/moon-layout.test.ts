@@ -253,3 +253,21 @@ test('the center plaza can be crossed without jumping through the link walls',()
  assert.equal(world.hasLunarOxygen({x:0,z:moonCorridor.z}),false);
  assert.equal(world.hasLunarOxygen({x:8,z:moonCorridor.z}),true);
 });
+
+test('oxygen guidance points to a real nearby entrance only while air is low outdoors',async()=>{
+ const {oxygenGuidance}=await import('../src/wayfinding.ts');
+ assert.equal(typeof oxygenGuidance,'function');
+ const world=createWorld('moon');
+ const nearShelter={x:53,z:-27};
+ const guide=oxygenGuidance(world,nearShelter,Math.PI,20);
+ assert.equal(guide?.name,'산소 쉼터 3');
+ assert.equal(guide?.z,-31.6);
+ assert.equal(guide?.distance,5);
+ assert.equal(guide?.direction,'앞');
+ assert.equal(oxygenGuidance(world,nearShelter,Math.PI,21),undefined);
+ assert.equal(oxygenGuidance(world,{x:53,z:-35},0,1),undefined);
+ assert.equal(oxygenGuidance(createWorld('harbor'),nearShelter,0,1),undefined);
+ const crossing=oxygenGuidance(world,{x:0,z:11},Math.PI/2,0);
+ assert.equal(crossing?.name,'연결 통로');
+ assert.equal(crossing?.distance,4);
+});
