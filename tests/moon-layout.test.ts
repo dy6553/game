@@ -276,3 +276,24 @@ test('oxygen guidance points to a real nearby entrance only while air is low out
  assert.equal(crossing?.name,'연결 통로');
  assert.equal(crossing?.distance,4);
 });
+
+test('lunar eclipse fades distance while its countdown continues inside',()=>{
+ const engine=new NullEngine(),scene=createHarborScene(engine,{map:'moon',randomSpawns:false,weatherSeed:101});
+ try{
+  const outside={x:0,z:-8},inside={x:31,z:0};
+  const first=scene.eclipseState()!;
+  assert.equal(first.startsIn,first.start);
+  scene.update(outside,first.start+5);
+  const density=scene.scene.fogDensity;
+  assert.ok(density>.01);
+  assert.ok(Math.exp(-((10*density)**2))>.95);
+  assert.ok(Math.exp(-((80*density)**2))<.4);
+  const remaining=scene.eclipseState()!.endsIn;
+  scene.update(inside,2);
+  assert.ok(scene.scene.fogDensity<density);
+  assert.equal(scene.eclipseState()!.endsIn,remaining-2);
+  scene.update(inside,remaining-2);
+  assert.equal(scene.scene.fogMode,0);
+  assert.ok(scene.eclipseState()!.startsIn>=55);
+ }finally{scene.scene.dispose();engine.dispose();}
+});

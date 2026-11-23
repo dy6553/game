@@ -678,7 +678,11 @@ async function start() {
     }
     const navigation=navigationLocation(geometry,me??position),locationLabel=document.querySelector<HTMLElement>('#map-location')!;if(locationLabel.textContent!==navigation.label)locationLabel.textContent=navigation.label;locationLabel.style.borderColor=navigation.color;
     const eclipse=world.eclipseState(),weather=world.weatherState(),weatherLabel=document.querySelector<HTMLElement>('#weather-status')!;
-    const weatherText=eclipse?(eclipse.warning?`일식까지 ${eclipse.warning}초`:eclipse.active?`일식 · ${Math.ceil(eclipse.endsIn)}초 남음`:'달 기지 · 맑음'):weather?.intensity&&world.isWeatherSheltered()?'실내 · 폭설 차단':weatherMessage(weather);
+    const eclipseClock=document.querySelector<HTMLElement>('#eclipse-clock')!;
+    eclipseClock.hidden=!eclipse;
+    const eclipseText=eclipse?(eclipse.active?`일식 · ${Math.ceil(eclipse.endsIn)}초 남음`:`일식까지 ${Math.ceil(eclipse.startsIn)}초`):'';
+    if(eclipseClock.textContent!==eclipseText)eclipseClock.textContent=eclipseText;
+    const weatherText=eclipse?eclipseText:weather?.intensity&&world.isWeatherSheltered()?'실내 · 폭설 차단':weatherMessage(weather);
     weatherLabel.hidden=!weather&&!eclipse;
     if(weatherLabel.textContent!==weatherText)weatherLabel.textContent=weatherText;
     weatherNotice.hidden=!(weather?.warning||eclipse?.warning||eclipse?.active);

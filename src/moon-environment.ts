@@ -52,5 +52,5 @@ export function moonEclipse(seconds:number,seed=1){
  const warning=seconds>=start-10&&seconds<start?Math.ceil(start-seconds):0;
  const active=seconds>=start;
  const darkness=active?Math.max(0,Math.min(1,(seconds-start)/4,(end-seconds)/4)):0;
- return {warning,active,darkness,start,end,endsIn:Math.max(0,end-seconds)};
+ return {warning,active,darkness,start,end,startsIn:Math.max(0,start-seconds),endsIn:Math.max(0,end-seconds)};
 }

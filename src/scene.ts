@@ -655,6 +655,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
    eclipseRing.position.set(-94,76,135);
    eclipseRing.billboardMode=Mesh.BILLBOARDMODE_ALL;
    eclipseRing.isPickable=false;
+   eclipseRing.applyFog=false;
    const corona=new StandardMaterial('eclipse-corona',scene);
    corona.disableLighting=true;corona.emissiveColor=Color3.FromHexString('#ffc68a');
    eclipseRing.material=corona;eclipseRing.setEnabled(false);
@@ -880,6 +881,9 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
      eclipseRing.setEnabled(darkness>.05);
      eclipseRing.visibility=darkness;
      const sheltered=geometry.hasLunarOxygen({...p,y:(p.y??0)+jumpState.height});
+     scene.fogMode=darkness>.001?Scene.FOGMODE_EXP2:Scene.FOGMODE_NONE;
+     scene.fogDensity=darkness*(sheltered?.0105:.015);
+     scene.fogColor.set(.035,.037,.047);
      sky.intensity=(sheltered?.79:.53)-darkness*(sheltered?.018:.065);
      moon.intensity=(sheltered?.89:1.2)-darkness*(sheltered?.1:.46);
     }

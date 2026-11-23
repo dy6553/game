@@ -142,3 +142,5 @@ body.at-home #weather-notice,body.results-open #weather-notice,.comparing #weath
 
 #oxygen-guide:not([hidden]){display:flex;align-items:center;gap:6px;margin-top:5px;padding:4px 5px;border-radius:4px;background:#103c42;color:#9bffe8;font-size:11px;line-height:1.3}
 #oxygen-guide-arrow{display:inline-block;flex:none}
+
+#eclipse-clock:not([hidden]){display:block;margin-top:4px;color:#ffe3ad;font-size:11px;font-variant-numeric:tabular-nums}
