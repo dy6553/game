@@ -2,12 +2,16 @@ import {weatherRandom} from './snow-weather.ts';
 import {expansionLayouts} from './expansion-layouts.ts';
 import type {Point,Rect,Stairway} from './world.ts';
 
-export const MOON_LAYOUT_REVISION='moon-v8';
+export const MOON_LAYOUT_REVISION='moon-v9';
 const original=expansionLayouts.moon;
 const wall=(id:string,x:number,z:number,width:number,depth:number,yMin:number,yMax:number):Rect=>({id,x,z,width,depth,yMin,yMax});
 
 const corridorAirlocks=[-1,1].map(side=>wall(`moon-airlock-${side}`,side*20.4,11,.28,4.2,0,3.18));
-export const moonCorridor={halfWidth:22,z:11,halfDepth:2.1,height:3.4};
+export const moonCorridor={halfWidth:22,crossingHalfWidth:3.2,z:11,halfDepth:2.1,height:3.4};
+export const moonCorridorSections=[-1,1].map(side=>({
+ x:side*(moonCorridor.halfWidth+moonCorridor.crossingHalfWidth)/2,
+ width:moonCorridor.halfWidth-moonCorridor.crossingHalfWidth,
+}));
 export const moonCrater={x:0,z:-22,radius:8.5};
 export const moonStairs:Stairway[]=original.rooms.map(room=>({
  building:room.id,width:2.8,start:{x:room.x+Math.sign(room.x)*5.4,z:-9,y:0},
@@ -32,7 +36,10 @@ export const moonExteriorAirlocks=[
  ...original.rooms.flatMap(room=>[-1,1].map(side=>wall(room.id+' exterior hatch '+side,room.x,side*room.depth/2,6,.28,0,4.4))),
  ...moonShelters.map(room=>wall(room.id+' exterior hatch',room.x,room.z-Math.sign(room.z)*3.4,2.8,.24,0,2.95)),
 ];
-export const moonAirlocks=[...corridorAirlocks,...moonExteriorAirlocks];
+export const moonAirlocks=[
+ ...corridorAirlocks,...moonExteriorAirlocks,
+ ...[-1,1].map(side=>wall('moon-crossing-airlock-'+side,side*(moonCorridor.crossingHalfWidth+.25),11,.28,4.2,0,3.18)),
+];
 const shelterWalls=moonShelters.flatMap(b=>{
  const entrance=b.z<0?1:-1,z=b.z+entrance*3.4;
  return [
@@ -50,9 +57,11 @@ export const moonLayout={...original,width:140,depth:112,rooms:[...original.room
  ...original.rooms.map(room=>wall(room.id+' sealed outer wall',room.x+Math.sign(room.x)*room.width/2,room.z,.5,6,0,room.height)),
  ...original.solids.filter(s=>!facingWalls.includes(s)&&!(Math.abs(s.x)===19&&s.z===11)),
  ...apertures,
- wall('moon-link-south wall',0,8.75,44,.3,0,3.4),
- wall('moon-link-north wall',0,13.25,44,.3,0,3.4),
- wall('moon-link roof',0,11,44,4.8,3.18,3.4),
+ ...moonCorridorSections.flatMap(({x,width},i)=>[
+  wall(`moon-link-${i} south wall`,x,8.75,width,.3,0,3.4),
+  wall(`moon-link-${i} north wall`,x,13.25,width,.3,0,3.4),
+  wall(`moon-link-${i} roof`,x,11,width,4.8,3.18,3.4),
+ ]),
  ...[-1,1].flatMap(side=>[
   wall(`moon-crater-rim-${side}`,side*7.3,-22,2.8,7,0,1.45),
   wall(`moon-crater-shoulder-${side}`,side*4.6,-26.8,3.8,2.2,0,1.18),
@@ -61,7 +70,7 @@ export const moonLayout={...original,width:140,depth:112,rooms:[...original.room
 ]};
 
 export function moonCovered(p:Point){
- return Math.abs(p.x)<moonCorridor.halfWidth&&Math.abs(p.z-moonCorridor.z)<moonCorridor.halfDepth&&(p.y??0)<moonCorridor.height;
+ return Math.abs(p.x)>moonCorridor.crossingHalfWidth+.25&&Math.abs(p.x)<moonCorridor.halfWidth&&Math.abs(p.z-moonCorridor.z)<moonCorridor.halfDepth&&(p.y??0)<moonCorridor.height;
 }
 
 export function moonMaskRacks(seed:number){

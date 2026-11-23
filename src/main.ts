@@ -542,12 +542,13 @@ async function start() {
     document.querySelector('#duel-health')!.textContent=duel.mode==='survival'?`체력 ${duel.playerHealth} · 생명 ${duel.lives}`:duel.mode==='ffa'?`내 체력 ${duel.playerHealth} · 목표 10킬`:`내 체력 ${duel.playerHealth} · 봇 체력 ${duel.botHealth}`;
     document.querySelector<HTMLProgressElement>('#player-health')!.value=duel.playerHealth;
     document.querySelector('#duel-hud')!.classList.toggle('critical',duel.playerHealth<=25);
+    const oxygenDepleted=selectedMap==='moon'&&world.oxygenLevel()<=0;
     if(duel.damageVersion>previousDamage){damageTime=0.35;}
     previousDamage=duel.damageVersion;
     document.querySelectorAll<HTMLElement>('#health-segments i').forEach((part,i)=>part.classList.toggle('lost',duel.playerHealth<=(i*25)));
     const incoming=Math.atan2(duel.position.x-position.x,duel.position.z-position.z)-input.look.yaw;
     (document.querySelector('#damage-direction') as HTMLElement).style.transform=`rotate(${incoming}rad)`;
-    document.querySelector<HTMLElement>('#damage-overlay')!.style.opacity=String(duel.active?Math.min(0.7,damageTime*2):0);
+    document.querySelector<HTMLElement>('#damage-overlay')!.style.opacity=String(duel.active?Math.min(oxygenDepleted?.12:.7,damageTime*2):0);
     const status=document.querySelector('#duel-status')!;
     status.classList.toggle('incoming',!!duel.locked);
     document.querySelector('#duel-status')!.textContent=duel.winner?(duel.winner==='player'?'승리!':duel.mode==='ffa'?`${duel.winnerName} 승리 · 패배`:'패배')+' · 다시 시작으로 재경기':duel.playerDead>0?`쓰러졌습니다 · ${Math.ceil(duel.playerDead)}초 후 부활`:duel.botDead>0?`봇 처치 · ${Math.ceil(duel.botDead)}초 후 상대 부활`:duel.locked?'발사 임박! 옆으로 이동하세요':duel.aim>0?'상대가 조준 중 · 엄폐하세요':'벽과 건물로 몸을 숨기세요';
@@ -556,7 +557,7 @@ async function start() {
       const spawnWait=Math.ceil(Math.min(3,...duel.bots.filter(b=>b.health===0).map(b=>b.dead)));
       status.textContent=duel.phase==='won'?'생존 성공! 모든 웨이브 클리어 · 다시 시작':duel.phase==='lost'?'생명을 모두 잃었습니다 · 다시 시작':duel.phase==='preparing'?`준비 ${Math.ceil(duel.prepareRemaining)}초 · 이번 웨이브 적 ${duel.total}명`:duel.phase==='respawning'?`${Math.ceil(duel.playerDead)}초 후 현재 웨이브 재도전 · 생명 ${duel.lives}`:reinforcing?`증원 ${spawnWait}초 · 남은 적 ${duel.remaining}명`:`${duel.locked?'발사 임박! · ':''}남은 적 ${duel.remaining}명 · 현재 ${alive}명 출현`;
     }
-    document.body.classList.toggle('player-hurt',duel.active&&duel.playerHealth>0&&duel.playerHealth<=50);
+    document.body.classList.toggle('player-hurt',duel.active&&!oxygenDepleted&&duel.playerHealth>0&&duel.playerHealth<=50);
     document.querySelector<HTMLButtonElement>('#reset')!.disabled=duel.active;
     const blocked=duel.active&&(duel.playerHealth===0||!!duel.winner);
     document.querySelector<HTMLButtonElement>('#fire')!.disabled=blocked;

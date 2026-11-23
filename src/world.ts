@@ -235,7 +235,7 @@ function jumpGravityAt(p:Point){
 function beginJumpAt(p:Point,state:JumpState){
  if(map!=='moon')return beginJump(state);
  const gravity=jumpGravityAt(p);
- return beginJump(state,gravity===LUNAR_GRAVITY?2.6:Math.sqrt(2*gravity));
+ return beginJump(state,gravity===LUNAR_GRAVITY?1.7:Math.sqrt(2*gravity));
 }
 const automaticDoors=map==='moon'?moonAirlocks:[];
 function updateAutomaticDoors(doors:Doors,actors:readonly Point[]){

@@ -872,8 +872,8 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
      eclipseRing.setEnabled(darkness>.05);
      eclipseRing.visibility=darkness;
      const sheltered=geometry.hasLunarOxygen({...p,y:(p.y??0)+jumpState.height});
-     sky.intensity=.55-darkness*(sheltered?.04:.18);
-     moon.intensity=1.2-darkness*(sheltered?.26:1.03);
+     sky.intensity=.55-darkness*(sheltered?.025:.07);
+     moon.intensity=1.2-darkness*(sheltered?.18:.46);
     }
     snowfall?.update(p,snowfallEnabled&&(!proceduralArt||!lowPerformance)&&(!paused||onlineFrame)&&!preview&&!reference&&!weatherSheltered,look.yaw);
     launcher.setEnabled(weaponId==='bazooka');launcherRim.setEnabled(weaponId==='bazooka');muzzle.setEnabled(weaponId!=='bazooka');muzzleInset.setEnabled(weaponId!=='bazooka');

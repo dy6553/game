@@ -1,4 +1,4 @@
-import {moonCorridor,moonCrater,moonShelters,moonMaskRacks,moonExteriorAirlocks} from './moon-layout.ts';
+import {moonCorridor,moonCorridorSections,moonCrater,moonShelters,moonMaskRacks,moonExteriorAirlocks} from './moon-layout.ts';
 import {snowShells,snowShellIds,snowEntryGalleries} from './igloo-layout.ts';
 import type {Scene} from '@babylonjs/core/scene.js';
 import {Mesh} from '@babylonjs/core/Meshes/mesh.js';
@@ -223,15 +223,18 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
     for(const [i,tint] of ['#64dcda','#eebd77','#9ba7ed'].entries()){
      const slot=z+(i-1)*.49;
      box(x-side*.16,1.48,slot,.18,.29,.28,tint);
-     box(x-side*.24,1.44,slot,.08,.095,.14,'#344c5a');
+     if(profile.details>0)box(x-side*.24,1.44,slot,.08,.095,.14,'#344c5a');
     }
    }
-   const {z,halfWidth}=moonCorridor;
-   box(0,.018,z,halfWidth*2,.025,4.12,'#576574');
-   for(const side of [-1,1]){
-    box(0,3.09,z+side*1.75,halfWidth*2,.04,.14,'#78c9ed',1);
-    box(0,.038,z+side*1.8,halfWidth*2,.012,.11,'#82bdd6',1);
+   const {z,crossingHalfWidth}=moonCorridor;
+   for(const {x,width} of moonCorridorSections){
+    box(x,.018,z,width,.025,4.12,'#576574');
+    for(const side of [-1,1]){
+     box(x,3.09,z+side*1.75,width,.04,.14,'#78c9ed',1);
+     box(x,.038,z+side*1.8,width,.012,.11,'#82bdd6',1);
+    }
    }
+   for(const side of [-1,1])box(side*(crossingHalfWidth-.5),.018,z,.13,.022,7,'#e2b577');
    for(const room of [hab,ops]){
     const trim=room===hab?'#ffd491':'#78c9ed';
     for(const side of [-1,1])box(room.x+side*7.5,5.93,8.45,.19,.05,11.7,trim,1);

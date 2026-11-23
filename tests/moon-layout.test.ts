@@ -68,7 +68,7 @@ test('airlock artwork agrees with collision, including a full traversal between 
    p=scene.move(p,{x:-.25,z:0});
   }
   assert.ok(p.x < -29,JSON.stringify(p));
-  assert.match(navigationLocation(world,{x:0,z}).label,/연결 통로/);
+  assert.match(navigationLocation(world,{x:8,z}).label,/연결 통로/);
   assert.equal(scene.doorState()['moon-airlock-1'],false);
   scene.update({x:21,z},.25);
   assert.equal(shoot()?.hit,false);
@@ -84,7 +84,7 @@ test('scene and shared online motion rise and land at Earth and lunar rates',()=
  try{
   for(const [point,gravity,maxHeight] of [
    [{x:31,z:0},9.81,1],
-      [{x:0,z:-8},1.62,2.6**2/(2*1.62)],
+      [{x:0,z:-8},1.62,1.7**2/(2*1.62)],
   ] as const){
    const p={...point},dt=.01;
    const launch=Math.sqrt(2*gravity*maxHeight),apex=launch/gravity;
@@ -159,6 +159,7 @@ test('the eclipse clock warns, darkens the surface, and stays synchronized with 
    scene.renderOnline(game.state,player.id,{yaw:0,pitch:0},.05);
    assert.equal(scene.eclipseState()?.warning,warning);
    assert.equal(scene.eclipseState()?.active,active);
+   assert.ok(scene.scene.getLightByName('moon')!.intensity>=.7,'outdoor eclipse retains direct illumination');
    assert.equal(scene.scene.getMeshByName('eclipse-solar-corona')?.isEnabled(),active);
   }
  }finally{scene.scene.dispose();engine.dispose();}
@@ -237,9 +238,18 @@ test('exterior airlocks block shots until approached and moon ceilings stop jump
  assert.equal(ray(),null);
  world.updateAutomaticDoors(doors,[]);
  assert.ok(ray());
- const point={x:0,z:moonCorridor.z};
+ const point={x:8,z:moonCorridor.z};
  let jump=world.beginJumpAt(point,createJump()),peak=0;
  for(let i=0;i<100;i++){jump=world.advanceJumpOnTerrain(point,jump,.01).jump;peak=Math.max(peak,jump.height);}
  assert.ok(peak>.6&&peak<=.68001);
  assert.deepEqual(jump,createJump());
+});
+
+test('the center plaza can be crossed without jumping through the link walls',()=>{
+ const world=createWorld('moon'),doors=world.createDoors();
+ let p={x:0,z:5};
+ for(let i=0;i<60;i++)p=world.moveWithCollisions(p,{x:0,z:.25},world.worldSolids(doors));
+ assert.ok(p.z>19);
+ assert.equal(world.hasLunarOxygen({x:0,z:moonCorridor.z}),false);
+ assert.equal(world.hasLunarOxygen({x:8,z:moonCorridor.z}),true);
 });
