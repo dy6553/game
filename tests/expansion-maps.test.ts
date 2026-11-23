@@ -17,7 +17,9 @@ for(const [map,width,depth] of [['snow',160,120],['moon',140,112]] as const){
   assert.equal(world.PROTOTYPE.maxZ,depth/2);
   assert.ok(!world.canStand({x:width/2,z:0},.55));
   const room=world.BUILDINGS[0]!;
-  assert.ok(world.canStand({x:room.x,z:room.z-room.depth/2},.55,world.worldSolids(world.createDoors())));
+  const entrance={x:room.x,z:room.z-room.depth/2},doors=world.createDoors();
+  world.updateAutomaticDoors(doors,[entrance]);
+  assert.ok(world.canStand(entrance,.55,world.worldSolids(doors)));
   assert.ok(!world.canStand({x:room.x+room.width/2,z:room.z+5},.55,world.worldSolids()));
   assert.equal(world.stairways(room).length,map==='moon'?1:0);
   for(const pickup of createMatchPickups(world,()=>.25))assert.ok(world.canStand(pickup,1,world.worldSolids()));

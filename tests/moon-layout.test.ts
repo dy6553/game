@@ -84,8 +84,7 @@ test('scene and shared online motion rise and land at Earth and lunar rates',()=
  try{
   for(const [point,gravity,maxHeight] of [
    [{x:31,z:0},9.81,1],
-   [{x:0,z:moonCorridor.z},9.81,1],
-   [{x:0,z:-8},1.62,1.3],
+      [{x:0,z:-8},1.62,2.6**2/(2*1.62)],
   ] as const){
    const p={...point},dt=.01;
    const launch=Math.sqrt(2*gravity*maxHeight),apex=launch/gravity;
@@ -93,7 +92,7 @@ test('scene and shared online motion rise and land at Earth and lunar rates',()=
    let peak=0,landing=0;
    scene.update(p,0);
    assert.equal(scene.jump(p),true);
-   for(let tick=1;tick<=300;tick++){
+   for(let tick=1;tick<=360;tick++){
     player={...player,...advancePlayerMotion(player,{...command,jump:tick===1},dt,world.createDoors(),world)};
     scene.update(p,dt);
     const t=tick*dt,expected=Math.max(0,launch*t-gravity*t*t/2);
@@ -166,14 +165,14 @@ test('the eclipse clock warns, darkens the surface, and stays synchronized with 
 });
 
 test('four refill shelters have walkable entrances and keep vacuum outdoors',()=>{
- const world=createWorld('moon'),solids=world.worldSolids(world.createDoors());
+ const world=createWorld('moon'),doors=world.createDoors();
  const shelters=world.BUILDINGS.filter(b=>b.id.startsWith('moon-shelter-'));
  assert.equal(shelters.length,4);
  for(const b of shelters){
   const side=b.z<0?1:-1;
   let point={x:b.x,z:b.z+side*5};
   assert.equal(world.hasLunarOxygen(point),false);
-  for(let i=0;i<25;i++)point=world.moveWithCollisions(point,{x:0,z:-side*.2},solids);
+  for(let i=0;i<25;i++){world.updateAutomaticDoors(doors,[point]);point=world.moveWithCollisions(point,{x:0,z:-side*.2},world.worldSolids(doors));}
   assert.ok(Math.abs(b.z-point.z)<.01);
   assert.equal(world.hasLunarOxygen(point),true);
   assert.equal(world.hasLunarOxygen({...point,y:b.height+.5}),false);
@@ -227,4 +226,20 @@ test('match seeds choose multiple wall racks in every building',()=>{
  assert.deepEqual(layout(101).map(racks=>racks.length),[3,3,2,2,2,2]);
  assert.deepEqual(layout(101),layout(101));
  assert.notDeepEqual(layout(101),layout(501));
+});
+
+test('exterior airlocks block shots until approached and moon ceilings stop jumps',()=>{
+ const world=createWorld('moon'),doors=world.createDoors(),room=world.BUILDINGS[0]!;
+ const z=-room.depth/2;
+ const ray=()=>firstShotBox(world,doors,{x:room.x,y:1,z:z-3},{x:room.x,y:1,z:z+2});
+ assert.ok(ray());
+ world.updateAutomaticDoors(doors,[{x:room.x,z:z-2}]);
+ assert.equal(ray(),null);
+ world.updateAutomaticDoors(doors,[]);
+ assert.ok(ray());
+ const point={x:0,z:moonCorridor.z};
+ let jump=world.beginJumpAt(point,createJump()),peak=0;
+ for(let i=0;i<100;i++){jump=world.advanceJumpOnTerrain(point,jump,.01).jump;peak=Math.max(peak,jump.height);}
+ assert.ok(peak>.6&&peak<=.68001);
+ assert.deepEqual(jump,createJump());
 });

@@ -71,6 +71,7 @@ if(map==='factory')COVERS.splice(0,COVERS.length,
  ]));
 if(expansion)COVERS.splice(0,COVERS.length,...expansion.solids.filter(r=>!expansion.rooms.some(b=>r.id.startsWith(b.id))).map(r=>({...r,height:r.yMax})));
 const SOLIDS: Rect[] = expansion?[...expansion.solids,...expansion.rooms.filter(()=>map!=='snow').map(b=>({id:b.id+' roof',x:b.x,z:b.z,width:b.width+1.1,depth:b.depth+1.1,yMin:b.height,yMax:b.height+.44}))]:[...BUILDINGS.flatMap(b=>b.enterable?[...buildingWalls(b),...interiorFurniture(b)]:[b]), ...COVERS];
+const moonCeilings=map==='moon'?[...SOLIDS.filter(r=>r.id.endsWith(' roof')||r.id.includes('lintel')),...moonUpperFloors]:[];
 const collisionCellSize=8;
 const emptyCollisionCell:readonly Rect[]=[];
 let openSolids:readonly Rect[]|undefined;
@@ -180,6 +181,14 @@ function stairSupport(building:Building,p:Point,ceiling:number){
 }
 function advanceJumpOnTerrain(p:Point,state:JumpState,dt:number){
  const gravity=jumpGravityAt(p),jump=advanceJump(state,dt,gravity),base=p.y??0;
+ if(map==='moon'&&state.velocity>0&&jump.height>state.height){
+  const body=stanceStats(p.stance).height,top=base+state.height+body;
+  let clearance=Infinity;
+  for(const ceiling of moonCeilings){
+   if(ceiling.yMin!>=top-.02&&circleOverlapsRect(p,PROTOTYPE.radius,ceiling))clearance=Math.min(clearance,ceiling.yMin!-base-body);
+  }
+  if(jump.height>clearance)return {position:p,jump:{height:Math.max(0,clearance),velocity:0}};
+ }
  if(state.height>0&&jump.velocity<=0&&jump.height<state.height){
   let floor=base;
   for(const building of ENTERABLE_BUILDINGS){
@@ -225,14 +234,18 @@ function jumpGravityAt(p:Point){
 }
 function beginJumpAt(p:Point,state:JumpState){
  if(map!=='moon')return beginJump(state);
- const gravity=jumpGravityAt(p),targetHeight=gravity===LUNAR_GRAVITY?1.3:1;
- return beginJump(state,Math.sqrt(2*gravity*targetHeight));
+ const gravity=jumpGravityAt(p);
+ return beginJump(state,gravity===LUNAR_GRAVITY?2.6:Math.sqrt(2*gravity));
 }
 const automaticDoors=map==='moon'?moonAirlocks:[];
 function updateAutomaticDoors(doors:Doors,actors:readonly Point[]){
  for(const door of automaticDoors){
   const reach=doors[door.id]?3.7:3;
-  doors[door.id]=actors.some(p=>(p.y??0)<door.yMax!&&Math.abs(p.z-door.z)<door.depth/2+.65&&Math.abs(p.x-door.x)<reach);
+  const acrossX=door.width>door.depth;
+  doors[door.id]=actors.some(p=>{
+   const dx=Math.abs(p.x-door.x),dz=Math.abs(p.z-door.z);
+   return (p.y??0)<door.yMax!&&(acrossX?dx<door.width/2+.65&&dz<reach:dz<door.depth/2+.65&&dx<reach);
+  });
  }
 }
 function createDoors():Doors{return map==='moon'?Object.fromEntries(automaticDoors.map(d=>[d.id,false])):expansion?{}:Object.fromEntries(ENTERABLE_BUILDINGS.map(b=>[b.id,false]));}
@@ -243,6 +256,10 @@ function worldSolids(doors?:Doors):Rect[]{
   const cached=solidCache.get(key);if(cached)return cached;
   const ramps=moonStairs.map(s=>({id:s.building+'-stair-volume',x:s.start.x,z:(s.start.z+s.end.z)/2,width:s.width,depth:Math.abs(s.end.z-s.start.z),yMin:0,yMax:s.end.y,slope:s}));
   const result=[...SOLIDS,...ramps,...(doors?automaticDoors.filter(d=>!doors[d.id]):[])];
+  if(solidCache.size>=64){
+   const oldest=[...solidCache.keys()].find(value=>value!=='open');
+   if(oldest)solidCache.delete(oldest);
+  }
   solidCache.set(key,result);if(!doors)openSolids=result;return result;
  }
  if(expansion){openSolids=SOLIDS;return SOLIDS;}

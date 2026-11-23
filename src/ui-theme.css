@@ -134,3 +134,8 @@ body.at-home #weather-notice,body.results-open #weather-notice,.comparing #weath
 #oxygen-mask-controls:not([hidden]){display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;pointer-events:auto}
 #oxygen-mask-controls button{font-size:10px;line-height:1.2;padding:4px 5px;min-height:27px;touch-action:manipulation}
 #oxygen-mask-controls button:disabled{opacity:.55}
+
+#oxygen-panel{margin-top:6px;border-top:1px solid #78a7ae66;padding-top:5px}
+.oxygen-readout{display:flex;align-items:baseline;justify-content:space-between;color:#bdf4f1;font-size:11px}
+#oxygen-percent{font-size:17px;color:#d8fff9;font-variant-numeric:tabular-nums}
+#combat-vitals #oxygen-bar{height:5px;accent-color:#67d9e7;margin:2px 0}

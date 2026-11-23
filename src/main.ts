@@ -632,6 +632,21 @@ async function start() {
     const card=document.querySelector<HTMLElement>('#target-vitals')!;if(!active){card.hidden=true;nameplates.clear();document.querySelector<HTMLElement>('#match-roster')!.hidden=true;return;}if(now-combatHudAt<100)return;combatHudAt=now;
     const reticle=world.aimReticle();crosshair.style.left=reticle.x+'%';crosshair.style.top=reticle.y+'%';
     const battle=world.duelState(),me=onlineActive?onlineState?.players.find(p=>p.id===onlineId):undefined,health=me?.health??(battle.active?battle.playerHealth:readGear().health),p=me?{...me,y:(me.y??0)+me.jump.height}:{...position,y:(position.y??0)+(world.practiceState().jumpHeight??0)},geometry=world.geometry??harborWorld,doors=(onlineActive?onlineState?.doors:world.doorState?.())??{};
+    const oxygenLabel=document.querySelector<HTMLElement>('#oxygen-status')!,lunar=(onlineActive?onlineState?.map??selectedMap:selectedMap)==='moon';
+    document.querySelector<HTMLElement>('#oxygen-panel')!.hidden=!lunar;if(!lunar)maskControls.hidden=true;
+    if(lunar){
+      const oxygen=me?.oxygen??world.oxygenLevel(),refill=geometry.hasLunarOxygen(p);
+      const mask=me?me.oxygenMask:world.oxygenMaskState(),remaining=Math.ceil(mask?.remaining??0);
+      const text=`${refill?'충전':oxygen<=0&&!remaining?'고갈':oxygen<=20&&!remaining?'부족':'실외'} · ${remaining?`마스크 ${remaining}초`:mask?.id?(mask.worn?'빈 마스크':`${oxygenMasks[mask.id].label} 미착용`):'마스크 없음'}`;
+      const take=!mask?.id&&world.nearMaskRack(p,onlineActive?onlineState?.weatherSeed:undefined),wear=!!mask?.id&&!mask.worn,discard=!!mask?.id&&!!mask.worn&&!remaining;
+      maskControls.hidden=health<=0||!(take||wear||discard);
+      for(const button of maskButtons)button.hidden=!take;
+      wearMaskButton.hidden=!wear;discardMaskButton.hidden=!discard;
+      if(oxygenLabel.textContent!==text)oxygenLabel.textContent=text;
+      document.querySelector<HTMLElement>('#oxygen-percent')!.textContent=Math.ceil(oxygen)+'%';
+      document.querySelector<HTMLProgressElement>('#oxygen-bar')!.value=oxygen;
+      oxygenLabel.classList.toggle('critical',oxygen<=20);
+    }
     document.querySelector('#combat-hp')!.textContent=String(Math.ceil(health));document.querySelector<HTMLProgressElement>('#combat-hp-bar')!.value=health;document.querySelector('#combat-vitals')!.classList.toggle('critical',health<=25);
     document.querySelector('#combat-life')!.textContent=health===0?'쓰러짐 · 부활 대기':(me?.protection??battle.protection??0)>0?'부활 보호 중':battle.active&&battle.mode==='survival'?`남은 생명 ${battle.lives}`:'피격 시 엄폐 · H 회복';
     let actors:Contact[]=[];
@@ -652,19 +667,6 @@ async function start() {
       bar.value=target.health;
     }
     const navigation=navigationLocation(geometry,me??position),locationLabel=document.querySelector<HTMLElement>('#map-location')!;if(locationLabel.textContent!==navigation.label)locationLabel.textContent=navigation.label;locationLabel.style.borderColor=navigation.color;
-    const oxygenLabel=document.querySelector<HTMLElement>('#oxygen-status')!,lunar=selectedMap==='moon';
-    oxygenLabel.hidden=!lunar;if(!lunar)maskControls.hidden=true;
-    if(lunar){
-      const oxygen=me?.oxygen??world.oxygenLevel(),refill=geometry.hasLunarOxygen(p);
-      const mask=me?me.oxygenMask:world.oxygenMaskState(),remaining=Math.ceil(mask?.remaining??0);
-      const text=`산소 ${Math.ceil(oxygen)}% · ${refill?'충전':oxygen<=0&&!remaining?'고갈':oxygen<=20&&!remaining?'부족':'실외'} · ${remaining?`마스크 ${remaining}초`:mask?.id?(mask.worn?'빈 마스크':`${oxygenMasks[mask.id].label} 미착용`):'마스크 없음'}`;
-      const take=!mask?.id&&world.nearMaskRack(p,onlineActive?onlineState?.weatherSeed:undefined),wear=!!mask?.id&&!mask.worn,discard=!!mask?.id&&!!mask.worn&&!remaining;
-      maskControls.hidden=health<=0||!(take||wear||discard);
-      for(const button of maskButtons)button.hidden=!take;
-      wearMaskButton.hidden=!wear;discardMaskButton.hidden=!discard;
-      if(oxygenLabel.textContent!==text)oxygenLabel.textContent=text;
-      oxygenLabel.classList.toggle('critical',oxygen<=20);
-    }
     const eclipse=world.eclipseState(),weather=world.weatherState(),weatherLabel=document.querySelector<HTMLElement>('#weather-status')!;
     const weatherText=eclipse?(eclipse.warning?`일식까지 ${eclipse.warning}초`:eclipse.active?`일식 · ${Math.ceil(eclipse.endsIn)}초 남음`:'달 기지 · 맑음'):weather?.intensity&&world.isWeatherSheltered()?'실내 · 폭설 차단':weatherMessage(weather);
     weatherLabel.hidden=!weather&&!eclipse;

@@ -579,10 +579,12 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
     collider.visibility=0;
     collider.isPickable=!doors[door.id];
     collider.freezeWorldMatrix();
+    const acrossX=door.width>door.depth;
     const panels=[-1,1].map(side=>{
-      const panel=box(door.id+'-panel-'+side,door.x,door.yMax!/2,door.z+side*door.depth/4,door.width,door.yMax!,door.depth/2-.035,metal);
+      const width=acrossX?door.width/2-.035:door.width,depth=acrossX?door.depth:door.depth/2-.035;
+      const panel=box(door.id+'-panel-'+side,door.x+(acrossX?side*door.width/4:0),door.yMax!/2,door.z+(acrossX?0:side*door.depth/4),width,door.yMax!,depth,metal);
       panel.isPickable=false;
-      const stripe=box(door.id+'-stripe-'+side,0,0,0,door.width+.016,.11,door.depth/2-.035,accent);
+      const stripe=box(door.id+'-stripe-'+side,0,0,0,width+.016,.11,depth+.016,accent);
       stripe.parent=panel;
       return panel;
     });

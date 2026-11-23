@@ -1,4 +1,4 @@
-import {moonCorridor,moonCrater,moonShelters,moonMaskRacks} from './moon-layout.ts';
+import {moonCorridor,moonCrater,moonShelters,moonMaskRacks,moonExteriorAirlocks} from './moon-layout.ts';
 import {snowShells,snowShellIds,snowEntryGalleries} from './igloo-layout.ts';
 import type {Scene} from '@babylonjs/core/scene.js';
 import {Mesh} from '@babylonjs/core/Meshes/mesh.js';
@@ -186,6 +186,29 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
    const hab=world.BUILDINGS[0]!,ops=world.BUILDINGS[1]!;
    cylinder(moonCrater.x,.002,moonCrater.z,moonCrater.radius,.019,'#444550');
    cylinder(0,.013,0,9.2,.014,'#4d5965');
+   for(const room of world.BUILDINGS){
+    const w=room.width,d=room.depth,main=room.height>4;
+    const endCladding=VertexData.CreateCylinder({diameterBottom:1,diameterTop:.81,height:.70,tessellation:4});
+    add(endCladding,room.x,room.height+.77,room.z,'#b4c3ce',0,Math.PI/4,0,0,new Vector3(w*Math.SQRT2,1,d*Math.SQRT2));
+    for(const direction of [-1,1]){
+     const x=room.x+direction*(w/2+.28);
+     for(const fraction of [-.34,.34]){
+      const z=room.z+fraction*d;
+      box(x,room.height/2,z,.68,room.height+.1,.55,'#596d7d');
+      if(profile.details>0)box(x,.21,z,1.12,.42,1.15,'#364754');
+     }
+     box(room.x+direction*(w/2-.85),room.height-.05,room.z,.16,.08,d*.72,'#b1daf0',1);
+     if(main)box(room.x+direction*(w/2-1.15),3.18,8.4,.13,.07,11.5,'#93c2df',1);
+    }
+   }
+   for(const hatch of moonExteriorAirlocks){
+    const h=hatch.yMax!,w=hatch.width;
+    for(const side of [-1,1]){
+     box(hatch.x+side*(w/2+.13),h/2,hatch.z,.3,h,.67,'#4a6070');
+     box(hatch.x+side*(w/2+.14),h*.76,hatch.z,.12,.56,.71,'#61dfcf',1);
+    }
+    box(hatch.x,h+.12,hatch.z,w+.56,.24,.69,'#516777');
+   }
    for(const shelter of moonShelters){
     const direction=shelter.z<0?1:-1;
     const entrance=shelter.z+direction*3.55;
