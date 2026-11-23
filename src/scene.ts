@@ -591,14 +591,14 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
       stripe.parent=panel;
       return panel;
     });
-    const lamp=box(door.id+'-indicator',door.x,door.yMax!+.09,door.z,acrossX?.84:.34,.11,acrossX?.34:.84,closedHatchLamp);
-    return {door,collider,panels,lamp,mid,height,open:0};
+    const lamps=[-1,1].map(side=>box(door.id+'-indicator-'+side,door.x+(acrossX?0:side*.37),door.yMax!+.09,door.z+(acrossX?side*.37:0),acrossX?.84:.08,.11,acrossX?.08:.84,closedHatchLamp));
+    return {door,collider,panels,lamps,mid,height,open:0};
   });
   function updateAirlockArt(dt:number){
     for(const rig of airlockPanels){
       const open=!!doors[rig.door.id];
       rig.collider.isPickable=!open;
-      rig.lamp.material=open?openHatchLamp:closedHatchLamp;
+      for(const lamp of rig.lamps)lamp.material=open?openHatchLamp:closedHatchLamp;
       rig.open=open?Math.min(1,rig.open+dt*5):Math.max(0,rig.open-dt*5);
       for(const panel of rig.panels){
         panel.setEnabled(rig.open<1);

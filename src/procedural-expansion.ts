@@ -200,6 +200,11 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
    cylinder(0,.013,0,9.2,.014,'#4d5965');
    for(const room of world.BUILDINGS){
     const w=room.width,d=room.depth,main=room.height>4;
+    box(room.x,room.height-.055,room.z,w-1.35,.045,d-1.35,'#526878',1);
+    if(profile.details>0)for(const section of [-.3,0,.3]){
+     box(room.x,room.height-.102,room.z+section*d,w-1.15,.05,.22,'#88a6b7',1);
+    }
+
     const endCladding=VertexData.CreateCylinder({diameterBottom:1,diameterTop:.81,height:.70,tessellation:4});
     add(endCladding,room.x,room.height+.77,room.z,'#b4c3ce',0,Math.PI/4,0,0,new Vector3(w*Math.SQRT2,1,d*Math.SQRT2));
     for(const direction of [-1,1]){
