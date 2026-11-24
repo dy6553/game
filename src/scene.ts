@@ -802,7 +802,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
         return unobstructed(geometry,doors,from,to);
       },(point,target)=>{
         if(!canSeeThroughWeather(point,target))return false;
-        if((point.y??0)>=3.35){const b=battleState(),actor=b.bots.find(a=>Math.hypot(a.position.x-point.x,a.position.z-point.z)<.1);botReveals.set(actor?.id??'bot-1',4);if(highShotNotices.length<8)highShotNotices.push('고층 사격 감지 · 미니맵에 4초간 표시');}
+        if((point.y??0)>=SECOND_FLOOR-.05){const b=battleState(),actor=b.bots.find(a=>Math.hypot(a.position.x-point.x,a.position.z-point.z)<.1);botReveals.set(actor?.id??'bot-1',4);if(highShotNotices.length<8)highShotNotices.push('고층 사격 감지 · 미니맵에 4초간 표시');}
         const start=new Vector3(point.x,1.8+(point.y??0),point.z),end=new Vector3(target.x,1.8+(target.y??0),target.z);
         const delta=end.subtract(start);
         const nearest=firstShotBox(geometry,doors,start,end);
@@ -905,7 +905,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
     if(!continued&&cooldown>1e-8)return {fired:false,hit:false,reason:'cooldown'};
     const attempt=tryFire(weapon);weapon=attempt.state;
     if(!attempt.fired)return {fired:false,hit:false,reason:attempt.reason};
-    if(aimOrigin.y-stanceStats(stance).eye-jumpState.height>=3.35&&highShotNotices.length<8)highShotNotices.push('고층 사격 · 내 위치가 4초간 노출됩니다');
+    if(aimOrigin.y-stanceStats(stance).eye-jumpState.height>=SECOND_FLOOR-.05&&highShotNotices.length<8)highShotNotices.push('고층 사격 · 내 위치가 4초간 노출됩니다');
     (survivalMode?survival:ffaMode?ffa:duel).playerFired();localActor.healing=0;shots++;recoil.fire(weaponId);if(!continued){cooldown=Math.max(0,spec.interval-(spec.automatic?(weapon.cadenceCarry??0):0));weapon=startBurst(weapon,spec);}
     if(weaponId==='bazooka'){
       frightenWildlife(animals,weatherSeconds,localActor,WILDLIFE_SHOT_RANGE,geometry,doors);
@@ -1035,7 +1035,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
     },
     targetContacts:()=>targets.map((t,i)=>({id:'target-'+i,name:'표적 '+(i+1),x:t.x,z:t.z,y:0,health:t.health})),
     gearState:()=>({meat:localMeat,gear:{...localActor.gear},health:localActor.health,flash:localActor.flash,healing:localActor.healing,cooldown:localActor.gearCooldown}),
-    useEquipment(kind:EquipmentId,p:Point,look:Look){if(preview||reference||battleState().winner)return false;Object.assign(localActor,{stance,jump:jumpState,x:p.x,y:p.y??0,z:p.z,yaw:look.yaw,pitch:look.pitch,health:battleState().playerHealth});const ok=useEquipment(localActor,kind,localProjectiles,++toolSequence);if(ok&&kind!=='medkit')if(aimOrigin.y-stanceStats(stance).eye-jumpState.height>=3.35&&highShotNotices.length<8)highShotNotices.push('고층 사격 · 내 위치가 4초간 노출됩니다');
+    useEquipment(kind:EquipmentId,p:Point,look:Look){if(preview||reference||battleState().winner)return false;Object.assign(localActor,{stance,jump:jumpState,x:p.x,y:p.y??0,z:p.z,yaw:look.yaw,pitch:look.pitch,health:battleState().playerHealth});const ok=useEquipment(localActor,kind,localProjectiles,++toolSequence);if(ok&&kind!=='medkit')if(aimOrigin.y-stanceStats(stance).eye-jumpState.height>=SECOND_FLOOR-.05&&highShotNotices.length<8)highShotNotices.push('고층 사격 · 내 위치가 4초간 노출됩니다');
     (survivalMode?survival:ffaMode?ffa:duel).playerFired();return ok;},
     setUpgradeTier(tier:number){upgradeTier=Number.isInteger(tier)?Math.max(0,Math.min(3,tier)):0;spec=localSpec(weaponId);},
     doorState:()=>doors,

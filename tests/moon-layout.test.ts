@@ -16,23 +16,38 @@ import {navigationLocation} from '../src/wayfinding.ts';
 
 test('both interior ramps reach a supported second floor with a view of the landing area',()=>{
  const world=createWorld('moon'),doors=world.createDoors();
+ assert.equal(world.SECOND_FLOOR,4.6);
  for(const room of world.BUILDINGS.slice(0,2)){
   const ramp=world.stairways(room)[0]!;
   let position={...ramp.start,z:ramp.start.z-.5};
   for(let step=0;step<110;step++){
+   world.updateAutomaticDoors(doors,[position]);
    position=world.moveWithCollisions(position,{x:0,z:.15},world.worldSolids(doors)) as typeof position;
    position=world.advanceFall(position,.02) as typeof position;
   }
   assert.equal(position.y,world.SECOND_FLOOR);
   assert.equal(navigationLocation(world,position).floor,'2F');
+  const landingDoor=world.automaticDoors.find(door=>door.id===room.id+' upper entrance')!;
+  assert.ok(position.z>landingDoor.z);
+  const beside={x:landingDoor.x,z:landingDoor.z-.8},upperY=world.SECOND_FLOOR;
+  const shot=()=>firstShotBox(world,doors,{...beside,y:upperY+1.2},{x:beside.x,y:upperY+1.2,z:landingDoor.z+.8});
+  world.updateAutomaticDoors(doors,[beside]);
+  assert.equal(doors[landingDoor.id],false);
+  assert.ok(shot());
+  world.updateAutomaticDoors(doors,[{...beside,y:upperY}]);
+  assert.equal(doors[landingDoor.id],true);
+  assert.equal(shot(),null);
+  world.updateAutomaticDoors(doors,[{...beside,y:upperY,z:landingDoor.z+5}]);
+  assert.equal(doors[landingDoor.id],false);
+  assert.ok(shot());
   const side=Math.sign(room.x);
-  const observationShot=()=>firstShotBox(world,doors,{x:side*23,y:5.1,z:5.5},{x:side*9,y:4.7,z:4.5});
+  const observationShot=()=>firstShotBox(world,doors,{x:side*23,y:upperY+1.7,z:5.5},{x:side*9,y:upperY+1.3,z:4.5});
   world.updateAutomaticDoors(doors,[{x:side*23,y:0,z:5.5}]);
   assert.ok(observationShot());
   assert.equal(doors[room.id+' observation hatch'],false);
-  world.updateAutomaticDoors(doors,[{x:side*23,y:3.4,z:5.5}]);
+  world.updateAutomaticDoors(doors,[{x:side*23,y:upperY,z:5.5}]);
   assert.equal(observationShot(),null);
-  assert.ok(firstShotBox(world,doors,{x:side*23,y:3.75,z:5.5},{x:side*9,y:3.75,z:4.5}));
+  assert.ok(firstShotBox(world,doors,{x:side*23,y:upperY+.35,z:5.5},{x:side*9,y:upperY+.35,z:4.5}));
  }
 });
 

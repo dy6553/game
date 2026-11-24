@@ -275,8 +275,8 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
    for(const side of [-1,1])box(side*(crossingHalfWidth-.5),.018,z,.13,.022,7,'#e2b577');
    for(const room of [hab,ops]){
     const trim=room===hab?'#ffd491':'#78c9ed';
-    for(const side of [-1,1])box(room.x+side*7.5,5.93,8.45,.19,.05,11.7,trim,1);
-    box(room.x,3.42,2.28,16.8,.018,.17,trim,1);
+    for(const side of [-1,1])box(room.x+side*7.5,room.height-.07,8.45,.19,.05,11.7,trim,1);
+    box(room.x,world.SECOND_FLOOR+.02,2.28,16.8,.018,.17,trim,1);
     const side=Math.sign(room.x),stair=world.stairways(room)[0]!;
     const length=stair.end.z-stair.start.z;
     for(let i=0;i<7;i++){
@@ -285,10 +285,10 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
      const stairZ=stair.start.z+length*(step-.5)/32;
      box(stair.start.x,stairY+.016,stairZ,2.54,.012,.072,trim,1);
     }
-    label(room.x+side*3.9,4.7,2.1,5,0,0,1.2,.43);
-    box(room.x-side*1.4,4.475,10,2.72,.04,.82,'#2d5372');
+    label(room.x+side*3.9,world.SECOND_FLOOR+1.23,2.1,5,0,0,1.2,.43);
+    box(room.x-side*1.4,world.SECOND_FLOOR+1.075,10,2.72,.04,.82,'#2d5372');
     if(profile.details>0)for(const offset of [-.78,0,.78]){
-     box(room.x-side*1.4+offset,4.502,10,.54,.01,.34,'#62d7d7',1);
+     box(room.x-side*1.4+offset,world.SECOND_FLOOR+1.102,10,.54,.01,.34,'#62d7d7',1);
     }
 
    }
@@ -298,12 +298,12 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
     if(profile.details>0)for(let i=0;i<5;i++)box(side*(13+i*1.8),.024,0,.32,.008,2.5,warm);
     if(profile.details===2)for(let i=0;i<8;i++)box(side*(13+i*1.1),.024,2.2,.6,.008,.28,'#757d83',0,side*.28);
    }
-   cylinder(hab.x,6.9,0,6,.9,dark);dome(hab.x,7.35,0,5.7,'#dbe4e2');cylinder(hab.x,7.35,0,5.8,.13,accent);
-   cylinder(ops.x,7.8,0,.5,3,dark);
+   cylinder(hab.x,hab.height+.9,0,6,.9,dark);dome(hab.x,hab.height+1.35,0,5.7,'#dbe4e2');cylinder(hab.x,hab.height+1.35,0,5.8,.13,accent);
+   cylinder(ops.x,ops.height+1.8,0,.5,3,dark);
    const segments=profile.segments*2,rings=4,p:number[]=[],indices:number[]=[],uv:number[]=[];
    for(let j=0;j<=rings;j++)for(let i=0;i<=segments;i++){const r=j/rings*3.6,a=i/segments*Math.PI*2;p.push(Math.cos(a)*r,r*r*.095,Math.sin(a)*r);uv.push(i/segments,j/rings);}
-   for(let j=0;j<rings;j++)for(let i=0;i<segments;i++){const a=j*(segments+1)+i,b=a+1,c=a+segments+1;indices.push(a,b,c,b,c+1,c);}const v=new VertexData(),normals:number[]=[];VertexData.ComputeNormals(p,indices,normals);v.positions=p;v.indices=indices;v.normals=normals;v.uvs=uv;add(v,ops.x,9.3,0,'#b9ccd1',0,0,-.38);
-   box(ops.x,10.6,-.6,.1,2,.1,accent);box(ops.x,8.1,7,9,.14,3,'#2e5b75');
+   for(let j=0;j<rings;j++)for(let i=0;i<segments;i++){const a=j*(segments+1)+i,b=a+1,c=a+segments+1;indices.push(a,b,c,b,c+1,c);}const v=new VertexData(),normals:number[]=[];VertexData.ComputeNormals(p,indices,normals);v.positions=p;v.indices=indices;v.normals=normals;v.uvs=uv;add(v,ops.x,ops.height+3.3,0,'#b9ccd1',0,0,-.38);
+   box(ops.x,ops.height+4.6,-.6,.1,2,.1,accent);box(ops.x,ops.height+2.1,7,9,.14,3,'#2e5b75');
    // Rings and solar cells are thin surface details, not additional cover.
    for(let i=0;i<28;i++){const a=i/28*Math.PI*2;box(Math.sin(a)*9.2,.038,Math.cos(a)*9.2,.20,.02,1.18,warm,1,a);}
    label(0,.048,0,6,0,Math.PI/2);

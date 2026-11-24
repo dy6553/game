@@ -92,7 +92,14 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
  if(!saved&&options.waitingRoom)state.phase='waiting';state.map=mapId;state.mode=mode;state.capacity=mode==='duel'?2:20;state.teamScores??=[0,0];state.projectiles??=[];state.toolEvents??=[];state.pickups??=createMatchPickups(world);state.doors??=world.createDoors();
  if(mapId==='snow'){state.animals=createWildlife(state.animals);state.weatherTime??=0;state.weatherSeed??=newWeatherSeed();state.layoutRevision=SNOW_LAYOUT_REVISION;}
  if(mapId==='moon'){
-  if(saved&&saved.layoutRevision!==MOON_LAYOUT_REVISION)for(const p of state.players)p.oxygenMask=createOxygenMask();
+  if(saved?.layoutRevision==='moon-v10'){
+   for(const p of state.players)if(Math.abs((p.y??0)-3.4)<.05)p.y=world.SECOND_FLOOR;
+   for(const pickup of state.pickups)if(Math.abs((pickup.y??0)-3.4)<.05){
+    const raised={...pickup,y:world.SECOND_FLOOR};
+    if(world.canStand(raised,1,world.worldSolids()))pickup.y=raised.y;
+    else if(world.canStand({...pickup,y:0},1,world.worldSolids()))pickup.y=0;
+   }
+  }else if(saved&&saved.layoutRevision!==MOON_LAYOUT_REVISION)for(const p of state.players)p.oxygenMask=createOxygenMask();
   state.layoutRevision=MOON_LAYOUT_REVISION;
   state.weatherTime??=0;
   state.weatherSeed??=newWeatherSeed();
@@ -172,8 +179,8 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
         p.meat=(p.meat??0)+1;
       }
     }
-    if(sequence.due>0||((c.shot||(c.fire&&spec.automatic))&&p.cooldown<1e-8)){const attempt=tryFire(p.weapon);p.weapon=attempt.state;if(attempt.fired){if((p.y??0)>=3.35)p.revealedUntil=state.tick+80;p.healing=0;p.protection=0;if(!sequence.due){p.cooldown=Math.max(0,spec.interval-(spec.automatic?(p.weapon.cadenceCarry??0):0));p.weapon=startBurst(p.weapon,spec);}const origin=[p.x,(stanceStats(p.stance).eye-(p.character==='robot-cat'?.05:0))+(p.y??0)+p.jump.height,p.z];
-     if(p.weaponId==='bazooka'){launchRocket(p,state.projectiles!,id(),spec.damage);state.events.push({elevated:(p.y??0)>=3.35,id:id(),player:p.id,weapon:p.weaponId,from:{x:origin[0]!,y:origin[1]!,z:origin[2]!},to:{x:p.x+Math.sin(p.yaw)*2,y:origin[1]!-Math.sin(p.pitch)*2,z:p.z+Math.cos(p.yaw)*2},hit:false,killed:false});}else for(const offset of pelletOffsets(spec)){const sy=Math.sin(p.yaw),cy=Math.cos(p.yaw),sp=Math.sin(p.pitch),cp=Math.cos(p.pitch);let d=[sy*cp+cy*offset.x+sy*sp*offset.y,-sp+cp*offset.y,cy*cp-sy*offset.x+cy*sp*offset.y];const len=Math.hypot(...d);d=d.map(v=>v/len);const wall=wallDistance(origin,d,state.doors,world);let target:Player|undefined,range=wall;
+    if(sequence.due>0||((c.shot||(c.fire&&spec.automatic))&&p.cooldown<1e-8)){const attempt=tryFire(p.weapon);p.weapon=attempt.state;if(attempt.fired){if((p.y??0)>=world.SECOND_FLOOR-.05)p.revealedUntil=state.tick+80;p.healing=0;p.protection=0;if(!sequence.due){p.cooldown=Math.max(0,spec.interval-(spec.automatic?(p.weapon.cadenceCarry??0):0));p.weapon=startBurst(p.weapon,spec);}const origin=[p.x,(stanceStats(p.stance).eye-(p.character==='robot-cat'?.05:0))+(p.y??0)+p.jump.height,p.z];
+     if(p.weaponId==='bazooka'){launchRocket(p,state.projectiles!,id(),spec.damage);state.events.push({elevated:(p.y??0)>=world.SECOND_FLOOR-.05,id:id(),player:p.id,weapon:p.weaponId,from:{x:origin[0]!,y:origin[1]!,z:origin[2]!},to:{x:p.x+Math.sin(p.yaw)*2,y:origin[1]!-Math.sin(p.pitch)*2,z:p.z+Math.cos(p.yaw)*2},hit:false,killed:false});}else for(const offset of pelletOffsets(spec)){const sy=Math.sin(p.yaw),cy=Math.cos(p.yaw),sp=Math.sin(p.pitch),cp=Math.cos(p.pitch);let d=[sy*cp+cy*offset.x+sy*sp*offset.y,-sp+cp*offset.y,cy*cp-sy*offset.x+cy*sp*offset.y];const len=Math.hypot(...d);d=d.map(v=>v/len);const wall=wallDistance(origin,d,state.doors,world);let target:Player|undefined,range=wall;
       for(const foe of state.players){if(foe===p||foe.health<=0||!availablePlayer(foe))continue;const t=actorHit(origin,d,foe);if(t<range){range=t;target=foe;}}
       const from={x:origin[0]!,y:origin[1]!,z:origin[2]!};
       const direction={x:d[0]!,y:d[1]!,z:d[2]!};
@@ -185,7 +192,7 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
         state.events.push({id:id(),player:p.id,weapon:p.weaponId,from,to:{x:from.x+direction.x*range,y:from.y+direction.y*range,z:from.z+direction.z*range},target:'wildlife-'+animalHit.index,hit:true,killed:state.animals[animalHit.index]!.health===0});
         continue;
       }
-      const hit=!!target&&(target.protection??0)<=0&&(p.team===undefined||target.team!==p.team);const headDistance=target?actorHit(origin,d,target,true):Infinity;const headshot=!!hit&&headDistance<wall;const before=target?.deaths??0;if(hit)hurt(target!,rangedDamage(p.weaponId,spec.damage,range)*(headshot?1.5:1),p.id);state.events.push({elevated:(p.y??0)>=3.35,id:id(),player:p.id,weapon:p.weaponId,from:{x:origin[0]!,y:origin[1]!,z:origin[2]!},to:{x:origin[0]!+d[0]!*range,y:origin[1]!+d[1]!*range,z:origin[2]!+d[2]!*range},hit,killed:hit&&target!.deaths>before,target:target?.id,headshot,protected:!!target&&(target.protection??0)>0&&(p.team===undefined||target.team!==p.team)});if(state.winner)break;
+      const hit=!!target&&(target.protection??0)<=0&&(p.team===undefined||target.team!==p.team);const headDistance=target?actorHit(origin,d,target,true):Infinity;const headshot=!!hit&&headDistance<wall;const before=target?.deaths??0;if(hit)hurt(target!,rangedDamage(p.weaponId,spec.damage,range)*(headshot?1.5:1),p.id);state.events.push({elevated:(p.y??0)>=world.SECOND_FLOOR-.05,id:id(),player:p.id,weapon:p.weaponId,from:{x:origin[0]!,y:origin[1]!,z:origin[2]!},to:{x:origin[0]!+d[0]!*range,y:origin[1]!+d[1]!*range,z:origin[2]!+d[2]!*range},hit,killed:hit&&target!.deaths>before,target:target?.id,headshot,protected:!!target&&(target.protection??0)>0&&(p.team===undefined||target.team!==p.team)});if(state.winner)break;
      }
      frightenWildlife(state.animals,wildlifeTime,p,WILDLIFE_SHOT_RANGE,world,state.doors!);
     }}syncSlot(p.inventory,p.weapon,p.cooldown);c.door=undefined;c.shot=false;c.reload=false;c.jump=false;c.dash=false;c.slot=undefined;c.pickup=undefined;c.replace=undefined;c.equipment=undefined;c.eatMeat=undefined;c.oxygenMask=undefined;if(state.winner)break;

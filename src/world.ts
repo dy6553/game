@@ -1,4 +1,4 @@
-import {moonLayout,moonAirlocks,moonCovered,moonStairs,moonUpperFloors} from './moon-layout.ts';
+import {MOON_SECOND_FLOOR,moonLayout,moonAirlocks,moonCovered,moonStairs,moonUpperFloors} from './moon-layout.ts';
 import {iglooLayout,snowShelter} from './igloo-layout.ts';
 import {stanceStats,type Stance} from './stance.ts';
 import {advanceJump,beginJump,createJump,JUMP_TUNING,type JumpState} from './jump.ts';
@@ -144,7 +144,7 @@ function normalized(x: number, y: number): { x: number; y: number } {
   return length > 1 ? { x: x / length, y: y / length } : { x, y };
 }
 
-const SECOND_FLOOR=3.4;
+const SECOND_FLOOR=map==='moon'?MOON_SECOND_FLOOR:3.4;
 const FENCE_HEIGHT=.65;
 function hasBalcony(y:number){return !expansion&&(map==='factory'||Math.abs(y-SECOND_FLOOR)<.05);}
 function balcony(b:Building,y:number):Rect{return {id:b.id+'-balcony',x:b.x,z:b.z+(b.z<0?1:-1)*(b.depth/2+1),width:map==='harbor'&&hasBalcony(y)?b.width:DOOR_WIDTH,depth:3,yMin:y-.12,yMax:y};}
