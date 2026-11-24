@@ -1,3 +1,4 @@
+import {createLunarDust} from './surfaces.ts';
 import {moonCorridor,moonCorridorSections,moonCrater,moonShelters,moonMaskRacks,moonExteriorAirlocks} from './moon-layout.ts';
 import {snowShells,snowShellIds,snowEntryGalleries} from './igloo-layout.ts';
 import type {Scene} from '@babylonjs/core/scene.js';
@@ -46,6 +47,8 @@ const shellFaceKey=(points:readonly (readonly number[])[])=>points.map(p=>p.map(
 const shellFaceCounts=new Map<string,number>();
 for(const shell of snowShells)for(const face of SHELL_FACES){const key=shellFaceKey(face.map(i=>shell.vertices[i]!));shellFaceCounts.set(key,(shellFaceCounts.get(key)??0)+1);}
 
+const REGOLITH=4,BASALT=5;
+
 export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:World,shadows?:ShadowGenerator,rackSeed=1){
  let high=false,low=false,sheltered=false,root:TransformNode|undefined,owned:StandardMaterial[]=[],textures:RawTexture[]=[],meshes:Mesh[]=[],state:ProceduralMapState;
  const snow=map==='snow',bounds=world.PROTOTYPE;
@@ -60,6 +63,26 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
   const sky=new StandardMaterial('procedural-map-sky',scene);sky.disableLighting=true;sky.emissiveColor=Color3.White();sky.diffuseColor=Color3.White();sky.specularColor=Color3.Black();sky.backFaceCulling=false;
   const signs=new StandardMaterial('procedural-map-sign',scene);const atlas=signTexture(scene);signs.diffuseTexture=atlas;signs.emissiveTexture=atlas;signs.emissiveColor=new Color3(.3,.3,.3);signs.specularColor=Color3.Black();
   owned=[surface,glow,sky,signs];textures=[texture,atlas];
+  let lunarTextureBytes=0;
+  if(!snow){
+   const dust=createLunarDust(scene,profile.texture,quality==='high');
+   textures.push(dust.albedo);
+   if(dust.normal)textures.push(dust.normal);
+   lunarTextureBytes=dust.bytes;
+   for(const name of ['lunar-regolith','lunar-basalt']){
+    const material=new StandardMaterial(name,scene);
+    const rock=name==='lunar-basalt';
+    material.diffuseColor=rock?new Color3(.84,.86,.92):Color3.White();
+    material.specularColor=rock?new Color3(.025,.027,.03):Color3.Black();
+    material.specularPower=rock?18:64;
+    material.ambientColor=new Color3(.22,.22,.22);
+    material.emissiveColor=new Color3(.067,.073,.082);
+    material.maxSimultaneousLights=2;
+    material.diffuseTexture=dust.albedo;
+    material.bumpTexture=dust.normal;
+    owned.push(material);
+   }
+  }
   const materials=owned;
   function add(v:VertexData,x:number,y:number,z:number,tint:string,material=0,yaw=0,pitch=0,roll=0,scale:Vector3=new Vector3(1,1,1),special?:string){
    const key=special??(material===0?`${Math.max(0,Math.min(Math.ceil(bounds.halfWidth*2/40)-1,Math.floor((x+bounds.halfWidth)/40)))},${Math.max(0,Math.min(Math.ceil((bounds.maxZ+bounds.halfDepth)/40)-1,Math.floor((z+bounds.halfDepth)/40)))}`:'global');
@@ -79,7 +102,8 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
    const lunarRoom=!snow?world.BUILDINGS.find(b=>r.id.startsWith(b.id)):undefined;
    const roomTint=(lunarRoom?.x??0)>0?'#8197a5':'#6e889f';
    const floor=r.id.includes('floor-observation')||r.id.includes('stair-step');
-   const tint=floor?roomTint:lunarRoom&&wall?roomTint:wall?(isDark?dark:white):roof?(snow?'#edf3f1':dark):/basalt|moon-crater/.test(r.id)?'#555a63':/console|igloo-workbench/.test(r.id)?dark:/support/.test(r.id)?dark:accent;
+   const lunarRock=!snow&&/basalt|moon-crater/.test(r.id);
+   const tint=floor?roomTint:lunarRoom&&wall?roomTint:wall?(isDark?dark:white):roof?(snow?'#edf3f1':dark):lunarRock?'#626674':/console|igloo-workbench/.test(r.id)?dark:/support/.test(r.id)?dark:accent;
    if(lunarRoom&&wall){
     const liner=color('#a9c4d3'),shell=color('#e6e4d9'),edge=color('#607382');
     const mesh=VertexData.CreateBox({width:r.width,height:max-min,depth:r.depth});
@@ -91,6 +115,15 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
      mesh.colors.push(paint.r,paint.g,paint.b,1);
     }
     add(mesh,r.x,(min+max)/2,r.z,'#ffffff');
+   }else if(lunarRock){
+    const mesh=VertexData.CreateBox({width:r.width,height:max-min,depth:r.depth});
+    const base=color(tint);
+    mesh.colors=[];
+    for(let i=0;i<mesh.normals!.length;i+=3){
+     const shade=.72+.23*Math.max(0,mesh.normals![i+1]!)+.12*hash(r.x+mesh.positions![i]!,r.z+mesh.positions![i+2]!);
+     mesh.colors.push(base.r*shade,base.g*shade,base.b*shade,1);
+    }
+    add(mesh,r.x,(min+max)/2,r.z,tint,BASALT);
    }else box(r.x,(min+max)/2,r.z,r.width,max-min,r.depth,tint);
    if(wall&&min===0&&!r.id.startsWith('moon-link')){
     // Inlays stay on solid walls; never bridge a walkable opening.
@@ -131,16 +164,15 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
     const ridge=Math.max(0,1-Math.abs(e-ridgeDistance)/19);
     const fine=hash(Math.floor(x/12),Math.floor(z/12));
     const y=terrain?(snow?Math.min(1,e/20)*(7+Math.pow(hash(Math.floor(x/18),Math.floor(z/18)),2)*34)+Math.sin(x*.045)*Math.cos(z*.04)*Math.min(e*.15,6):Math.min(1,e/13)*(2+fine*3+ridge*(9+fine*7))):-.012;
-    let col=snow?new Color3(.72,.82,.87):new Color3(.39,.385,.38);
+    let col=snow?new Color3(.72,.82,.87):new Color3(.43,.43,.435);
     if(terrain){const v=hash(Math.floor(x/10),Math.floor(z/10));col=snow?(y>22?new Color3(.83,.88,.89):new Color3(.30+v*.12,.41+v*.12,.49+v*.12)):new Color3(.25+v*.12,.247+v*.12,.263+v*.12);}
     else if(!snow){for(const [cx,cz,r] of [[-12,25,8],[13,-26,7],[0,0,14]]){const q=Math.hypot(x-cx!,z-cz!)/r!;if(q<1.3&&q>.75)col=col.scale(1.22);else if(q<.75)col=col.scale(.82);}col=col.scale(.91+hash(i,j)*.13+.055*Math.cos(x*.083+z*.057));}
     else col=col.scale(.97+hash(i,j)*.05);
-    p.push(x,y,z);c.push(col.r,col.g,col.b,1);uv.push(x*.08,z*.08);
+    p.push(x,y,z);c.push(col.r,col.g,col.b,1);const tile=snow?.08:.19;uv.push(x*tile,z*tile);
    }
    for(let j=0;j<n;j++)for(let i=0;i<n;i++){const x=((i+.5)/n-.5)*(w+margin*2),z=((j+.5)/n-.5)*(d+margin*2);const dx=(w+margin*2)/n/2,dz=(d+margin*2)/n/2;if(terrain&&Math.abs(x)-dx<w/2+3&&Math.abs(z)-dz<d/2+3)continue;const a=j*(n+1)+i,b=a+1,k=a+n+1;indices.push(a,b,k,b,k+1,k);}
-   const normals:number[]=[];VertexData.ComputeNormals(p,indices,normals);const v=new VertexData();v.positions=p;v.normals=normals;v.indices=indices;v.uvs=uv;
-   // Preserve authored elevation colors in the shared surface batch.
-   add(v,0,0,0,'#ffffff',0,0,0,0,new Vector3(1,1,1),terrain?'landscape':'ground');const batch=batches.get('0:'+(terrain?'landscape':'ground'))!;batch.colors.splice(batch.colors.length-c.length,c.length,...c);
+   const normals:number[]=[];VertexData.ComputeNormals(p,indices,normals);const v=new VertexData();v.positions=p;v.normals=normals;v.indices=indices;v.uvs=uv;v.colors=c;
+   add(v,0,0,0,'#ffffff',snow?0:REGOLITH,0,0,0,new Vector3(1,1,1),terrain?'landscape':'ground');
   }
   grid(false);grid(true);
   const landmarks=snow?['observatory','mountain-ridge','igloo-hub','arched-laboratories','heated-links']:['habitat-dome','communications-dish','landing-pad','earth','airlock-link','crater-route'];
@@ -217,7 +249,9 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
    const rimNormals:number[]=[];VertexData.ComputeNormals(rimPositions,rimIndices,rimNormals);
    if(rimNormals[1]!<0){for(let i=0;i<rimIndices.length;i+=3)[rimIndices[i+1],rimIndices[i+2]]=[rimIndices[i+2]!,rimIndices[i+1]!];VertexData.ComputeNormals(rimPositions,rimIndices,rimNormals);}
    crater.positions=rimPositions;crater.indices=rimIndices;crater.normals=rimNormals;crater.colors=rimColors;
-   add(crater,moonCrater.x,-.006,moonCrater.z,'#ffffff');
+   crater.uvs=[];
+   for(let i=0;i<rimPositions.length;i+=3)crater.uvs.push((rimPositions[i]!+moonCrater.x)*.19,(rimPositions[i+2]!+moonCrater.z)*.19);
+   add(crater,moonCrater.x,-.006,moonCrater.z,'#ffffff',REGOLITH);
    cylinder(0,.013,0,9.2,.014,'#4d5965');
    for(const room of world.BUILDINGS){
     const w=room.width,d=room.depth,main=room.height>4;
@@ -346,10 +380,10 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
    // Surface seams and roof equipment are the only additional opaque detail.
    for(const r of world.worldSolids().filter(r=>r.id.includes('wall')&&(r.yMin??0)===0)){const wide=r.width>r.depth,length=wide?r.width:r.depth;for(let i=2;i<length-1;i+=profile.details===2?2.5:5){const offset=i-length/2;box(r.x+(wide?offset:0),2.4,r.z+(wide?0:offset),wide?.035:r.width+.02,3.8,wide?r.depth+.02:.035,dark);}}
   }
-  let triangles=0;for(const [key,b] of batches){const mesh=new Mesh(`${map}-batch-${quality}-${key}`,scene),v=new VertexData();v.positions=b.positions;v.normals=b.normals;v.indices=b.indices;v.uvs=b.uvs;v.colors=b.colors;v.applyToMesh(mesh);mesh.material=materials[b.material]!;mesh.parent=root;mesh.isPickable=false;mesh.checkCollisions=false;mesh.receiveShadows=b.material===0&&quality!=='low';const indoor=key.includes(':shelter:');mesh.metadata={proceduralMap:map,quality,indoor};mesh.applyFog=(snow||b.material!==2)&&(!indoor||!sheltered);mesh.freezeWorldMatrix();meshes.push(mesh);triangles+=b.indices.length/3;
-   if(quality==='high'&&b.material===0&&!key.includes('landscape')&&!key.includes('ground'))shadows?.addShadowCaster(mesh,false);
+  let triangles=0;for(const [key,b] of batches){const mesh=new Mesh(`${map}-batch-${quality}-${key}`,scene),v=new VertexData();v.positions=b.positions;v.normals=b.normals;v.indices=b.indices;v.uvs=b.uvs;v.colors=b.colors;v.applyToMesh(mesh);mesh.material=materials[b.material]!;mesh.parent=root;mesh.isPickable=false;mesh.checkCollisions=false;mesh.receiveShadows=(b.material===0||b.material===REGOLITH||b.material===BASALT)&&quality!=='low';const indoor=key.includes(':shelter:');mesh.metadata={proceduralMap:map,quality,indoor};mesh.applyFog=(snow||b.material!==2)&&(!indoor||!sheltered);mesh.freezeWorldMatrix();meshes.push(mesh);triangles+=b.indices.length/3;
+   if(quality==='high'&&(b.material===0||b.material===BASALT)&&!key.includes('landscape')&&!key.includes('ground'))shadows?.addShadowCaster(mesh,false);
   }
-  root.metadata={proceduralMap:map,quality,landmarks};state={source:'procedural',map,quality,triangles,meshCount:meshes.length,textureBytes:grain.byteLength+128*64*3,collisionCount:world.worldSolids().length,landmarks};
+  root.metadata={proceduralMap:map,quality,landmarks};state={source:'procedural',map,quality,triangles,meshCount:meshes.length,textureBytes:grain.byteLength+128*64*3+lunarTextureBytes,collisionCount:world.worldSolids().length,landmarks};
  }
  build('medium');scene.onDisposeObservable.addOnce(release);
  return {setRackSeed(seed:number){if(!snow&&rackSeed!==seed){rackSeed=seed;build(state.quality,true);}},setQuality(value:boolean){high=value;build(high?'high':low?'low':'medium');},setPerformanceLow(value:boolean){low=value;build(high?'high':low?'low':'medium');},syncDoors(){},setSheltered(value:boolean){
