@@ -63,7 +63,7 @@ export function createLunarDust(scene:Scene,size:number,withRelief:boolean){
   const u=x/size,v=y/size,grain=random(x,y),fine=noise(u,v,24);
   const dust=.45*noise(u,v,4)+.34*noise(u,v,11)+.21*fine;
   const chips=Math.max(0,fine-.72)*.9;
-  const value=Math.round(200+dust*48+grain*12-chips*68);
+  const value=Math.min(255,Math.round(200+dust*48+grain*12-chips*68));
   const index=y*size+x,i=index*3;
   diffuse[i]=value;diffuse[i+1]=value;diffuse[i+2]=value-2;
   if(heights)heights[index]=dust*.38+chips+.028*grain;
