@@ -301,6 +301,16 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
     const color=habitat?'#dba873':station?'#85aec8':'#7cbdac';
     const edge=hatch.z+Math.sign(hatch.z)*((habitat||station)?.355:-.34);
     const outer=Math.sign(edge-hatch.z);
+    if(habitat||station){
+     box(hatch.x,h+1.37,edge,16.9,.24,.055,color);
+     box(hatch.x,h+1.55,edge+outer*.014,16.9,.05,.045,'#b4c4cc',1);
+     for(const side of [-1,1]){
+      const x=hatch.x+side*6.85;
+      box(x,h+.62,edge,2.35,.9,.07,habitat?'#879194':'#536f81');
+      box(x,h+.62,edge+outer*.024,1.9,.58,.047,habitat?'#566671':'#456679');
+      if(profile.details>0)for(const shelf of [-.2,0,.2])box(x,h+.62+shelf,edge+outer*.051,1.76,.055,.018,'#abbac3');
+     }
+    }
     for(const side of [-1,1]){
      const local=(distance:number,y:number,depth:number)=>[side*(w/2+distance),y,depth*outer];
      const panel=shellFace([local(.27,.24,0),local(1.55,.44,0),local(1.08,h*.86,0),local(.27,h+.12,0)],[0,h/2,-outer]);
