@@ -14,6 +14,8 @@ for(const map of ['snow','moon'] as const)test(`${map}: three code-built profile
   assert.equal(s!.landmarks.includes('milky-way'),map==='moon'&&quality==='high');
   const art=w.scene.meshes.filter(m=>m.metadata?.proceduralMap===map);assert.ok(art.length<=24);const ground=art.find(m=>m.name.endsWith(':ground'))!;const normals=ground.getVerticesData('normal')!;assert.ok(normals[1]>.99,'ground faces upward and is visible from the play area');assert.ok(art.every(m=>!m.isPickable&&!m.checkCollisions&&m.material?.alpha===1));
   if(map==='moon'){
+   for(const landmark of ['pressure-shells','habitat-interiors','shelter-modules','sealed-walkways'])assert.ok(s!.landmarks.includes(landmark),landmark);
+   if(quality==='low')assert.ok(s!.triangles<=11358,'keep the existing low-quality triangle budget');
    const terrain=ground.material as StandardMaterial;
    const rocks=art.find(mesh=>mesh.material?.name==='lunar-basalt');
    assert.equal(terrain.name,'lunar-regolith');

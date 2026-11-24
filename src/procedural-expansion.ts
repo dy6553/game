@@ -92,7 +92,22 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
   }
   function box(x:number,y:number,z:number,w:number,h:number,d:number,c:string,mat=0,yaw=0){add(VertexData.CreateBox({width:w,height:h,depth:d}),x,y,z,c,mat,yaw);}
   function cylinder(x:number,y:number,z:number,r:number,h:number,c:string,mat=0){add(VertexData.CreateCylinder({diameter:r*2,height:h,tessellation:profile.segments}),x,y,z,c,mat);}
-  function dome(x:number,y:number,z:number,r:number,c:string){add(VertexData.CreateSphere({diameter:r*2,segments:profile.segments,slice:.5}),x,y,z,c);}
+  function pressureShell(x:number,y:number,z:number,width:number,depth:number,rise:number,paint:string,spine:string,yaw=0){
+   const facets=profile.details===2?16:profile.details===1?10:6;
+   const stations=[{z:-.5,rise:.05},{z:-.4,rise:1},{z:.4,rise:1},{z:.5,rise:.05}];
+   for(let section=0;section<stations.length-1;section++){
+    const near=stations[section]!,far=stations[section+1]!;
+    for(let i=0;i<facets;i++){
+     const point=(index:number,station:typeof near)=>{
+      const angle=Math.PI*index/facets;
+      return [Math.cos(angle)*width/2,Math.sin(angle)*rise*station.rise,station.z*depth];
+     };
+     const strip=i===facets/2-1||i===facets/2;
+     const face=shellFace([point(i,near),point(i+1,near),point(i+1,far),point(i,far)],[0,-rise,0]);
+     add(face,x,y,z,strip&&section===1?spine:section===1?paint:'#a1aab0',0,yaw);
+    }
+   }
+  }
   function label(x:number,y:number,z:number,index:number,yaw=0,pitch=0,width=3.2,height=.8){const v=VertexData.CreatePlane({width,height,sideOrientation:Mesh.DOUBLESIDE});const u=index%2*.5,t=Math.floor(index/2)*.25;v.uvs=v.uvs!.map((a,i)=>i%2?1-t-.25+a*.25:u+a*.5);add(v,x,y,z,'#ffffff',3,yaw,pitch);}
   const white=snow?'#d6e7ea':'#c6cfd2',dark=snow?'#284958':'#35404e',accent=snow?'#278c99':'#b79a55',warm='#e9a35d';
   // Exact shared rectangles are the visual foundation at all three levels.
@@ -105,13 +120,17 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
    const lunarRock=!snow&&/basalt|moon-crater/.test(r.id);
    const tint=floor?roomTint:lunarRoom&&wall?roomTint:wall?(isDark?dark:white):roof?(snow?'#edf3f1':dark):lunarRock?'#626674':/console|igloo-workbench/.test(r.id)?dark:/support/.test(r.id)?dark:accent;
    if(lunarRoom&&wall){
-    const liner=color('#a9c4d3'),shell=color('#e6e4d9'),edge=color('#607382');
+    const habitat=lunarRoom.id.startsWith('Habitat'),station=lunarRoom.id.startsWith('Operations');
+    const liner=color(habitat?'#d8c9b3':station?'#acc6d7':'#c0d9d0');
+    const shell=color(habitat?'#e5ddd0':station?'#cbd1d7':'#dae1d7'),edge=color('#546978');
+    const dust=color('#8c8a83');
     const mesh=VertexData.CreateBox({width:r.width,height:max-min,depth:r.depth});
     mesh.colors=[];
     for(let i=0;i<mesh.normals!.length;i+=3){
      const nx=mesh.normals![i]!,nz=mesh.normals![i+2]!;
      const facing=nx*(r.x-lunarRoom.x)+nz*(r.z-lunarRoom.z);
-     const paint=facing>.4?shell:facing<-.4?liner:edge;
+     const lower=Math.max(0,1-(min+mesh.positions![i+1]!+(max-min)/2)*.55);
+     const paint=facing>.4?Color3.Lerp(shell,dust,lower*.42):facing<-.4?liner:edge;
      mesh.colors.push(paint.r,paint.g,paint.b,1);
     }
     add(mesh,r.x,(min+max)/2,r.z,'#ffffff');
@@ -130,7 +149,7 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
     const wide=r.width>r.depth,length=wide?r.width:r.depth;
     for(const side of [-1,1]){const x=r.x+(wide?0:side*(r.width/2+.006)),z=r.z+(wide?side*(r.depth/2+.006):0);
      box(x,.42,z,wide?length:.015,.32,wide?.015:length,dark);
-     box(x,Math.min(3.6,max-.3),z,wide?length:.018,.23,wide?.018:length,accent);
+     if(snow||profile.details>0)box(x,Math.min(3.6,max-.3),z,wide?length:.018,.23,wide?.018:length,accent);
      if(length>4&&(snow||profile.details>0)){const count=Math.floor((length-1)/5);for(let i=0;i<count;i++){const offset=(i-(count-1)/2)*5;box(x+(wide?offset:0),2.1,z+(wide?0:offset),wide?3:.022,.7,wide?.022:3,'#345668');if(profile.details>0)box(x+(wide?offset:0),2.5,z+(wide?0:offset),wide?3.15:.032,.07,wide?.032:3.15,white);}}
     }
    }
@@ -143,13 +162,14 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
   // Flat paths and room floors add no obstacles or different sightlines.
   for(const [i,b] of world.BUILDINGS.entries()){
    if(snow)continue;
-   box(b.x,.018,b.z,b.width-.5,.03,b.depth-.5,'#536d7f');
-   box(b.x,.038,b.z,1.2,.012,b.depth-.7,'#718ca0');
-   for(const side of [-1,1]){
-    box(b.x, b.height+.48,b.z+side*(b.depth/2-.25),b.width,.06,.25,white);
-    label(b.x+(b.width/2+3)/2,3.45,b.z+side*(b.depth/2+.28),i===0?3:i===1?4:7,side===-1?0:Math.PI,0,Math.min(3.2,(b.width-6)/2-.2));
-    box(b.x,.025,b.z+side*(b.depth/2+2),2.8,.025,3.6,dark);
-    for(const x of [-1,1])box(b.x+x*1.3,.046,b.z+side*(b.depth/2+2),.11,.018,3.6,warm,1);
+   const mat=i===0?'#536775':i===1?'#425f75':'#44615e';
+   const guide=i===0?'#ffcc86':i===1?'#9ccff4':'#83e4cf';
+   box(b.x,.018,b.z,b.width-.5,.03,b.depth-.5,mat);
+   for(const side of [-1,1])box(b.x+side*.83,.04,b.z,.085,.014,b.depth-.8,guide,1);
+   for(const side of i<2?[-1,1]:[-Math.sign(b.z)]){
+    if(i<2)label(b.x+(b.width/2+3)/2,3.45,b.z+side*(b.depth/2+.28),i===0?3:4,side===-1?0:Math.PI,0,3.2);
+    box(b.x,.025,b.z+side*(b.depth/2+2),i<2?4.8:2.8,.025,3.6,'#465864');
+    for(const x of [-1,1])box(b.x+x*(i<2?2.22:1.27),.047,b.z+side*(b.depth/2+2),.14,.018,3.6,guide,1);
    }
    if(profile.details>0){const count=profile.details===2?8:4;for(let j=0;j<count;j++){
     const x=b.x-b.width*.4+b.width*.8*j/(count-1);box(x,b.height+.5,b.z,.08,.05,b.depth*.92,dark);
@@ -177,7 +197,7 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
    add(v,0,0,0,'#ffffff',snow?0:REGOLITH,0,0,0,new Vector3(1,1,1),terrain?'landscape':'ground');
   }
   grid(false);grid(true);
-  const landmarks=snow?['observatory','mountain-ridge','igloo-hub','arched-laboratories','heated-links']:['habitat-dome','communications-dish','landing-pad','earth','airlock-link','crater-route'];
+  const landmarks=snow?['observatory','mountain-ridge','igloo-hub','arched-laboratories','heated-links']:['habitat-dome','communications-dish','landing-pad','earth','airlock-link','crater-route','pressure-shells','habitat-interiors','shelter-modules','sealed-walkways'];
   if(snow){
    for(const side of [-1,1]){
     box(0,.012,side*28,3.4,.014,28,'#aebfc5');
@@ -254,34 +274,45 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
    crater.uvs=[];
    for(let i=0;i<rimPositions.length;i+=3)crater.uvs.push((rimPositions[i]!+moonCrater.x)*.19,(rimPositions[i+2]!+moonCrater.z)*.19);
    add(crater,moonCrater.x,-.006,moonCrater.z,'#ffffff',REGOLITH);
-   cylinder(0,.013,0,9.2,.014,'#4d5965');
+   cylinder(0,.013,0,9.2,.014,'#4b555e');
    for(const room of world.BUILDINGS){
-    const w=room.width,d=room.depth,main=room.height>4;
-    box(room.x,room.height-.055,room.z,w-1.35,.045,d-1.35,'#526878',1);
-    if(profile.details>0)for(const section of [-.3,0,.3]){
-     box(room.x,room.height-.102,room.z+section*d,w-1.15,.05,.22,'#88a6b7',1);
-    }
-
-    const endCladding=VertexData.CreateCylinder({diameterBottom:1,diameterTop:.81,height:.70,tessellation:4});
-    add(endCladding,room.x,room.height+.77,room.z,'#b4c3ce',0,Math.PI/4,0,0,new Vector3(w*Math.SQRT2,1,d*Math.SQRT2));
-    for(const direction of [-1,1]){
-     const x=room.x+direction*(w/2+.28);
-     for(const fraction of [-.34,.34]){
+    const w=room.width,d=room.depth,main=room.height>4,habitat=room===hab;
+    const shell=habitat?'#e3dac8':main?'#bdcbd4':'#d4ded0';
+    const trim=habitat?'#d7a162':main?'#6f9dbc':'#539b88';
+    const liner=habitat?'#7f746a':main?'#536f83':'#537773';
+    pressureShell(room.x,room.height+.435,room.z,w,d,main?(habitat?3:2.1):1.12,shell,trim);
+    box(room.x,room.height-.062,room.z,w-1.18,.055,d-1.18,liner,1);
+    for(const side of [-1,1]){
+     const x=room.x+side*(w/2+.16);
+     box(x,room.height-.72,room.z,.28,.23,d*.98,trim);
+     box(room.x+side*(w/2-.95),room.height-.12,room.z,.14,.043,d*.8,'#c9e3eb',1);
+     if(main)box(room.x+side*(w/2-1),world.SECOND_FLOOR-.24,8.4,.15,.07,11.5,habitat?'#ffd39a':'#97d3f2',1);
+     if(profile.details>0)for(const fraction of [-.34,0,.34]){
       const z=room.z+fraction*d;
-      box(x,room.height/2,z,.68,room.height+.1,.55,'#596d7d');
-      if(profile.details>0)box(x,.21,z,1.12,.42,1.15,'#364754');
+      add(VertexData.CreateBox({width:.58,height:room.height+.11,depth:.36}),x,room.height/2,z,'#8d9ba4',0,0,0,side*.045);
+      box(room.x+side*(w/2-.58),room.height-.175,z,1.05,.06,.17,'#d3e2e3',1);
+      if(profile.details===2)box(x+side*.19,.24,z,1.04,.43,1.12,'#3f5361');
      }
-     box(room.x+direction*(w/2-.85),room.height-.05,room.z,.16,.08,d*.72,'#b1daf0',1);
-     if(main)box(room.x+direction*(w/2-1.15),3.18,8.4,.13,.07,11.5,'#93c2df',1);
     }
    }
    for(const hatch of moonExteriorAirlocks){
     const h=hatch.yMax!,w=hatch.width;
+    const habitat=hatch.id.startsWith('Habitat'),station=hatch.id.startsWith('Operations');
+    const color=habitat?'#dba873':station?'#85aec8':'#7cbdac';
+    const edge=hatch.z+Math.sign(hatch.z)*((habitat||station)?.355:-.34);
+    const outer=Math.sign(edge-hatch.z);
     for(const side of [-1,1]){
-     box(hatch.x+side*(w/2+.13),h/2,hatch.z,.3,h,.67,'#4a6070');
+     const local=(distance:number,y:number,depth:number)=>[side*(w/2+distance),y,depth*outer];
+     const panel=shellFace([local(.27,.24,0),local(1.55,.44,0),local(1.08,h*.86,0),local(.27,h+.12,0)],[0,h/2,-outer]);
+     add(panel,hatch.x,0,edge,habitat?'#bdb4a6':station?'#a9b9c5':'#a7b9af');
+     const bright=shellFace([local(.47,.77,.015),local(.63,.81,.015),local(.63,h*.69,.015),local(.47,h*.73,.015)],[0,h/2,-outer]);
+     add(bright,hatch.x,0,edge,color,1);
+    }
+    for(const side of [-1,1]){
+     box(hatch.x+side*(w/2+.13),h/2,hatch.z,.3,h,.67,'#687e89');
      box(hatch.x+side*(w/2+.14),h*.76,hatch.z,.12,.56,.71,'#61dfcf',1);
     }
-    box(hatch.x,h+.12,hatch.z,w+.56,.24,.69,'#516777');
+    box(hatch.x,h+.12,hatch.z,w+.56,.24,.69,'#a9b6bf');
    }
    for(const shelter of moonShelters){
     const direction=shelter.z<0?1:-1;
@@ -302,6 +333,7 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
    }
    const {z,crossingHalfWidth}=moonCorridor;
    for(const {x,width} of moonCorridorSections){
+    pressureShell(x,moonCorridor.height+.01,z,4.78,width,.86,'#c5cfd2','#829fae',Math.PI/2);
     box(x,.018,z,width,.025,4.12,'#576574');
     for(const side of [-1,1]){
      box(x,3.09,z+side*1.75,width,.04,.14,'#78c9ed',1);
@@ -334,7 +366,11 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
     if(profile.details>0)for(let i=0;i<5;i++)box(side*(13+i*1.8),.024,0,.32,.008,2.5,warm);
     if(profile.details===2)for(let i=0;i<8;i++)box(side*(13+i*1.1),.024,2.2,.6,.008,.28,'#757d83',0,side*.28);
    }
-   cylinder(hab.x,hab.height+.9,0,6,.9,dark);dome(hab.x,hab.height+1.35,0,5.7,'#dbe4e2');cylinder(hab.x,hab.height+1.35,0,5.8,.13,accent);
+   if(profile.details>0)for(const x of [-2.8,2.8]){
+    const panels=VertexData.CreateBox({width:1.55,height:.1,depth:7.8});
+    add(panels,hab.x+x,hab.height+3.29,0,'#315374',0,0,0,-Math.sign(x)*.11);
+    if(profile.details===2)for(let j=-3;j<=3;j++)box(hab.x+x,hab.height+3.36,j,1.44,.012,.045,'#8393ac');
+   }
    cylinder(ops.x,ops.height+1.8,0,.5,3,dark);
    const segments=profile.segments*2,rings=4,p:number[]=[],indices:number[]=[],uv:number[]=[];
    for(let j=0;j<=rings;j++)for(let i=0;i<=segments;i++){const r=j/rings*3.6,a=i/segments*Math.PI*2;p.push(Math.cos(a)*r,r*r*.095,Math.sin(a)*r);uv.push(i/segments,j/rings);}
