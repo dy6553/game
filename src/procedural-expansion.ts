@@ -157,13 +157,15 @@ export function createProceduralExpansion(scene:Scene,map:ExpansionMapId,world:W
   }
   function grid(terrain:boolean){const n=terrain?profile.terrain:profile.ground,w=bounds.halfWidth*2,d=bounds.maxZ+bounds.halfDepth,p:number[]=[],c:number[]=[],uv:number[]=[],indices:number[]=[];
    const margin=terrain?110:20;
+   const edgePadding=Math.max(w,d)/n+margin*2/n+1;
    for(let j=0;j<=n;j++)for(let i=0;i<=n;i++){
     const x=(i/n-.5)*(w+margin*2),z=(j/n-.5)*(d+margin*2),outside=Math.max(Math.abs(x)-w/2,Math.abs(z)-d/2),e=Math.max(0,outside-3);
     const angle=Math.atan2(z,x);
     const ridgeDistance=23+9*Math.cos(angle*3)+5*Math.sin(angle*7);
     const ridge=Math.max(0,1-Math.abs(e-ridgeDistance)/19);
     const fine=hash(Math.floor(x/12),Math.floor(z/12));
-    const y=terrain?(snow?Math.min(1,e/20)*(7+Math.pow(hash(Math.floor(x/18),Math.floor(z/18)),2)*34)+Math.sin(x*.045)*Math.cos(z*.04)*Math.min(e*.15,6):Math.min(1,e/13)*(2+fine*3+ridge*(9+fine*7))):-.012;
+    const rise=Math.min(1,Math.max(0,outside-edgePadding)/13);
+    const y=terrain?(snow?Math.min(1,e/20)*(7+Math.pow(hash(Math.floor(x/18),Math.floor(z/18)),2)*34)+Math.sin(x*.045)*Math.cos(z*.04)*Math.min(e*.15,6):-.045+rise*(2+fine*3+ridge*(9+fine*7))):-.012;
     let col=snow?new Color3(.72,.82,.87):new Color3(.43,.43,.435);
     if(terrain){const v=hash(Math.floor(x/10),Math.floor(z/10));col=snow?(y>22?new Color3(.83,.88,.89):new Color3(.30+v*.12,.41+v*.12,.49+v*.12)):new Color3(.25+v*.12,.247+v*.12,.263+v*.12);}
     else if(!snow){for(const [cx,cz,r] of [[-12,25,8],[13,-26,7],[0,0,14]]){const q=Math.hypot(x-cx!,z-cz!)/r!;if(q<1.3&&q>.75)col=col.scale(1.22);else if(q<.75)col=col.scale(.82);}col=col.scale(.91+hash(i,j)*.13+.055*Math.cos(x*.083+z*.057));}
