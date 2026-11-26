@@ -725,7 +725,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
   }
   const matchPickups=()=>options.randomSpawns===false?createPickups():createMatchPickups(geometry);
   let localActor:GearActor={id:'player',...PROTOTYPE.spawn,yaw:0,pitch:0,health:100,gear:createGear(),healing:0,flash:0,gearCooldown:0};
-  let oxygen=100,oxygenMask=createOxygenMask(),localMeat=0,pendingMeatHeal:ToolEvent|undefined;
+  let oxygen=100,oxygenMask=createOxygenMask(),localMeat=0,pendingHealEffect:ToolEvent|undefined;
   let localProjectiles:Projectile[]=[],toolSequence=0,toolDamageVersion=0,lastToolHealth=100;
   const toolVisuals=createEquipmentVisuals(scene);
   let upgradeTier=0;
@@ -845,9 +845,9 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
       },()=>++toolSequence);
       const actual=group.state().playerHealth;if(localActor.health>actual)group.healPlayer(localActor.health-actual);
       if(animals)advanceWildlife(animals,weatherSeconds);
-      if(pendingMeatHeal){
-        events.unshift(pendingMeatHeal);
-        pendingMeatHeal=undefined;
+      if(pendingHealEffect){
+        events.unshift(pendingHealEffect);
+        pendingHealEffect=undefined;
       }
       localActor.health=group.state().playerHealth;lastToolHealth=localActor.health;for(const b of bots)botFlashes.set(b.id,b.flash);for(const e of events)if(soundEvents.length<16)soundEvents.push({kind:e.kind,x:e.x,z:e.z});toolVisuals.update(localProjectiles,events,dt);
     }
@@ -963,7 +963,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
     const next=beginReload(weapon,spec);const started=next!==weapon;weapon=started?cancelBurst(next):next;return started;
   }
   function resetPractice() {
-    animals=wildlifeArt?createWildlife():undefined;localMeat=0;oxygen=100;oxygenMask=createOxygenMask();pendingMeatHeal=undefined;
+    animals=wildlifeArt?createWildlife():undefined;localMeat=0;oxygen=100;oxygenMask=createOxygenMask();pendingHealEffect=undefined;
     weatherSeconds=0;weatherSeed=options.weatherSeed??newWeatherSeed();
     localActor={id:'player',...PROTOTYPE.spawn,yaw:0,pitch:0,health:100,gear:createGear(),healing:0,flash:0,gearCooldown:0};localProjectiles=[];toolSequence=0;toolDamageVersion=0;lastToolHealth=100;botFlashes.clear();toolVisuals.clear();
     highShotNotices.length=0;botReveals.clear();autoShotResults.length=0;weaponId=startWeapon;spec=localSpec(weaponId);inventory=createInventory(startWeapon);pickups=matchPickups();weapon=createWeapon(spec);cooldown=0;scoped=false;jumpState=createJump();falling=false;hits=0;destroyed=0;shots=0;
@@ -1055,6 +1055,14 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
       localMeat++;
       return 'added';
     }syncSlot(inventory,weapon,cooldown);const crate=pickups.find(c=>c.id===id);if(crate?.equipmentId)return takeEquipmentPickup(localActor.gear,p,pickups,id)?'added':'unavailable';const result=takePickup(inventory,p,pickups,id,replace);if(result==='added')equip();return result;},
+    repairCharacter(amount:number,p:Point){
+      if(preview||reference||character.type!=='welder'||!amount)return false;
+      const group=survivalMode?survival:ffaMode?ffa:duel;
+      if(!group.healPlayer(amount))return false;
+      localActor.health=group.state().playerHealth;
+      pendingHealEffect={id:++toolSequence,kind:'heal',owner:'player',x:p.x,y:(p.y??0)+1,z:p.z};
+      return true;
+    },
     eatMeat(p:Point){
       const battle=battleState();
       if(preview||reference||battle.winner)return false;
@@ -1064,7 +1072,7 @@ export function createHarborScene(engine: Engine,options:{weatherSeed?:number;ra
       if(!group.healPlayer(recovered))return false;
       localMeat--;
       localActor.health=group.state().playerHealth;
-      pendingMeatHeal={id:++toolSequence,kind:'heal',owner:'player',x:p.x,y:(p.y??0)+1,z:p.z};
+      pendingHealEffect={id:++toolSequence,kind:'heal',owner:'player',x:p.x,y:(p.y??0)+1,z:p.z};
       return true;
     },
     switchWeapon(slot:number){if(preview||reference||(battleState().playerHealth===0||!!battleState().winner))return false;syncSlot(inventory,weapon,cooldown);if(!switchSlot(inventory,slot))return false;equip();return true;},

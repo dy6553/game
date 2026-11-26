@@ -10,7 +10,7 @@ export {normalizeNickname} from './nickname.ts';
 import {normalizeNickname} from './nickname.ts';
 import {createMatchPickups} from './match-pickups.ts';
 import {createGear,launchRocket,useEquipment,advanceEquipment,isEquipmentId,type GearActor,type EquipmentId,type Projectile,type ToolEvent} from './equipment.ts';
-import {createDash,beginDash,advanceDash,cancelDash,type DashState} from './dash.ts';
+import {createDash,startCharacterAbility,advanceDash,cancelDash,type DashState} from './dash.ts';
 import {createInventory,createPickups,takeEquipmentPickup,syncSlot,advanceStowed,switchSlot,takePickup,tickPickups,type Inventory,type Pickup} from './inventory.ts';
 import {harborWorld,createWorld,type World,type MapId,type Doors,type Point} from './world.ts';
 import {normalizeMap,MAPS} from './maps.ts';
@@ -50,19 +50,23 @@ export function moveNetworkPlayer(p:Pick<Player,'x'|'z'|'y'|'health'|'weapon'|'c
  return moveWithCollisions(p,{x:m.x*PROTOTYPE.speed*stanceStats(c.stance).speed*(running&&(!c.stance||c.stance==='stand')?1.5:1)*dt,z:m.z*PROTOTYPE.speed*stanceStats(c.stance).speed*(running&&(!c.stance||c.stance==='stand')?1.5:1)*dt},worldSolids(doors),PROTOTYPE.radius,stairLift);
 }
 // Shared with prediction: only a server snapshot with dash state enables the feature.
-export function advancePlayerMotion(p:Pick<Player,'x'|'z'|'y'|'health'|'weapon'|'cooldown'>&Partial<Pick<Player,'dash'|'jump'|'fallSpeed'|'stance'>>,c:Omit<Command,'seq'>,dt:number,doors?:Doors,world:World=harborWorld){
+export function advancePlayerMotion(p:Pick<Player,'x'|'z'|'y'|'health'|'weapon'|'cooldown'>&Partial<Pick<Player,'dash'|'jump'|'fallSpeed'|'stance'|'character'>>,c:Omit<Command,'seq'>,dt:number,doors?:Doors,world:World=harborWorld){
  const {moveWithCollisions,worldSolids}=world;
  // Missing input stops actions, but posture persists until explicitly changed.
  c={...c,stance:c.stance??p.stance??'stand'};
- let dash=p.dash,jump=p.jump??createJump();
- if(p.health<=0)return {x:p.x,z:p.z,y:p.y,jump,dash:dash?cancelDash(dash):undefined};
- if(dash&&c.dash&&(!c.stance||c.stance==='stand'))dash=beginDash(dash,{x:c.x,y:c.y,yaw:c.yaw,grounded:jump.height===0&&jump.velocity===0&&!(p.fallSpeed&&p.fallSpeed>0),canAct:true});
+ let dash=p.dash,jump=p.jump??createJump(),health=p.health;
+ if(p.health<=0)return {x:p.x,z:p.z,y:p.y,health,jump,dash:dash?cancelDash(dash):undefined};
+ if(dash&&c.dash&&c.stance==='stand'){
+  const ability=startCharacterAbility(dash,{x:c.x,y:c.y,yaw:c.yaw,grounded:jump.height===0&&jump.velocity===0&&!(p.fallSpeed&&p.fallSpeed>0),canAct:true},p.character??'robot',health);
+  dash=ability.dash;health+=ability.healing;
+  if(ability.leap)jump=world.beginJumpAt(p,jump);
+ }
  if((!c.stance||c.stance==='stand')&&c.jump&&(!dash||dash.remaining===0)&&!(p.fallSpeed&&p.fallSpeed>0))jump=world.beginJumpAt(p,jump);
  let position:Point={x:p.x,z:p.z,y:p.y,fallSpeed:p.fallSpeed,stance:c.stance},walkTime=dt;
- if(dash){const result=advanceDash(dash,dt);dash=result.state;position=moveWithCollisions(position,result.delta,worldSolids(doors));walkTime-=result.activeSeconds;}
+ if(dash){const result=advanceDash(dash,dt);dash=result.state;position=moveWithCollisions(position,result.delta,worldSolids(doors),world.PROTOTYPE.radius,jump.height);walkTime-=result.activeSeconds;}
  if(walkTime>1e-8)position=moveNetworkPlayer({...p,...position},c,walkTime,doors,world,jump.height);
  const vertical=world.advanceJumpOnTerrain(position,jump,dt);
- return {...vertical.position,jump:vertical.jump,dash};
+ return {...vertical.position,health,jump:vertical.jump,dash};
 }
 function rayBox(o:number[],d:number[],min:number[],max:number[]):number{
  let near=0,far=150;for(let i=0;i<3;i++){if(Math.abs(d[i]!)<1e-9){if(o[i]!<min[i]!||o[i]!>max[i]!)return Infinity;continue;}
@@ -156,8 +160,9 @@ export function createNetworkGame(saved?:MatchState,map:MapId='harbor',options:N
     syncSlot(p.inventory,p.weapon,p.cooldown);advanceStowed(p.inventory,dt,true);if(c.slot!==undefined)switchSlot(p.inventory,c.slot);if(c.pickup&&!c.pickup.startsWith('meat-')){const pickup=state.pickups.find(x=>x.id===c.pickup);if(pickup?.equipmentId)takeEquipmentPickup(p.gear,p,state.pickups,c.pickup);else takePickup(p.inventory,p,state.pickups,c.pickup,c.replace);}
     const slot=p.inventory.slots[p.inventory.active]!;p.weaponId=slot.id;p.weapon=slot.weapon;p.cooldown=slot.cooldown;const spec=WEAPONS[p.weaponId];if(c.reload){const next=beginReload(p.weapon,spec);if(next!==p.weapon)p.weapon=cancelBurst(next);}if(c.equipment)useEquipment(p,c.equipment,state.projectiles!,id());
     c.stance??=p.stance??'stand';p.stance=c.stance;const sequence=advanceBurst(p.weapon,dt);p.weapon=sequence.state;
-    const previousX=p.x,previousZ=p.z;
+    const previousX=p.x,previousZ=p.z,previousHealth=p.health;
     Object.assign(p,advancePlayerMotion(p,c,dt,state.doors,world));
+    if(p.health>previousHealth)state.toolEvents.push({id:id(),kind:'heal',owner:p.id,x:p.x,y:(p.y??0)+1,z:p.z});
     if(mapId==='moon'){
      p.oxygenMask??=createOxygenMask();
      if(c.oxygenMask)applyOxygenMaskAction(p.oxygenMask,c.oxygenMask,{...p,y:(p.y??0)+p.jump.height},state.weatherSeed??1);

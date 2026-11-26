@@ -26,7 +26,7 @@ import {COMBAT_HUD_MARKUP,combatContacts,drawCombatMap,hitFeedback,type Contact}
 import {EQUIPMENT,createGear,type EquipmentId} from './equipment.ts';
 import {growth} from './progression.ts';
 import {ACCOUNT_MARKUP,createAccountView} from './account-view.ts';
-import {createDash,beginDash,advanceDash,cancelDash} from './dash.ts';
+import {createDash,startCharacterAbility,characterAbilities,advanceDash,cancelDash} from './dash.ts';
 import {createLobbyPolish} from './lobby-polish.ts';
 import {createGameChoices} from './game-choices.ts';
 import {HOME_MARKUP,createHomeScreen} from './home-screen.ts';
@@ -82,7 +82,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   </header>
   <div class="location"><span class="live-dot"></span><span id="zone">중앙 광장</span><span class="location-divider"></span><span>해안 지구</span></div>
   <section class="help" id="help" hidden>
-    <button id="help-close" class="panel-close" aria-label="도움말 닫기">닫기</button><h2>조작과 게임 안내</h2><p>수류탄 G · 섬광탄 B · 회복키트 H 또는 장비 버튼. 각 2개까지 소지하며 상자에서 얻습니다. 회복은 2초 후 50 회복하며 사격/피격 시 취소됩니다. 무기·장비 상자는 매판 야외와 건물 1·2층의 다른 위치에 놓입니다.</p><p>초록 입구와 ‘출입 가능’ 표지가 있는 건물은 1층·2층·옥상에 갈 수 있습니다. 입구에서 E 또는 문 버튼으로 문을 열고 닫습니다. 보급 상자가 가까우면 E는 획득을 우선합니다. 서쪽 계단으로 2층, 동쪽 계단으로 옥상에 오릅니다. 2층·옥상의 중앙 출구로 발코니에 나가 가장자리에서 뛰어내릴 수 있습니다. 고층 사격 시 상대 지도에 4초간 위치가 표시됩니다. C는 앉기, Z는 엎드리기이며 같은 키를 다시 누르면 일어납니다. 몹도 문과 계단으로 추격합니다. 몹은 건물 밖 지상에서만 생성됩니다. 부활 후 3초 동안 보호되며 사격하면 해제됩니다.</p><p>대시: PC F키 또는 대시 버튼. 이동 방향(멈췄다면 보는 방향)으로 4m를 0.2초에 이동하며 사용 시점부터 3초 뒤 다시 사용할 수 있습니다. 지상에서만 시작하고 대시 중 점프는 불가합니다. 사격·재장전은 가능하며 무적이나 벽 관통은 없습니다.</p><p>생존 자동 난이도는 9단계이며 보통에 해당하는 5단계에서 시작합니다. 총 20웨이브입니다. 체력 50 이상으로 2웨이브 연속 클리어하면 한 단계 상승하고, 사망 후 재도전할 때 한 단계 내려갑니다. 조준·경고 시간과 이동·좌우 이동 속도가 조금씩 변하며 전투 중에는 유지됩니다.</p><p>생존: 생명 3개, 쉬움 10·보통 20·어려움 30웨이브. 동시 최대 3명이며 첫 적 4명에서 2웨이브마다 1명씩 늘어 최대 12명입니다. 적 부활·증원 대기는 1.5초입니다. 준비 시간은 5초이며 체력·탄창을 회복합니다. 사망 시 3초 후 현재 웨이브의 적·상자와 소지 무기를 초기화해 시작 총으로 재도전합니다.</p><p>봇 3명 개인전에서는 봇끼리 싸우지 않고 나만 공격합니다. 나와 각 봇의 점수를 따로 기록하며 먼저 10킬이면 승리합니다. 사망하면 3초 후 다른 캐릭터들과 먼 지점에서 시작 총으로 부활합니다.</p><p>봇 대전은 쉬움·보통·어려움 중 선택합니다. 보통·어려움은 더 빨리 조준하고 좌우로 움직이며, 발사 경고 중에는 멈춥니다. 난이도를 변경하면 새 경기를 시작합니다.</p><p>보급 상자 근처에서 E키 또는 획득 버튼으로 무기를 줍습니다. 최대 3개를 소지하며 숫자 1~3 또는 아래 슬롯 버튼으로 바꿉니다. 가득 차면 버릴 총을 선택하세요. 상자는 20초 후 다시 나오며, 사망하면 시작 총만 남습니다.</p>
+    <button id="help-close" class="panel-close" aria-label="도움말 닫기">닫기</button><h2>조작과 게임 안내</h2><p>수류탄 G · 섬광탄 B · 회복키트 H 또는 장비 버튼. 각 2개까지 소지하며 상자에서 얻습니다. 회복은 2초 후 50 회복하며 사격/피격 시 취소됩니다. 무기·장비 상자는 매판 야외와 건물 1·2층의 다른 위치에 놓입니다.</p><p>초록 입구와 ‘출입 가능’ 표지가 있는 건물은 1층·2층·옥상에 갈 수 있습니다. 입구에서 E 또는 문 버튼으로 문을 열고 닫습니다. 보급 상자가 가까우면 E는 획득을 우선합니다. 서쪽 계단으로 2층, 동쪽 계단으로 옥상에 오릅니다. 2층·옥상의 중앙 출구로 발코니에 나가 가장자리에서 뛰어내릴 수 있습니다. 고층 사격 시 상대 지도에 4초간 위치가 표시됩니다. C는 앉기, Z는 엎드리기이며 같은 키를 다시 누르면 일어납니다. 몹도 문과 계단으로 추격합니다. 몹은 건물 밖 지상에서만 생성됩니다. 부활 후 3초 동안 보호되며 사격하면 해제됩니다.</p><p>특수능력은 F키 또는 능력 버튼으로 사용합니다. 소형 로봇은 부스터로 4m 이동(3초), 고양이형 로봇은 이동 방향으로 도약(6초), 용접 로봇은 자기 체력을 최대 20 회복(14초)합니다. 괄호 안은 재사용 대기 시간입니다. 서 있는 지상에서 사용해 주세요.</p><p>생존 자동 난이도는 9단계이며 보통에 해당하는 5단계에서 시작합니다. 총 20웨이브입니다. 체력 50 이상으로 2웨이브 연속 클리어하면 한 단계 상승하고, 사망 후 재도전할 때 한 단계 내려갑니다. 조준·경고 시간과 이동·좌우 이동 속도가 조금씩 변하며 전투 중에는 유지됩니다.</p><p>생존: 생명 3개, 쉬움 10·보통 20·어려움 30웨이브. 동시 최대 3명이며 첫 적 4명에서 2웨이브마다 1명씩 늘어 최대 12명입니다. 적 부활·증원 대기는 1.5초입니다. 준비 시간은 5초이며 체력·탄창을 회복합니다. 사망 시 3초 후 현재 웨이브의 적·상자와 소지 무기를 초기화해 시작 총으로 재도전합니다.</p><p>봇 3명 개인전에서는 봇끼리 싸우지 않고 나만 공격합니다. 나와 각 봇의 점수를 따로 기록하며 먼저 10킬이면 승리합니다. 사망하면 3초 후 다른 캐릭터들과 먼 지점에서 시작 총으로 부활합니다.</p><p>봇 대전은 쉬움·보통·어려움 중 선택합니다. 보통·어려움은 더 빨리 조준하고 좌우로 움직이며, 발사 경고 중에는 멈춥니다. 난이도를 변경하면 새 경기를 시작합니다.</p><p>보급 상자 근처에서 E키 또는 획득 버튼으로 무기를 줍습니다. 최대 3개를 소지하며 숫자 1~3 또는 아래 슬롯 버튼으로 바꿉니다. 가득 차면 버릴 총을 선택하세요. 상자는 20초 후 다시 나오며, 사망하면 시작 총만 남습니다.</p>
     <p>로봇의 눈높이에서 거리를 탐색합니다. 화면 중앙의 조준점이 바라보는 방향입니다.</p>
     <p><strong>PC</strong> WASD 이동 · Shift 달리기 · 마우스를 움직여 조준. 게임 중 마우스가 고정되어 화면 가장자리 없이 회전할 수 있습니다. Esc를 누르면 고정이 풀리고 게임 메뉴가 열립니다.</p>
     <p><strong>휴대폰</strong> 왼쪽 스틱 이동 · 화면 빈 공간을 좌우·위아래로 드래그해 시점 변경</p>
@@ -107,7 +107,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <button id="fire" class="single-fire" aria-label="화면 중앙 정면으로 발사">발사</button>
     <button id="reload" class="reload-button" aria-label="무기 재장전">재장전</button>
     <button id="scope" class="scope-button" hidden aria-pressed="false">확대</button>
-    <button id="dash" class="dash-button" aria-label="대시 · F키 · 재사용 대기 3초">대시</button>
+    <button id="dash" class="dash-button" aria-label="특수능력">특수능력</button>
     <button id="jump" class="jump-button" aria-label="점프">점프</button><div id="posture-controls"><button id="crouch">앉기 · C</button><button id="prone">엎드리기 · Z</button></div>
   </div>
   <section id="inventory-ui" aria-label="무기 소지와 획득"><p id="equipment-status" role="status"></p><button id="eat-meat" type="button" hidden></button><progress id="heal-progress" max="2" value="0" hidden aria-label="회복키트 사용 진행"></progress><div id="combat-slots" aria-label="무기와 장비 6칸"><div id="weapon-slots"><button data-slot="0" aria-label="무기 슬롯 1">1</button><button data-slot="1" aria-label="무기 슬롯 2">2</button><button data-slot="2" aria-label="무기 슬롯 3">3</button></div><div id="equipment-slots"><button data-equipment="grenade" aria-label="수류탄"><span>수류탄</span><b>0</b><small>4</small></button><button data-equipment="flash" aria-label="섬광탄"><span>섬광탄</span><b>0</b><small>5</small></button><button data-equipment="medkit" aria-label="회복키트"><span>회복키트</span><b>0</b><small>6</small></button></div></div></section>
@@ -133,7 +133,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <p id="ffa-mode-note" hidden>봇 3명은 나만 공격합니다. 나와 각 봇이 먼저 10킬을 경쟁하며, 플레이어는 사망 3초 후 먼 지점에서 부활하고, 봇은 1.5초 후 다시 나타납니다.</p>
       <div class="character-options">
         <button data-character="robot"><span class="robot-icon" aria-hidden="true">▰<i>● ●</i></span><strong>소형 로봇</strong><span>둥근 머리 · 청록색 눈 · 작은 안테나</span><small>왼쪽 시안</small></button>
-        <button data-character="robot-cat"><span class="robot-icon cat-icon" aria-hidden="true">▲ ▲<i>◆ ◆</i></span><strong>고양이형 로봇</strong><span>뾰족한 귀 · 금빛 눈 · 기계 꼬리</span><small>오른쪽 시안</small></button>
+        <button data-character="robot-cat"><span class="robot-icon cat-icon" aria-hidden="true">▲ ▲<i>◆ ◆</i></span><strong>고양이형 로봇</strong><span>뾰족한 귀 · 금빛 눈 · 기계 꼬리</span><small>특수능력 · 도약</small></button>
       </div><button id="character-start" class="character-start">게임 시작</button><p class="character-note">캐릭터를 고르면 오른쪽에서 실제 3D 모델을 볼 수 있습니다.</p>
     </div>
   </section>
@@ -888,7 +888,15 @@ async function start() {
         const oldPosition={...position};
         const dashRequested=input.consumeDashes()>0;
         if(!canAct)localDash=cancelDash(localDash);
-        if(dashRequested){const wasReady=localDash.cooldown<=1e-8;localDash=beginDash(localDash,{x:input.move.x,y:input.move.y,yaw:input.look.yaw,grounded:before.grounded,canAct});if(wasReady&&localDash.remaining>0)audio.play('dash');}
+        if(dashRequested){
+          const ability=startCharacterAbility(localDash,{x:input.move.x,y:input.move.y,yaw:input.look.yaw,grounded:before.grounded,canAct},world.characterType,duel.playerHealth);
+          if(ability.dash!==localDash){
+            if(ability.leap){world.jump(oldPosition);audio.play('jump');}
+            else if(ability.healing)world.repairCharacter(ability.healing,position);
+            else audio.play('dash');
+            localDash=ability.dash;
+          }
+        }
         const wasDashing=localDash.remaining>0,dashStep=advanceDash(localDash,step);localDash=dashStep.state;
         if(canAct){position=world.move?.(position,dashStep.delta)??moveWithCollisions(position,dashStep.delta);const walkTime=step-dashStep.activeSeconds;position=world.move?.(position,{x:movement.x*PROTOTYPE.speed*runScale*walkTime,z:movement.z*PROTOTYPE.speed*runScale*walkTime})??moveWithCollisions(position,{x:movement.x*PROTOTYPE.speed*runScale*walkTime,z:movement.z*PROTOTYPE.speed*runScale*walkTime});}
         if(input.consumeJumps()>0&&canAct&&!wasDashing&&world.jump(oldPosition))audio.play('jump');
@@ -919,11 +927,14 @@ async function start() {
       zone.textContent=selectedMap==='snow'?(world.geometry.indoorAt(position)?'1층 · 출입 가능 건물':MAPS[selectedMap].name):navigationLocation(world.geometry??harborWorld,position).label;
     } else { localDash=cancelDash(localDash);input.consumeDashes();input.consumeShots();input.consumeReloads();input.consumeJumps();world.update(position, dt, input.look,true);world.consumeSounds(); }
     const dashButton=document.querySelector<HTMLButtonElement>('#dash')!,onlineMe=onlineState?.players.find(p=>p.id===onlineId),dashState=onlineActive?onlineMe?.dash:localDash;
-    const dashGrounded=onlineActive?!!onlineMe&&onlineMe.jump.height===0&&onlineMe.jump.velocity===0:world.practiceState().grounded;
+    const dashGrounded=onlineActive?!!onlineMe&&onlineMe.jump.height===0&&onlineMe.jump.velocity===0&&!(onlineMe.fallSpeed&&onlineMe.fallSpeed>0):world.practiceState().grounded;
     const dashBattle=world.duelState(),dashAlive=onlineActive?!!onlineMe&&onlineMe.health>0&&!onlineState?.winner:!dashBattle.active||(dashBattle.playerHealth>0&&!dashBattle.winner);
-    dashButton.disabled=!canPlay||!dashAlive||!dashGrounded||!dashState||dashState.cooldown>1e-8||dashState.remaining>0;
-    const dashText=!dashState?'서버 준비 중':dashState.remaining>0?'대시 중':dashState.cooldown>0?`대시 ${(Math.ceil((dashState.cooldown-1e-8)*10)/10).toFixed(1)}초`:'대시';
-    if(dashButton.textContent!==dashText)dashButton.textContent=dashText;dashButton.setAttribute('aria-label',dashText+' · F키');
+    const ability=characterAbilities[onlineActive?onlineMe?.character??world.characterType:world.characterType];
+    const fullRepair=ability.healing>0&&(onlineMe?.health??dashBattle.playerHealth)>=100;
+    dashButton.disabled=!canPlay||!dashAlive||!dashGrounded||input.stance!=='stand'||fullRepair||!dashState||dashState.cooldown>1e-8||dashState.remaining>0;
+    const dashText=!dashState?'서버 준비 중':dashState.remaining>0?`${ability.name} 중`:dashState.cooldown>0?`${ability.name} ${Math.ceil(dashState.cooldown)}초`:ability.name;
+    if(dashButton.textContent!==dashText)dashButton.textContent=dashText;
+    dashButton.setAttribute('aria-label',dashText+' · '+controls.label('dash'));
     const protection=onlineActive?(onlineMe?.protection??0):world.duelState().protection??0;const shield=document.querySelector<HTMLElement>('#spawn-protection')!;shield.hidden=protection<=0||!canPlay;shield.textContent=`부활 보호 ${protection.toFixed(1)}초 · 사격 시 해제`;
     const runButton=document.querySelector<HTMLButtonElement>('#sprint')!;
     const runningRequested=input.sprintingRequested;

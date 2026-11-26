@@ -21,3 +21,26 @@ test('prediction starts before reply, matches server dash state, and never enabl
  const g=game(),motion=createOnlineMotion();motion.receive(structuredClone(g.state),'a');for(let i=0;i<4;i++){const c=command(i,{dash:i===0});motion.sent(i,c);const p=motion.advance(.05,c);if(i===0)assert.ok(p.z>-7.1,'first dash frame moves immediately');g.input('a',c);g.step();motion.receive(structuredClone(g.state),'a');}assert.ok(Math.abs(motion.advance(0,command(4)).z+4)<.05);assert.equal(g.state.players[0].weapon.ammo,12);
  const old=structuredClone(g.state);for(const p of old.players)delete p.dash;const legacy=createOnlineMotion();legacy.receive(old,'a');assert.equal(legacy.advance(.1,command(0,{dash:true})).z,old.players[0].z);
 });
+
+test('character abilities make the cat leap and the welder heal at most once per cooldown',()=>{
+ const g=createNetworkGame();
+ const cat=g.join('cat','pistol','robot-cat'),welder=g.join('welder','pistol','welder');
+ welder.health=65;
+ const z=cat.z,wz=welder.z;
+ g.input(cat.id,command(0,{dash:true}));
+ g.input(welder.id,command(0,{dash:true}));
+ g.step();
+ assert.ok(cat.jump.height>0&&cat.z>z);
+ assert.ok(cat.dash.cooldown>5);
+ assert.equal(welder.z,wz);
+ assert.equal(welder.health,85);
+ assert.ok(welder.dash.cooldown>13);
+ g.input(welder.id,command(1,{dash:true}));
+ g.step();
+ assert.equal(welder.health,85);
+ const full=createNetworkGame(),p=full.join('one','pistol','welder');
+ full.join('two');
+ full.input(p.id,command(0,{dash:true}));
+ full.step();
+ assert.equal(p.dash.cooldown,0);
+});
